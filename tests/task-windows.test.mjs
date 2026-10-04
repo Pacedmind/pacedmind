@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import { test } from "node:test";
 import { createTaskWindows } from "../desktop/task-windows.mjs";
+import { registerTaskNoteControls } from "../desktop/task-note-controls.mjs";
 import { noteCapacity, noteLayout } from "../desktop/task-note-layout.mjs";
 
 const origin = "http://127.0.0.1:4319";
@@ -12,6 +13,7 @@ function fixture(platform = "win32") {
   const windows = [];
   const opened = [];
   const preferred = new Map();
+  const changes = [];
   const displays = [{ id: 1, label: "Left", workArea: { x: -1280, y: 0, width: 1280, height: 720 } }];
   class Window extends EventEmitter {
     constructor(options) {
@@ -33,8 +35,11 @@ function fixture(platform = "win32") {
     isDestroyed() { return !!this.closed; }
     isMinimized() { return !!this.minimized; }
     restore() { this.minimized = false; }
+    setAlwaysOnTop(value) { this.options.alwaysOnTop = value; }
+    moveTop() { this.occluded = false; }
     show() { this.shown = true; }
     showInactive() { this.shown = true; }
+    hide() { this.shown = false; }
     focus() { this.focused = true; }
     close() { this.closed = true; this.emit("closed"); }
     setBackgroundColor(color) { this.background = color; }
@@ -49,9 +54,10 @@ function fixture(platform = "win32") {
     preferredDisplay: (scope) => preferred.get(scope) ?? null,
     rememberDisplay: (scope, display) => preferred.set(scope, display),
     theme: () => ({ name: "dark", background: "#010101" }), showMain: (url) => opened.push(url),
+    onChange: (state) => changes.push(state),
   });
   const event = (window) => ({ sender: window.webContents, senderFrame: window.webContents.mainFrame });
-  return { notes, windows, opened, event, displays, preferred };
+  return { notes, windows, opened, event, displays, preferred, changes, Window };
 }
 
 test("each task gets an independent topmost window; repeated clicks restore the existing note", () => {
@@ -98,6 +104,89 @@ test("grids never overlap or leave usable screen bounds, including portrait and 
     }
     assert.equal(noteLayout(area, noteCapacity(area) + 1), null);
   }
+});
+
+test("new and reused notes return above other windows without taking focus", () => {
+  const { notes, windows } = fixture();
+  notes.show(1, "local", createdAt, "1");
+  const note = windows[0];
+  note.options.alwaysOnTop = false;
+  note.occluded = true;
+  note.emit("ready-to-show");
+  assert.equal(note.options.alwaysOnTop, true);
+  assert.equal(note.shown, true);
+  assert.equal(note.occluded, false);
+  assert.equal(note.focused, undefined);
+  for (const minimized of [false, true]) {
+    note.options.alwaysOnTop = false;
+    note.occluded = true;
+    note.shown = false;
+    note.minimized = minimized;
+    notes.show(1, "local", createdAt, "1");
+    assert.equal(windows.length, 1);
+    assert.equal(note.options.alwaysOnTop, true);
+    assert.equal(note.shown, true);
+    assert.equal(note.occluded, false);
+    assert.equal(note.minimized, false);
+    assert.equal(note.focused, undefined);
+  }
+});
+
+test("hide and show preserve notes and bounds; closing the planner hides even loading notes", () => {
+  const { notes, windows, changes, Window } = fixture();
+  const planner = new Window({});
+  notes.bindPlanner(planner);
+  notes.show(1, "local", createdAt, "1");
+  notes.show(2, "local", createdAt, "1");
+  const [first, second] = windows.slice(1);
+  first.emit("ready-to-show");
+  const bounds = windows.slice(1).map((w) => w.getBounds());
+  assert.deepEqual(notes.state(), { count: 2, visible: true });
+  planner.emit("close");
+  second.emit("ready-to-show");
+  assert.equal(first.shown, false);
+  assert.equal(second.shown, false); // Loading cannot reopen a hidden note.
+  assert.deepEqual(changes.at(-1), { count: 2, visible: false });
+  assert.deepEqual(notes.toggle(), { count: 2, visible: true });
+  assert.ok(windows.slice(1).every((w) => w.shown && w.options.alwaysOnTop));
+  assert.deepEqual(windows.slice(1).map((w) => w.getBounds()), bounds);
+  assert.deepEqual(notes.toggle(), { count: 2, visible: false });
+  first.close();
+  assert.deepEqual(changes.at(-1), { count: 1, visible: false });
+  notes.show(2, "local", createdAt, "1");
+  assert.equal(second.shown, true);
+  assert.deepEqual(notes.state(), { count: 1, visible: true });
+  notes.hideAll();
+  notes.keepScope(account);
+  assert.equal(second.closed, true);
+  assert.deepEqual(notes.toggle(), { count: 0, visible: false });
+});
+
+test("group controls accept only the current planner and clear hidden notes after switching accounts", async () => {
+  const { notes, windows, event, Window } = fixture();
+  const planner = new Window({});
+  await planner.loadURL(`${origin}/today`);
+  let scope = "local";
+  const handlers = new Map();
+  registerTaskNoteControls({ ipcMain: { handle: (name, fn) => handlers.set(name, fn) }, taskWindows: notes,
+    planner: () => planner, origin, readScope: async () => scope });
+  const toggle = handlers.get("pacedmind:toggle-task-notes");
+  const state = handlers.get("pacedmind:task-notes-state");
+  notes.show(1, "local", createdAt, "1");
+  const note = windows[1];
+  assert.equal(await toggle(event(note)), null);
+  assert.equal(await state(event(note)), null);
+  assert.equal(await toggle({ ...event(planner), senderFrame: { url: `${origin}/today` } }), null);
+  planner.webContents.mainFrame.url = "https://example.com/today";
+  assert.equal(await toggle(event(planner)), null);
+  planner.webContents.mainFrame.url = `${origin}/today`;
+  assert.deepEqual(await toggle(event(planner)), { count: 1, visible: false });
+  scope = undefined; // A server restart must not discard hidden cards.
+  assert.equal(await toggle(event(planner)), null);
+  assert.equal(note.closed, undefined);
+  scope = account;
+  assert.deepEqual(await toggle(event(planner)), { count: 0, visible: false });
+  assert.equal(note.closed, true);
 });
 
 test("three displays, one remembered choice per account, one-off overrides and disconnected screens", () => {

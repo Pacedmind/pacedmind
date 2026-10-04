@@ -17,6 +17,19 @@ contextBridge.exposeInMainWorld("pacedMindDesktop", {
   closeTaskNote() {
     return ipcRenderer.invoke("pacedmind:close-task-note");
   },
+  taskNotesState() {
+    return ipcRenderer.invoke("pacedmind:task-notes-state");
+  },
+  toggleTaskNotes() {
+    return ipcRenderer.invoke("pacedmind:toggle-task-notes");
+  },
+  onTaskNotesChanged(listener) {
+    const receive = (_event, state) => {
+      if (state && Number.isSafeInteger(state.count) && state.count >= 0 && typeof state.visible === "boolean") listener(state);
+    };
+    ipcRenderer.on("pacedmind:task-notes-changed", receive);
+    return () => ipcRenderer.removeListener("pacedmind:task-notes-changed", receive);
+  },
   showFloatingTask(href) {
     return ipcRenderer.invoke("pacedmind:show-floating-task", href);
   },

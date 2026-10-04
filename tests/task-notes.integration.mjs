@@ -7,6 +7,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createTaskWindows } from "../desktop/task-windows.mjs";
+import { registerTaskNoteControls } from "../desktop/task-note-controls.mjs";
 
 const root = path.resolve(import.meta.dirname, "..");
 fs.mkdirSync(path.join(root, "dist"), { recursive: true });
@@ -65,6 +66,12 @@ async function screenshot(win, name) {
   await sleep(350);
   fs.writeFileSync(path.join(root, "dist", name), (await win.webContents.capturePage()).toPNG());
 }
+// Real Electron windows, invisible and click-through so tests never interrupt the user's desktop.
+function TestWindow(options) {
+  const window = new BrowserWindow({ ...options, opacity: 0, focusable: false, skipTaskbar: true });
+  window.setIgnoreMouseEvents(true);
+  return window;
+}
 app.whenReady().then(async () => {
 let db;
 let notePoll;
@@ -78,12 +85,16 @@ try {
   assert.equal(tasks.length, 2);
   let theme = "dark";
   const preferred = new Map();
-  const planner = new BrowserWindow({ show: false, width: 1280, height: 850, webPreferences: { sandbox: true, contextIsolation: true, preload: path.join(root, "desktop/preload.cjs"), additionalArguments: ["--pacedmind-theme=dark"] } });
-  const notes = createTaskWindows({ BrowserWindow, screen: (await import("electron")).screen, origin,
+  const planner = new TestWindow({ show: false, width: 1280, height: 850, webPreferences: { sandbox: true, contextIsolation: true, preload: path.join(root, "desktop/preload.cjs"), additionalArguments: ["--pacedmind-theme=dark"] } });
+  const notes = createTaskWindows({ BrowserWindow: TestWindow, screen: (await import("electron")).screen, origin,
     preload: path.join(root, "desktop/preload.cjs"), theme: () => ({ name: theme, background: theme === "dark" ? "#010101" : "#f5f5f6" }),
     icon: path.join(root, "desktop/icon.ico"), showMain: (url) => { void planner.loadURL(url); },
     preferredDisplay: (scope) => preferred.get(scope) ?? null, rememberDisplay: (scope, display) => preferred.set(scope, display),
+    onChange: (state) => { if (!planner.isDestroyed()) planner.webContents.send("pacedmind:task-notes-changed", state); },
   });
+  notes.bindPlanner(planner);
+  planner.on("close", (event) => { event.preventDefault(); planner.hide(); });
+  registerTaskNoteControls({ ipcMain, taskWindows: notes, planner: () => planner, origin, readScope: async () => "local" });
   ipcMain.handle("pacedmind:float-task", (e, id, scope, createdAt) => e.sender === planner.webContents && e.senderFrame === planner.webContents.mainFrame && notes.open(id, scope, createdAt));
   ipcMain.handle("pacedmind:close-task-note", (e) => notes.close(e));
   ipcMain.handle("pacedmind:show-floating-task", (e, href) => notes.showInPlanner(e, href));
@@ -130,6 +141,44 @@ try {
   assert.equal(second.isVisible(), true);
   assert.equal(second.isAlwaysOnTop(), true);
   console.log("PASS: real renderer buttons, independent topmost windows, duplicate prevention, main window hidden");
+  const noteDisplay = notes.displays("local").displays.find((d) => d.openCount > 0).id;
+  first.setAlwaysOnTop(false);
+  first.hide();
+  assert.equal(notes.show(tasks[0].id, "local", tasks[0].created_at, noteDisplay).status, "opened");
+  assert.equal(first.isVisible(), true);
+  assert.equal(first.isAlwaysOnTop(), true);
+  first.setAlwaysOnTop(false);
+  first.minimize();
+  await until(() => first.isMinimized(), "minimized note");
+  assert.equal(notes.show(tasks[0].id, "local", tasks[0].created_at, noteDisplay).status, "opened");
+  await until(() => !first.isMinimized() && first.isVisible(), "restored note");
+  assert.equal(first.isAlwaysOnTop(), true);
+  assert.equal(BrowserWindow.getAllWindows().length, 3);
+  console.log("PASS: hidden and minimized notes regain always-on-top when reopened, without creating duplicates");
+  await until(() => planner.webContents.executeJavaScript("!!document.querySelector('button[aria-label=\"Hide task notes\"]:not(:disabled)')"), "hide notes header button");
+  const beforeHide = [first, second].map((w) => w.getBounds());
+  const beforeTasks = db.prepare("SELECT id, status FROM tasks ORDER BY id").all();
+  assert.equal(await click(planner, "Hide task notes"), true);
+  await until(() => !first.isVisible() && !second.isVisible(), "all notes hidden from header");
+  await until(() => planner.webContents.executeJavaScript("!!document.querySelector('button[aria-label=\"Show task notes\"]:not(:disabled)')"), "show notes header button");
+  assert.equal(await click(planner, "Show task notes"), true);
+  await until(() => first.isVisible() && second.isVisible(), "same notes shown from header");
+  assert.deepEqual([first, second].map((w) => w.getBounds()), beforeHide);
+  assert.equal(BrowserWindow.getAllWindows().length, 3);
+  assert.equal(await first.webContents.executeJavaScript("window.pacedMindDesktop.toggleTaskNotes()"), null);
+  planner.close();
+  assert.equal(first.isVisible(), false);
+  assert.equal(second.isVisible(), false);
+  assert.equal(planner.isDestroyed(), false);
+  planner.showInactive();
+  await until(() => planner.webContents.executeJavaScript("!!document.querySelector('button[aria-label=\"Show task notes\"]:not(:disabled)')"), "show notes after planner close");
+  assert.equal(await click(planner, "Show task notes"), true);
+  await until(() => first.isVisible() && second.isVisible(), "notes restored after planner close");
+  await until(() => planner.webContents.executeJavaScript("document.querySelector('button[aria-label=\"Hide task notes\"]')?.textContent === 'Hide notes2'"), "header counts both notes");
+  await screenshot(planner, "task-notes-header.png");
+  assert.ok([first, second].every((w) => w.isAlwaysOnTop()));
+  assert.deepEqual(db.prepare("SELECT id, status FROM tasks ORDER BY id").all(), beforeTasks);
+  console.log("PASS: header hides and restores all notes, closing planner hides cards, note controls cannot toggle the group, task statuses unchanged");
   await sleep(4300);
   await call("start_task", { task: tasks[0].key, agent: "codex" });
   await call("report_progress", { task: tasks[0].key, message: "Checking the last installer details before the release.", plan: [{ step: "Review the release checklist", done: true }, { step: "Verify the installer", done: false }] });
@@ -245,8 +294,9 @@ try {
   // Hidden real renderers exercise the same code without covering the user's desktop during the load test.
   const noteWindows = [];
   function HiddenNote(options) {
-    const window = new BrowserWindow(options);
+    const window = new TestWindow(options);
     window.showInactive = () => {};
+    window.moveTop = () => {};
     noteWindows.push(window);
     return window;
   }
@@ -257,6 +307,7 @@ try {
   for (const t of performanceTasks) assert.equal(many.show(t.id, "local", t.created_at, String(display.id)).status, "opened");
   assert.equal(noteWindows.length, 46);
   await until(async () => (await Promise.all(noteWindows.map((w) => body(w).catch(() => "")))).every((text) => text.includes("Mark as done")), "46 loaded renderers", 90000);
+  assert.ok(noteWindows.every((w) => !w.isVisible()), "load-test windows must stay hidden from the user's desktop");
   const readVersions = async () => (await exchange({ receive: false, notes: many.tasks("local") })).versions;
   const initialVersions = await readVersions();
   many.updateVersions("local", initialVersions);

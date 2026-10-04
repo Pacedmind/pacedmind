@@ -8,6 +8,7 @@ import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
 import { createTaskWindows } from "./task-windows.mjs";
+import { registerTaskNoteControls } from "./task-note-controls.mjs";
 
 const PORT = 4319;
 const ORIGIN = `http://127.0.0.1:${PORT}`;
@@ -192,6 +193,10 @@ const taskWindows = createTaskWindows({
   theme: () => ({ name: activeTheme, ...THEME_COLORS[activeTheme] }), showMain: showWindow,
   preferredDisplay: (scope) => readState().taskNoteDisplays?.[scope] ?? null,
   rememberDisplay: (scope, display) => writeState({ taskNoteDisplays: { ...readState().taskNoteDisplays, [scope]: display } }),
+  onChange: (state) => { if (win && !win.isDestroyed()) win.webContents.send("pacedmind:task-notes-changed", state); },
+});
+registerTaskNoteControls({ ipcMain, taskWindows, planner: () => win, origin: ORIGIN,
+  readScope: async () => (await getJson("/api/state"))?.floatingScope,
 });
 
 let choosingNoteDisplay = false;
@@ -374,6 +379,7 @@ function createWindow() {
     },
   });
   win.setMenuBarVisibility(false);
+  taskWindows.bindPlanner(win);
   if (process.platform === "win32") win.setAppDetails({
     appId: APP_ID, appIconPath: shortcutIcon, appIconIndex: 0,
     relaunchCommand: `"${process.execPath}"`, relaunchDisplayName: "PacedMind",

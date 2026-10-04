@@ -1,8 +1,8 @@
 import { noteCapacity, noteLayout } from "./task-note-layout.mjs";
 
-// Independent task notes: no parent window, so hiding the planner leaves them on screen.
+// Independent task notes, with shared visibility controls in the planner.
 export function createTaskWindows({ BrowserWindow, screen, origin, preload, theme, icon, showMain,
-  preferredDisplay = () => null, rememberDisplay = () => {}, platform = process.platform }) {
+  preferredDisplay = () => null, rememberDisplay = () => {}, onChange = () => {}, platform = process.platform }) {
   const notes = new Map();
   const validScope = (scope) => typeof scope === "string" && /^(local|[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12})$/i.test(scope);
 
@@ -17,7 +17,41 @@ export function createTaskWindows({ BrowserWindow, screen, origin, preload, them
   const displayOf = (note) => String(screen.getDisplayMatching(note.window.getBounds()).id);
   const onDisplay = (id, scope) => [...notes.values()].filter((n) => n.scope === scope && displayOf(n) === id);
 
+  function showOnTop(window) {
+    if (window.isDestroyed()) return;
+    if (window.isMinimized()) window.restore();
+    // Reassert this for existing windows too. showInactive alone can leave a note behind
+    // other windows; moveTop raises it without taking keyboard focus from the user's app.
+    window.setAlwaysOnTop(true);
+    window.showInactive();
+    window.moveTop();
+  }
+
   const api = {
+    state() {
+      return { count: notes.size, visible: [...notes.values()].some((note) => !note.hidden) };
+    },
+    bindPlanner(window) {
+      // Close-to-tray must hide notes too, including ones still loading.
+      window.on("close", () => api.hideAll());
+    },
+    hideAll() {
+      for (const note of notes.values()) {
+        note.hidden = true;
+        note.window.hide();
+      }
+      onChange(api.state());
+      return api.state();
+    },
+    toggle() {
+      if (api.state().visible) return api.hideAll();
+      for (const note of notes.values()) {
+        note.hidden = false;
+        if (note.ready) showOnTop(note.window);
+      }
+      onChange(api.state());
+      return api.state();
+    },
     tasks(scope) {
       return [...notes.values()].filter((n) => n.scope === scope).map(({ id, createdAt }) => ({ id, createdAt }));
     },
@@ -63,9 +97,10 @@ export function createTaskWindows({ BrowserWindow, screen, origin, preload, them
         if (remember) rememberDisplay(scope, displayId);
       };
       if (existing && existing.createdAt === createdAt) {
-        if (existing.window.isMinimized()) existing.window.restore();
         place(existing);
-        existing.window.showInactive();
+        existing.hidden = false;
+        showOnTop(existing.window);
+        onChange(api.state());
         return { status: "opened", note: "Task note shown and arranged on the selected display." };
       }
       existing?.window.close();
@@ -84,13 +119,20 @@ export function createTaskWindows({ BrowserWindow, screen, origin, preload, them
         },
       });
       const url = `${origin}/floating/task/${id}?${new URLSearchParams({ scope, createdAt })}`;
-      const note = { window, url, scope, createdAt, id };
+      const note = { window, url, scope, createdAt, id, hidden: false, ready: false };
       notes.set(key, note);
       place(note);
       window.setMenuBarVisibility(false);
       if (platform === "darwin") window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-      window.once("ready-to-show", () => { if (!window.isDestroyed()) window.showInactive(); });
-      window.on("closed", () => { if (notes.get(key) === note) notes.delete(key); });
+      window.once("ready-to-show", () => {
+        note.ready = true;
+        if (!note.hidden) showOnTop(window);
+      });
+      window.on("closed", () => {
+        if (notes.get(key) === note) notes.delete(key);
+        onChange(api.state());
+      });
+      onChange(api.state());
       // A note never becomes a browser or a second full planner. Its buttons use narrow IPC calls.
       window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
       const stayHere = (event, target) => { if (target !== url) event.preventDefault(); };

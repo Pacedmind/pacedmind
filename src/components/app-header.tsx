@@ -2,10 +2,12 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useSyncExternalStore, useTransition } from "react";
+import { useEffect, useState, useSyncExternalStore, useTransition } from "react";
+import type { TaskNotesState } from "@/lib/theme";
 import { signOutAction } from "@/app/auth/actions";
 import { BrandWordmark } from "./brand-wordmark";
 import { Icon } from "./icons";
+import { useAction } from "./ui";
 import { Popover, PopoverItem, PopoverLabel, PopoverSeparator, type Anchor } from "./popover";
 
 type NavigationState = EventTarget & { canGoBack: boolean; canGoForward: boolean };
@@ -62,6 +64,7 @@ export function AppHeader({ email }: { email: string | null }) {
         <Link href="/today" aria-label="PacedMind — Today" className="app-titlebar__home">
           <BrandWordmark className="w-[112px]" />
         </Link>
+        <TaskNotesToggle />
         {email ? <AccountMenu email={email} /> : (
           // No account (the desktop app with this computer's own data): the way to PacedMind Cloud.
           <div className="app-titlebar__account">
@@ -77,6 +80,39 @@ export function AppHeader({ email }: { email: string | null }) {
 }
 
 const MENU_WIDTH = 240;
+
+function TaskNotesToggle() {
+  const [state, setState] = useState<TaskNotesState | null>(null);
+  const { run, pending } = useAction();
+  useEffect(() => {
+    const desktop = window.pacedMindDesktop;
+    if (!desktop?.taskNotesState || !desktop.toggleTaskNotes) return;
+    let active = true;
+    let updated = false;
+    const unsubscribe = desktop.onTaskNotesChanged?.((next) => {
+      updated = true;
+      if (active) setState(next);
+    });
+    void desktop.taskNotesState().then((next) => { if (active && !updated) setState(next); }).catch(() => {});
+    return () => { active = false; unsubscribe?.(); };
+  }, []);
+  if (!state) return null;
+  const label = state.visible ? "Hide task notes" : "Show task notes";
+  return (
+    <button type="button" className="app-titlebar__button app-titlebar__notes" aria-label={label}
+      aria-pressed={state.visible} disabled={pending || state.count === 0}
+      title={state.count ? `${label} (${state.count})` : "Select Float task on a task to open a note"}
+      onClick={() => run(async () => {
+        const next = await window.pacedMindDesktop?.toggleTaskNotes?.();
+        if (next) setState(next);
+        else return { ok: false, error: "Couldn't show or hide notes. Try again when PacedMind is ready." };
+      })}>
+      <Icon name="layers" size={15} />
+      <span>{state.visible ? "Hide notes" : "Show notes"}</span>
+      {state.count > 0 && <span className="text-[11px] tabular-nums">{state.count}</span>}
+    </button>
+  );
+}
 
 /** The signed-in account, with Settings and Sign out. A portal popover, because the header clips its overflow. */
 function AccountMenu({ email }: { email: string }) {

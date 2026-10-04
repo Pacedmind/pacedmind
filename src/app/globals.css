@@ -191,6 +191,16 @@ html[data-theme="light"] {
   opacity: 0.3;
 }
 
+.app-titlebar__notes {
+  -webkit-app-region: no-drag;
+  width: auto;
+  flex-shrink: 0;
+  gap: 6px;
+  margin-left: 12px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+
 /* On a phone (below Tailwind's md), the menu button opens the sidebar; the browser has back and forward. */
 .app-titlebar__menu {
   display: none;
