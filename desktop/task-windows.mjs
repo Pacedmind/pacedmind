@@ -18,6 +18,18 @@ export function createTaskWindows({ BrowserWindow, screen, origin, preload, them
   const onDisplay = (id, scope) => [...notes.values()].filter((n) => n.scope === scope && displayOf(n) === id);
 
   const api = {
+    tasks(scope) {
+      return [...notes.values()].filter((n) => n.scope === scope).map(({ id, createdAt }) => ({ id, createdAt }));
+    },
+    updateVersions(scope, versions) {
+      for (const { id, createdAt, version } of versions ?? []) {
+        const note = notes.get(`${scope}:${id}`);
+        if (note && note.createdAt === createdAt && !note.window.isDestroyed() &&
+            typeof version === "string" && /^[a-f0-9]{64}$/.test(version)) {
+          note.window.webContents.send("pacedmind:task-note-version", version);
+        }
+      }
+    },
     displays(scope) {
       const primary = screen.getPrimaryDisplay().id;
       const saved = preferredDisplay(scope);
@@ -72,7 +84,7 @@ export function createTaskWindows({ BrowserWindow, screen, origin, preload, them
         },
       });
       const url = `${origin}/floating/task/${id}?${new URLSearchParams({ scope, createdAt })}`;
-      const note = { window, url, scope, createdAt };
+      const note = { window, url, scope, createdAt, id };
       notes.set(key, note);
       place(note);
       window.setMenuBarVisibility(false);

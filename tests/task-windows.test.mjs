@@ -21,6 +21,8 @@ function fixture(platform = "win32") {
       this.webContents.mainFrame = { url: "" };
       this.webContents.setWindowOpenHandler = (fn) => { this.openHandler = fn; };
       this.webContents.reload = () => { this.reloaded = true; };
+      this.messages = [];
+      this.webContents.send = (...args) => this.messages.push(args);
       windows.push(this);
     }
     setMenuBarVisibility() {}
@@ -197,4 +199,24 @@ test("Mac notes cover workspaces; theme changes and server restarts reach every 
     assert.equal(window.background, "#f5f5f6");
     assert.equal(window.reloaded, true);
   }
+});
+
+test("46 notes share one inventory; version messages cannot cross accounts or replaced tasks", () => {
+  const { notes, windows, displays } = fixture();
+  displays[0].workArea = { x: -2560, y: 0, width: 2560, height: 1392 };
+  for (let id = 1; id <= 46; id++) assert.equal(notes.show(id, "local", createdAt, "1").status, "opened");
+  assert.equal(notes.tasks("local").length, 46);
+  assert.deepEqual(notes.tasks(account), []);
+  const version = "a".repeat(64);
+  notes.updateVersions(account, [{ id: 1, createdAt, version }]);
+  notes.updateVersions("local", [{ id: 1, createdAt: "2000-01-01T00:00:00", version }]);
+  notes.updateVersions("local", [{ id: 1, createdAt, version: "invalid" }]);
+  assert.ok(windows.every((w) => w.messages.length === 0));
+  notes.updateVersions("local", [{ id: 1, createdAt, version }]);
+  assert.deepEqual(windows[0].messages, [["pacedmind:task-note-version", version]]);
+  assert.ok(windows.slice(1).every((w) => w.messages.length === 0));
+  windows[0].close();
+  assert.equal(notes.tasks("local").length, 45);
+  notes.updateVersions("local", [{ id: 1, createdAt, version }]);
+  assert.equal(windows[0].messages.length, 1);
 });

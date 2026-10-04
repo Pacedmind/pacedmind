@@ -20,4 +20,11 @@ contextBridge.exposeInMainWorld("pacedMindDesktop", {
   showFloatingTask(href) {
     return ipcRenderer.invoke("pacedmind:show-floating-task", href);
   },
+  onTaskNoteVersion(listener) {
+    const receive = (_event, version) => {
+      if (typeof version === "string" && /^[a-f0-9]{64}$/.test(version)) listener(version);
+    };
+    ipcRenderer.on("pacedmind:task-note-version", receive);
+    return () => ipcRenderer.removeListener("pacedmind:task-note-version", receive);
+  },
 });

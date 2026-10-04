@@ -3,25 +3,14 @@
 import { useEffect } from "react";
 import { setFloatingTaskDone } from "@/app/floating/task/[id]/actions";
 import { attentionOf, attentionWords, planOf } from "@/lib/dates";
-import { AGENT_LABEL, STATUS_LABEL, isLiveSession, type Report, type Session, type SessionEvent, type Task } from "@/lib/types";
+import { AGENT_LABEL, STATUS_LABEL, isLiveSession } from "@/lib/types";
+import type { FloatingTaskData } from "@/lib/floating-task";
 import { AgentIcon, Icon, StatusIcon } from "./icons";
 import { DueChip } from "./task-row";
 import { LiveRefresh } from "./live-refresh";
 import { Button, IconButton, Toaster, cx, useAction } from "./ui";
 
-interface NoteData {
-  scope: string;
-  task: Pick<Task, "id" | "key" | "title" | "status" | "dueDate" | "createdAt">;
-  place: string;
-  color: string | null;
-  href: string;
-  subtasks: { done: number; total: number };
-  session: Session | null;
-  events: SessionEvent[];
-  report: Pick<Report, "outcome" | "summary"> | null;
-}
-
-export function FloatingTask({ data }: { data: NoteData | null }) {
+export function FloatingTask({ data, version }: { data: FloatingTaskData | null; version: string }) {
   const { run, pending } = useAction();
   const task = data?.task;
   const done = task?.status === "done";
@@ -84,7 +73,7 @@ export function FloatingTask({ data }: { data: NoteData | null }) {
         </footer>
       </> : <div className="flex flex-1 items-center p-5 text-[13px] leading-relaxed text-mut" role="status">This task is no longer available. Reopen it in PacedMind.</div>}
       <Toaster />
-      <LiveRefresh refreshOnMount />
+      <LiveRefresh refreshOnMount taskNoteVersion={version} />
     </main>
   );
 }

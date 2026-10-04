@@ -562,10 +562,12 @@ async function syncTaskNotes(scope) {
   const exchange = async (receive) => {
     const response = await postJson("/api/desktop/task-notes", {
       scope, displays: taskWindows.displays(scope), results: [...noteResults.values()], receive,
+      notes: receive ? taskWindows.tasks(scope) : [],
     });
     if (!response) return null;
     for (const id of response.acknowledged ?? []) noteResults.delete(id);
     if (response.scope !== scope) { taskWindows.keepScope(response.scope); noteResults.clear(); return null; }
+    taskWindows.updateVersions(scope, response.versions);
     return response;
   };
   const response = await exchange(true);

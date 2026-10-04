@@ -13,6 +13,7 @@ declare global {
       floatTask?: (id: number, scope: string, createdAt: string) => Promise<boolean | { ok: boolean; error?: string }>;
       closeTaskNote?: () => Promise<boolean>;
       showFloatingTask?: (href: string) => Promise<boolean>;
+      onTaskNoteVersion?: (listener: (version: string) => void) => () => void;
     };
   }
 }

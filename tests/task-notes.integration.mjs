@@ -67,6 +67,7 @@ async function screenshot(win, name) {
 }
 app.whenReady().then(async () => {
 let db;
+let notePoll;
 try {
   await until(async () => fetch(`${origin}/api/state`, { headers }).then((r) => r.ok, () => false), "server");
   await rpc("initialize", { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "note-check", version: "1" } });
@@ -87,8 +88,24 @@ try {
   ipcMain.handle("pacedmind:close-task-note", (e) => notes.close(e));
   ipcMain.handle("pacedmind:show-floating-task", (e, href) => notes.showInPlanner(e, href));
   ipcMain.on("pacedmind:set-theme", () => {});
+  // The production main process performs this once for all notes; renderers never poll /api/state.
+  let polling = false;
+  let autoPoll = true;
+  const pollNotes = async () => {
+    if (polling || !autoPoll) return;
+    polling = true;
+    try {
+      const r = await fetch(`${origin}/api/desktop/task-notes`, { method: "POST", headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({ scope: "local", displays: notes.displays("local"), results: [], receive: false, notes: notes.tasks("local") }) });
+      const state = await r.json();
+      notes.updateVersions("local", state.versions);
+    } finally { polling = false; }
+  };
+  notePoll = setInterval(() => { void pollNotes().catch(console.error); }, 1000);
+  const requests = [];
   let actionId;
   session.defaultSession.webRequest.onBeforeSendHeaders((details, callback) => {
+    requests.push({ url: details.url, webContentsId: details.webContentsId, method: details.method });
     if (details.url.includes("/floating/task/")) actionId = Object.entries(details.requestHeaders).find(([name]) => name.toLowerCase() === "next-action")?.[1] ?? actionId;
     callback({ requestHeaders: details.requestHeaders });
   });
@@ -159,6 +176,8 @@ try {
   await call("delete_task", { task: tasks[0].key });
   await until(async () => (await body(first)).includes("This task is no longer available"), "deleted task");
   notes.keepScope(null);
+  autoPoll = false;
+  await until(() => !polling, "last automatic note poll");
   await until(() => first.isDestroyed(), "scope closes note");
   console.log("PASS: mismatched account cannot read the note, deleted tasks clear the note, scope change closes notes");
   await call("create_task", { title: "Agent note delivery", agent: "codex" });
@@ -218,6 +237,49 @@ try {
   await call("show_task_note", { task: agentTask.key });
   rpcToken = ownerToken; mcpSession = undefined;
   console.log("PASS: a launched session can show only its own task note");
+  await rpc("initialize", { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "note-performance", version: "1" } });
+  await call("create_tasks", { tasks: Array.from({ length: 46 }, (_, i) => ({ title: `Performance note ${i + 1}`, agent: "human" })) });
+  const performanceTasks = db.prepare("SELECT id, key, title, created_at FROM tasks WHERE title LIKE 'Performance note %' ORDER BY id").all();
+  const { screen } = await import("electron");
+  const display = screen.getPrimaryDisplay();
+  // Hidden real renderers exercise the same code without covering the user's desktop during the load test.
+  const noteWindows = [];
+  function HiddenNote(options) {
+    const window = new BrowserWindow(options);
+    window.showInactive = () => {};
+    noteWindows.push(window);
+    return window;
+  }
+  const many = createTaskWindows({ BrowserWindow: HiddenNote, screen: {
+    getPrimaryDisplay: () => display, getAllDisplays: () => [{ ...display, workArea: { x: 0, y: 0, width: 2560, height: 1392 } }],
+    getDisplayMatching: () => display,
+  }, origin, preload: path.join(root, "desktop/preload.cjs"), theme: () => ({ name: theme, background: "#f5f5f6" }), showMain() {} });
+  for (const t of performanceTasks) assert.equal(many.show(t.id, "local", t.created_at, String(display.id)).status, "opened");
+  assert.equal(noteWindows.length, 46);
+  await until(async () => (await Promise.all(noteWindows.map((w) => body(w).catch(() => "")))).every((text) => text.includes("Mark as done")), "46 loaded renderers", 90000);
+  const readVersions = async () => (await exchange({ receive: false, notes: many.tasks("local") })).versions;
+  const initialVersions = await readVersions();
+  many.updateVersions("local", initialVersions);
+  await sleep(1500);
+  requests.length = 0;
+  await sleep(4500);
+  const noteIds = new Set(noteWindows.map((w) => w.webContents.id));
+  assert.equal(requests.filter((r) => noteIds.has(r.webContentsId) && r.url.includes("/api/state")).length, 0, "notes must not poll the planner");
+  const target = noteWindows.find((w) => new URL(w.webContents.getURL()).pathname.endsWith(`/${performanceTasks[0].id}`));
+  const started = Date.now();
+  assert.equal(await click(target, "Mark as done"), true);
+  await until(async () => (await body(target)).includes("Reopen task"), "completion with 46 notes");
+  const elapsed = Date.now() - started;
+  assert.ok(requests.some((r) => r.webContentsId === target.webContents.id && r.method === "POST"), "capture the actual renderer action");
+  const changedVersions = await readVersions();
+  assert.equal(changedVersions.filter((v, i) => v.version !== initialVersions[i].version).length, 1);
+  many.updateVersions("local", changedVersions);
+  await sleep(1500);
+  assert.equal(requests.filter((r) => noteIds.has(r.webContentsId) && r.webContentsId !== target.webContents.id && r.url.includes("/floating/task/")).length, 0,
+    "completing one task must not refresh the other 45");
+  console.log(`PASS: 46 real notes, zero renderer state polls, only the changed task refreshed, completion ${elapsed} ms (local fixture)`);
+  many.keepScope(null);
+  clearInterval(notePoll);
   console.log(`Artifacts: ${path.join(root, "dist")}`);
   console.log(`Fixture: ${temp}`);
   planner.destroy();
@@ -226,6 +288,7 @@ try {
   child.kill();
   app.exit(0);
 } catch (error) {
+  clearInterval(notePoll);
   console.error(error);
   console.error(`Fixture: ${temp}`);
   for (const window of BrowserWindow.getAllWindows()) {
