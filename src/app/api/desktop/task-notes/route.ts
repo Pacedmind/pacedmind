@@ -18,6 +18,17 @@ const bodySchema = z.object({
 });
 const g = globalThis as unknown as { __pacedmindDisplaysSent?: { scope: string; device: string; key: string; at: number } };
 
+/** The header's Show notes button starts a fresh set after a restart, using only open tasks. */
+export async function GET(request: NextRequest) {
+  if (MODE !== "desktop" || request.headers.has("origin") || !isUiKey(request.headers.get(UI_HEADER))) {
+    return new NextResponse(null, { status: 403 });
+  }
+  const scope = floatingTaskScope(await authState());
+  const tasks = scope ? (await repo.listTasks()).filter((t) => t.status !== "done" && t.status !== "canceled")
+    .map((t) => ({ id: t.id, createdAt: t.createdAt })) : [];
+  return NextResponse.json({ scope, tasks }, { headers: { "Cache-Control": "no-store" } });
+}
+
 /** Only the main process has this header: cookies, an MCP bearer token and a browser Origin never suffice. */
 export async function POST(request: NextRequest) {
   if (MODE !== "desktop" || request.headers.has("origin") || !isUiKey(request.headers.get(UI_HEADER))) {

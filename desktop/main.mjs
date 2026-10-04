@@ -197,10 +197,16 @@ const taskWindows = createTaskWindows({
 });
 registerTaskNoteControls({ ipcMain, taskWindows, planner: () => win, origin: ORIGIN,
   readScope: async () => (await getJson("/api/state"))?.floatingScope,
+  openNotes: async (event, scope) => {
+    const data = await getJson("/api/desktop/task-notes");
+    if (data?.scope !== scope || !Array.isArray(data.tasks)) return { ok: false, error: "Couldn't load your tasks. Try again." };
+    if (!data.tasks.length) return { ok: true, message: "You have no open tasks to show." };
+    return showTaskNotes(event, data.tasks, scope);
+  },
 });
 
 let choosingNoteDisplay = false;
-ipcMain.handle("pacedmind:float-task", async (event, id, scope, createdAt) => {
+async function showTaskNotes(event, tasks, scope) {
   if (!serverReady || !win || event.sender !== win.webContents || event.senderFrame !== win.webContents.mainFrame) return false;
   if (!sameOrigin(event.senderFrame.url)) return false;
   const state = await getJson("/api/state");
@@ -213,7 +219,7 @@ ipcMain.handle("pacedmind:float-task", async (event, id, scope, createdAt) => {
     choosingNoteDisplay = true;
     try {
       const answer = await dialog.showMessageBox(win, {
-        type: "question", title: "Task notes", message: "Which display should show this task note?",
+        type: "question", title: "Task notes", message: "Which display should show the task notes?",
         detail: (snapshot.defaultDisplay ? "The remembered display is disconnected.\n\n" : "") + snapshot.displays.map((d, i) => `${i + 1}. ${d.label} · ${d.width} × ${d.height}${d.primary ? " (primary)" : ""} · position ${d.x}, ${d.y}`).join("\n"),
         buttons: [...snapshot.displays.map((_, i) => `Display ${i + 1}`), "Cancel"],
         cancelId: snapshot.displays.length, defaultId: Math.max(0, snapshot.displays.findIndex((d) => d.primary)),
@@ -224,10 +230,17 @@ ipcMain.handle("pacedmind:float-task", async (event, id, scope, createdAt) => {
       remember = answer.checkboxChecked;
     } finally { choosingNoteDisplay = false; }
   }
-  if ((await getJson("/api/state"))?.floatingScope !== scope) return false;
-  const result = taskWindows.show(id, scope, createdAt, display, remember);
-  return { ok: result.status === "opened", error: result.note };
-});
+  if ((await getJson("/api/state"))?.floatingScope !== scope || !win || event.sender !== win.webContents ||
+      event.senderFrame !== win.webContents.mainFrame || !sameOrigin(event.senderFrame.url)) return false;
+  let opened = 0;
+  for (const { id, createdAt } of tasks) {
+    const result = taskWindows.show(id, scope, createdAt, display, remember);
+    if (result.status !== "opened") return { ok: false, error: `${opened ? `Opened ${opened} of ${tasks.length} notes. ` : ""}${result.note}` };
+    opened++;
+  }
+  return { ok: true };
+}
+ipcMain.handle("pacedmind:float-task", (event, id, scope, createdAt) => showTaskNotes(event, [{ id, createdAt }], scope));
 ipcMain.handle("pacedmind:close-task-note", (event) => taskWindows.close(event));
 ipcMain.handle("pacedmind:show-floating-task", (event, href) => taskWindows.showInPlanner(event, href));
 

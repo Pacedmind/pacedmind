@@ -1,5 +1,5 @@
 export type Theme = "dark" | "light";
-export type TaskNotesState = { count: number; visible: boolean };
+export type TaskNotesState = { count: number; visible: boolean; ok?: boolean; error?: string; message?: string };
 
 export const THEME_STORAGE_KEY = "pacedmind-theme";
 

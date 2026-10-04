@@ -94,7 +94,14 @@ try {
   });
   notes.bindPlanner(planner);
   planner.on("close", (event) => { event.preventDefault(); planner.hide(); });
-  registerTaskNoteControls({ ipcMain, taskWindows: notes, planner: () => planner, origin, readScope: async () => "local" });
+  registerTaskNoteControls({ ipcMain, taskWindows: notes, planner: () => planner, origin, readScope: async () => "local",
+    openNotes: async (_event, scope) => {
+      const data = await fetch(`${origin}/api/desktop/task-notes`, { headers }).then((r) => r.json());
+      assert.equal(data.scope, scope);
+      for (const t of data.tasks) assert.equal(notes.show(t.id, scope, t.createdAt, String((await import("electron")).screen.getPrimaryDisplay().id)).status, "opened");
+      return { ok: true };
+    },
+  });
   ipcMain.handle("pacedmind:float-task", (e, id, scope, createdAt) => e.sender === planner.webContents && e.senderFrame === planner.webContents.mainFrame && notes.open(id, scope, createdAt));
   ipcMain.handle("pacedmind:close-task-note", (e) => notes.close(e));
   ipcMain.handle("pacedmind:show-floating-task", (e, href) => notes.showInPlanner(e, href));
@@ -229,6 +236,17 @@ try {
   await until(() => !polling, "last automatic note poll");
   await until(() => first.isDestroyed(), "scope closes note");
   console.log("PASS: mismatched account cannot read the note, deleted tasks clear the note, scope change closes notes");
+  // A fresh app has no cards. Show notes must still work and must exclude finished tasks.
+  assert.equal((await fetch(`${origin}/api/desktop/task-notes`, { headers: { Cookie: `pm_ui=${key}` } })).status, 403);
+  assert.equal((await fetch(`${origin}/api/desktop/task-notes`, { headers: { ...headers, Origin: origin } })).status, 403);
+  const expectedOpen = db.prepare("SELECT id FROM tasks WHERE status NOT IN ('done', 'canceled') ORDER BY id").all().map((t) => t.id);
+  await until(() => planner.webContents.executeJavaScript("!!document.querySelector('button[aria-label=\"Show task notes\"]:not(:disabled)')"), "enabled Show notes without cards");
+  assert.equal(await click(planner, "Show task notes"), true);
+  await until(() => notes.state().count === expectedOpen.length, "fresh set opened from header");
+  assert.deepEqual(notes.tasks("local").map((t) => t.id).sort((a, b) => a - b), expectedOpen);
+  assert.ok(expectedOpen.length > 0);
+  notes.keepScope(null);
+  console.log("PASS: Show notes opens unfinished tasks after all cards close; main-process list rejects browser credentials");
   await call("create_task", { title: "Agent note delivery", agent: "codex" });
   const agentTask = db.prepare("SELECT * FROM tasks WHERE title = 'Agent note delivery'").get();
   const exchange = async (patch = {}, extraHeaders = headers) => {

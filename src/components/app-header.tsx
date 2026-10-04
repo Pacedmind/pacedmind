@@ -100,11 +100,11 @@ function TaskNotesToggle() {
   const label = state.visible ? "Hide task notes" : "Show task notes";
   return (
     <button type="button" className="app-titlebar__button app-titlebar__notes" aria-label={label}
-      aria-pressed={state.visible} disabled={pending || state.count === 0}
-      title={state.count ? `${label} (${state.count})` : "Select Float task on a task to open a note"}
+      aria-pressed={state.visible} disabled={pending}
+      title={state.count ? `${label} (${state.count})` : "Show all open tasks as notes"}
       onClick={() => run(async () => {
         const next = await window.pacedMindDesktop?.toggleTaskNotes?.();
-        if (next) setState(next);
+        if (next) { setState(next); return next; }
         else return { ok: false, error: "Couldn't show or hide notes. Try again when PacedMind is ready." };
       })}>
       <Icon name="layers" size={15} />

@@ -189,6 +189,31 @@ test("group controls accept only the current planner and clear hidden notes afte
   assert.equal(note.closed, true);
 });
 
+test("Show notes starts a fresh set when none are open, then toggles that set", async () => {
+  const { notes, windows, event, Window } = fixture();
+  const planner = new Window({});
+  await planner.loadURL(`${origin}/today`);
+  const handlers = new Map();
+  let calls = 0;
+  registerTaskNoteControls({ ipcMain: { handle: (name, fn) => handlers.set(name, fn) }, taskWindows: notes,
+    planner: () => planner, origin, readScope: async () => "local", openNotes: async (_event, scope) => {
+      calls++;
+      notes.show(1, scope, createdAt, "1");
+      notes.show(2, scope, createdAt, "1");
+      return { ok: true };
+    } });
+  const toggle = handlers.get("pacedmind:toggle-task-notes");
+  assert.deepEqual(await handlers.get("pacedmind:task-notes-state")(event(planner)), { count: 0, visible: false });
+  assert.equal(calls, 0);
+  assert.deepEqual(await toggle(event(planner)), { count: 2, visible: true, ok: true });
+  assert.deepEqual(await toggle(event(planner)), { count: 2, visible: false });
+  assert.deepEqual(await toggle(event(planner)), { count: 2, visible: true });
+  assert.equal(calls, 1);
+  windows.slice(1).forEach((w) => w.close());
+  await toggle(event(planner));
+  assert.equal(calls, 2);
+});
+
 test("three displays, one remembered choice per account, one-off overrides and disconnected screens", () => {
   const { notes, displays, preferred, windows } = fixture();
   displays.push({ id: 2, label: "Centre", workArea: { x: 0, y: 0, width: 1920, height: 1040 } });
