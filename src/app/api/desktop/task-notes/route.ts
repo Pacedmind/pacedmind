@@ -24,6 +24,9 @@ export async function GET(request: NextRequest) {
     return new NextResponse(null, { status: 403 });
   }
   const scope = floatingTaskScope(await authState());
+  if (request.nextUrl.searchParams.get("scope") === "1") {
+    return NextResponse.json({ scope }, { headers: { "Cache-Control": "no-store" } });
+  }
   const tasks = scope ? (await repo.listTasks()).filter((t) => t.status !== "done" && t.status !== "canceled")
     .map((t) => ({ id: t.id, createdAt: t.createdAt })) : [];
   return NextResponse.json({ scope, tasks }, { headers: { "Cache-Control": "no-store" } });

@@ -114,9 +114,9 @@ const loginArgs = WINDOWS ? { name: "Organizer", path: process.execPath, args: [
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-function getJson(pathname) {
+function getJson(pathname, timeout = 1500) {
   return new Promise((resolve) => {
-    const req = http.get(`${ORIGIN}${pathname}`, { timeout: 1500, headers: { [UI_HEADER]: UI_KEY } }, (res) => {
+    const req = http.get(`${ORIGIN}${pathname}`, { timeout, headers: { [UI_HEADER]: UI_KEY } }, (res) => {
       let body = "";
       res.setEncoding("utf8");
       res.on("data", (c) => (body += c));
@@ -195,10 +195,13 @@ const taskWindows = createTaskWindows({
   rememberDisplay: (scope, display) => writeState({ taskNoteDisplays: { ...readState().taskNoteDisplays, [scope]: display } }),
   onChange: (state) => { if (win && !win.isDestroyed()) win.webContents.send("pacedmind:task-notes-changed", state); },
 });
+async function readTaskNoteScope() {
+  return (await getJson("/api/desktop/task-notes?scope=1", 10_000))?.scope;
+}
 registerTaskNoteControls({ ipcMain, taskWindows, planner: () => win, origin: ORIGIN,
-  readScope: async () => (await getJson("/api/state"))?.floatingScope,
+  readScope: readTaskNoteScope,
   openNotes: async (event, scope) => {
-    const data = await getJson("/api/desktop/task-notes");
+    const data = await getJson("/api/desktop/task-notes", 10_000);
     if (data?.scope !== scope || !Array.isArray(data.tasks)) return { ok: false, error: "Couldn't load your tasks. Try again." };
     if (!data.tasks.length) return { ok: true, message: "You have no open tasks to show." };
     return showTaskNotes(event, data.tasks, scope);
@@ -209,8 +212,7 @@ let choosingNoteDisplay = false;
 async function showTaskNotes(event, tasks, scope) {
   if (!serverReady || !win || event.sender !== win.webContents || event.senderFrame !== win.webContents.mainFrame) return false;
   if (!sameOrigin(event.senderFrame.url)) return false;
-  const state = await getJson("/api/state");
-  if (choosingNoteDisplay || state?.floatingScope !== scope) return false;
+  if (choosingNoteDisplay || (await readTaskNoteScope()) !== scope) return false;
   const snapshot = taskWindows.displays(scope);
   let display = snapshot.displays.find((d) => d.id === snapshot.defaultDisplay)?.id;
   let remember = false;
@@ -230,7 +232,7 @@ async function showTaskNotes(event, tasks, scope) {
       remember = answer.checkboxChecked;
     } finally { choosingNoteDisplay = false; }
   }
-  if ((await getJson("/api/state"))?.floatingScope !== scope || !win || event.sender !== win.webContents ||
+  if ((await readTaskNoteScope()) !== scope || !win || event.sender !== win.webContents ||
       event.senderFrame !== win.webContents.mainFrame || !sameOrigin(event.senderFrame.url)) return false;
   let opened = 0;
   for (const { id, createdAt } of tasks) {

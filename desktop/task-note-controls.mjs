@@ -9,6 +9,9 @@ export function registerTaskNoteControls({ ipcMain, taskWindows, planner, origin
   }
   const handle = (toggle) => async (event) => {
     if (!allowed(event)) return null;
+    // Reading the window count and hiding cards are local. Only showing data needs a fresh scope.
+    if (!toggle) return taskWindows.state();
+    if (taskWindows.state().visible) return taskWindows.hideAll();
     const scope = await readScope();
     if (scope === undefined || !allowed(event)) return null;
     taskWindows.keepScope(scope);

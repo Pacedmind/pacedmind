@@ -189,6 +189,25 @@ test("group controls accept only the current planner and clear hidden notes afte
   assert.equal(note.closed, true);
 });
 
+test("Hide notes and the header state work without a server response", async () => {
+  const { notes, windows, event, Window } = fixture();
+  const planner = new Window({});
+  await planner.loadURL(`${origin}/today`);
+  const handlers = new Map();
+  let reads = 0;
+  registerTaskNoteControls({ ipcMain: { handle: (name, fn) => handlers.set(name, fn) }, taskWindows: notes,
+    planner: () => planner, origin, readScope: async () => { reads++; return undefined; } });
+  notes.show(1, "local", createdAt, "1");
+  windows[1].emit("ready-to-show");
+  assert.deepEqual(await handlers.get("pacedmind:task-notes-state")(event(planner)), { count: 1, visible: true });
+  assert.deepEqual(await handlers.get("pacedmind:toggle-task-notes")(event(planner)), { count: 1, visible: false });
+  assert.equal(windows[1].shown, false);
+  assert.equal(reads, 0);
+  assert.equal(await handlers.get("pacedmind:toggle-task-notes")(event(planner)), null);
+  assert.equal(windows[1].shown, false); // Showing still requires the current account.
+  assert.equal(reads, 1);
+});
+
 test("Show notes starts a fresh set when none are open, then toggles that set", async () => {
   const { notes, windows, event, Window } = fixture();
   const planner = new Window({});

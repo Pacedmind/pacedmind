@@ -94,7 +94,9 @@ try {
   });
   notes.bindPlanner(planner);
   planner.on("close", (event) => { event.preventDefault(); planner.hide(); });
-  registerTaskNoteControls({ ipcMain, taskWindows: notes, planner: () => planner, origin, readScope: async () => "local",
+  let scopeUnavailable = false;
+  registerTaskNoteControls({ ipcMain, taskWindows: notes, planner: () => planner, origin,
+    readScope: async () => scopeUnavailable ? undefined : (await fetch(`${origin}/api/desktop/task-notes?scope=1`, { headers }).then((r) => r.json())).scope,
     openNotes: async (_event, scope) => {
       const data = await fetch(`${origin}/api/desktop/task-notes`, { headers }).then((r) => r.json());
       assert.equal(data.scope, scope);
@@ -165,8 +167,10 @@ try {
   await until(() => planner.webContents.executeJavaScript("!!document.querySelector('button[aria-label=\"Hide task notes\"]:not(:disabled)')"), "hide notes header button");
   const beforeHide = [first, second].map((w) => w.getBounds());
   const beforeTasks = db.prepare("SELECT id, status FROM tasks ORDER BY id").all();
+  scopeUnavailable = true;
   assert.equal(await click(planner, "Hide task notes"), true);
   await until(() => !first.isVisible() && !second.isVisible(), "all notes hidden from header");
+  scopeUnavailable = false;
   await until(() => planner.webContents.executeJavaScript("!!document.querySelector('button[aria-label=\"Show task notes\"]:not(:disabled)')"), "show notes header button");
   assert.equal(await click(planner, "Show task notes"), true);
   await until(() => first.isVisible() && second.isVisible(), "same notes shown from header");
