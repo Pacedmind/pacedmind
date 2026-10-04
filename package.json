@@ -11,6 +11,8 @@
     "stores:check": "node scripts/check-store-readiness.mjs",
     "test:sessions": "node --conditions=react-server --import tsx --test tests/session-health.test.ts",
     "test:models": "node --conditions=react-server --import tsx --test tests/agent-models.test.ts",
+    "test:notes": "node --import tsx --test tests/task-windows.test.mjs tests/task-notes.test.ts",
+    "test:notes:desktop": "node scripts/test-task-notes-desktop.mjs",
     "dev": "next dev -p 4320 -H 127.0.0.1",
     "build": "next build",
     "desktop": "node scripts/build-desktop.mjs",

@@ -6,6 +6,7 @@ import { approvalItems } from "@/server/requests";
 import { codeFreshUntil } from "@/server/step-up";
 import { askedHere } from "@/server/asks";
 import { readPlan } from "@/server/billing";
+import { floatingTaskScope } from "@/server/floating-tasks";
 import { attentionOf } from "@/lib/dates";
 import { LIVE_STATUSES, type AskView, type LaunchRequestView } from "@/lib/types";
 
@@ -36,7 +37,7 @@ export async function GET() {
   // Without an account, the desktop app shows this computer's own data; signing in counts as a change.
   const step = state || MODE === "web" ? nextStep(state) : null;
   if (step) {
-    return Response.json({ version: `${boot}-${step}`, waiting: [], attention: [], asks: [], approvals: [], requests: [], codeFreshUntil: null, signedIn: false, plan: null }, noStore);
+    return Response.json({ version: `${boot}-${step}`, waiting: [], attention: [], asks: [], approvals: [], requests: [], codeFreshUntil: null, signedIn: false, plan: null, floatingScope: null }, noStore);
   }
   const [version, finished, live, tasks, recent, plan] = await Promise.all([
     repo.stateVersion(), repo.listSessions({ status: ["finished"] }), repo.listSessions({ status: LIVE_STATUSES }), repo.listTasks(),
@@ -89,6 +90,7 @@ export async function GET() {
       requests,
       codeFreshUntil: state ? codeFreshUntil(state) : null,
       signedIn: !!state,
+      floatingScope: floatingTaskScope(state),
       plan: plan?.enforced ? { state: plan.state, writable: plan.writable, trialEndsAt: plan.trialEndsAt } : null,
     },
     noStore,

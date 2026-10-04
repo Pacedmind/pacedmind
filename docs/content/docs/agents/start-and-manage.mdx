@@ -133,15 +133,16 @@ When a project limits the MCP servers its sessions get on this computer, Claude 
 
 ## What agents may do without asking
 
-Sessions PacedMind starts in a terminal reach PacedMind with a token of their own, which works only for their task, only while they run, and only for these 20 MCP tools:
+Sessions PacedMind starts in a terminal reach PacedMind with a token of their own, which works only for their task, only while they run, and only for these 22 MCP tools:
 
 * reading: `get_overview`, `list_areas`, `list_projects`, `get_project`, `list_tasks`, `get_task`, `list_events`, `get_agenda`, `list_sessions`, `list_computers`, `get_settings`, `get_preferences`, `get_next_task`;
 * the session protocol: `start_task`, `attach_image`, `report_progress`, `ask_user`, `finish_task`;
+* task notes: `list_task_note_displays` and `show_task_note`, for its own task when you ask for it. With several displays and no remembered choice, it asks which one and whether to remember it before showing a note;
 * adding tasks and updating its own: `create_task`, for open tasks (to do or in the backlog), and `update_task`, for the session's own task, without its status, agent, project, area, where it runs, folder or needs.
 
 Claude Code runs them without asking you first: PacedMind passes this list when it starts it. Codex follows its own approval settings.
 
-The token doesn't list any other tool, and the others refuse it: *Sessions that PacedMind started can't use delete_task. Ask the user to do it in PacedMind.* So such a session can't delete anything, move calendar events, change projects, settings or preferences, ask for folders, start other sessions or send work back with `request_changes`, whatever it's asked. You do those in PacedMind, or with an agent you connected yourself.
+The token doesn't list any other tool, and the others refuse it: *Sessions that PacedMind started can't use delete_task. Ask the user to do it in PacedMind.* So such a session can't delete anything, move calendar events, change projects or planner settings, ask for folders, start other sessions or send work back with `request_changes`, whatever it's asked. Apart from remembering your task-note display choice, preferences stay under your control in PacedMind or through an agent you connected yourself.
 
 Sessions in the Claude app or the Codex app use your own connection to PacedMind (see [Connect your agents](/settings#connect-your-agents)), with every tool, and follow the apps' own approval settings.
 

@@ -64,7 +64,7 @@ export function tool<S extends z.ZodObject>(
         if (ownerOnly && who.kind === "session") {
           fail(`Sessions that PacedMind started can't use ${name}. Ask the user to do it in PacedMind.`);
         }
-        if (spec.kind === "launch" || name === "set_folder") {
+        if (spec.kind === "launch" || name === "set_folder" || name === "show_task_note") {
           const problem = await computerAccessProblem();
           if (problem) fail(problem);
         }

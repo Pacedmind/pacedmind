@@ -7,6 +7,7 @@ import { createHash, createHmac, randomBytes } from "node:crypto";
 import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
+import { createTaskWindows } from "./task-windows.mjs";
 
 const PORT = 4319;
 const ORIGIN = `http://127.0.0.1:${PORT}`;
@@ -131,6 +132,24 @@ function getJson(pathname) {
   });
 }
 
+function postJson(pathname, body) {
+  return new Promise((resolve) => {
+    const req = http.request(`${ORIGIN}${pathname}`, {
+      method: "POST", timeout: 10_000, headers: { [UI_HEADER]: UI_KEY, "Content-Type": "application/json" },
+    }, (res) => {
+      let text = "";
+      res.setEncoding("utf8");
+      res.on("data", (c) => { text += c; });
+      res.on("end", () => {
+        try { resolve(res.statusCode === 200 ? JSON.parse(text) : null); } catch { resolve(null); }
+      });
+    });
+    req.on("timeout", () => req.destroy());
+    req.on("error", () => resolve(null));
+    req.end(JSON.stringify(body));
+  });
+}
+
 /** Whether the server on the port is the one this app started: only it can sign a random value with this run's key. */
 async function isOurServer() {
   const nonce = randomBytes(16).toString("hex");
@@ -168,6 +187,45 @@ function openOutside(url) {
 
 let activeTheme = readState().theme === "light" ? "light" : "dark";
 
+const taskWindows = createTaskWindows({
+  BrowserWindow, screen, origin: ORIGIN, preload: path.join(import.meta.dirname, "preload.cjs"), icon: ICON,
+  theme: () => ({ name: activeTheme, ...THEME_COLORS[activeTheme] }), showMain: showWindow,
+  preferredDisplay: (scope) => readState().taskNoteDisplays?.[scope] ?? null,
+  rememberDisplay: (scope, display) => writeState({ taskNoteDisplays: { ...readState().taskNoteDisplays, [scope]: display } }),
+});
+
+let choosingNoteDisplay = false;
+ipcMain.handle("pacedmind:float-task", async (event, id, scope, createdAt) => {
+  if (!serverReady || !win || event.sender !== win.webContents || event.senderFrame !== win.webContents.mainFrame) return false;
+  if (!sameOrigin(event.senderFrame.url)) return false;
+  const state = await getJson("/api/state");
+  if (choosingNoteDisplay || state?.floatingScope !== scope) return false;
+  const snapshot = taskWindows.displays(scope);
+  let display = snapshot.displays.find((d) => d.id === snapshot.defaultDisplay)?.id;
+  let remember = false;
+  if (!display && snapshot.displays.length === 1 && !snapshot.defaultDisplay) display = snapshot.displays[0].id;
+  if (!display) {
+    choosingNoteDisplay = true;
+    try {
+      const answer = await dialog.showMessageBox(win, {
+        type: "question", title: "Task notes", message: "Which display should show this task note?",
+        detail: (snapshot.defaultDisplay ? "The remembered display is disconnected.\n\n" : "") + snapshot.displays.map((d, i) => `${i + 1}. ${d.label} · ${d.width} × ${d.height}${d.primary ? " (primary)" : ""} · position ${d.x}, ${d.y}`).join("\n"),
+        buttons: [...snapshot.displays.map((_, i) => `Display ${i + 1}`), "Cancel"],
+        cancelId: snapshot.displays.length, defaultId: Math.max(0, snapshot.displays.findIndex((d) => d.primary)),
+        checkboxLabel: "Always use this display for task notes on this computer", checkboxChecked: false,
+      });
+      if (answer.response === snapshot.displays.length) return { ok: true }; // Cancel is not an error.
+      display = snapshot.displays[answer.response]?.id;
+      remember = answer.checkboxChecked;
+    } finally { choosingNoteDisplay = false; }
+  }
+  if ((await getJson("/api/state"))?.floatingScope !== scope) return false;
+  const result = taskWindows.show(id, scope, createdAt, display, remember);
+  return { ok: result.status === "opened", error: result.note };
+});
+ipcMain.handle("pacedmind:close-task-note", (event) => taskWindows.close(event));
+ipcMain.handle("pacedmind:show-floating-task", (event, href) => taskWindows.showInPlanner(event, href));
+
 ipcMain.on("pacedmind:set-theme", (event, theme) => {
   if ((theme !== "dark" && theme !== "light") || !win || event.sender !== win.webContents || event.senderFrame !== win.webContents.mainFrame) return;
   try { if (new URL(event.senderFrame.url).origin !== ORIGIN) return; } catch { return; }
@@ -175,6 +233,7 @@ ipcMain.on("pacedmind:set-theme", (event, theme) => {
   const colors = THEME_COLORS[theme];
   nativeTheme.themeSource = theme;
   win.setBackgroundColor(colors.background);
+  taskWindows.setBackgroundColor(colors.background);
   if (process.platform === "win32") win.setTitleBarOverlay({ color: colors.background, symbolColor: colors.symbol, height: 40 });
   if (readState().theme !== theme) writeState({ theme });
 });
@@ -432,7 +491,7 @@ function appMenu() {
       MAC ? { role: "appMenu" } : {
         label: "PacedMind",
         submenu: [
-          { label: "Close window", accelerator: "CmdOrCtrl+W", click: () => win?.close() },
+          { label: "Close window", accelerator: "CmdOrCtrl+W", click: () => BrowserWindow.getFocusedWindow()?.close() },
           { label: "Quit PacedMind", accelerator: "CmdOrCtrl+Q", click: quit },
         ],
       },
@@ -466,25 +525,59 @@ function watchSessions() {
   let known = null;
   let heard = null;
   let asked = new Set();
+  let checking = false;
   const check = async () => {
-    if (!serverReady) return;
-    const state = await getJson("/api/state");
-    if (!state) return;
-    const waiting = state.waiting ?? [];
-    const attention = state.attention ?? [];
-    const approvals = state.approvals ?? [];
-    if (known) for (const s of waiting) if (!known.has(s.id)) notify(s);
-    // Once per event: a session that waits again later tells you again.
-    if (heard) for (const s of attention) if (!heard.has(`${s.id}:${s.eventId}`)) notifyAttention(s);
-    for (const a of approvals) if (!asked.has(a.id)) notifyApproval(a);
-    known = new Set(waiting.map((s) => s.id));
-    heard = new Set(attention.map((s) => `${s.id}:${s.eventId}`));
-    asked = new Set(approvals.map((a) => a.id));
-    const count = waiting.length + attention.length + approvals.length;
-    tray?.setToolTip(count ? `PacedMind · ${count} waiting for you` : "PacedMind");
+    if (!serverReady || checking) return;
+    checking = true;
+    try {
+      const state = await getJson("/api/state");
+      if (!state) return;
+      taskWindows.keepScope(state.floatingScope);
+      const waiting = state.waiting ?? [];
+      const attention = state.attention ?? [];
+      const approvals = state.approvals ?? [];
+      if (known) for (const s of waiting) if (!known.has(s.id)) notify(s);
+      // Once per event: a session that waits again later tells you again.
+      if (heard) for (const s of attention) if (!heard.has(`${s.id}:${s.eventId}`)) notifyAttention(s);
+      for (const a of approvals) if (!asked.has(a.id)) notifyApproval(a);
+      known = new Set(waiting.map((s) => s.id));
+      heard = new Set(attention.map((s) => `${s.id}:${s.eventId}`));
+      asked = new Set(approvals.map((a) => a.id));
+      const count = waiting.length + attention.length + approvals.length;
+      tray?.setToolTip(count ? `PacedMind · ${count} waiting for you` : "PacedMind");
+      await syncTaskNotes(state.floatingScope);
+    } catch (error) {
+      console.error("[PacedMind] Desktop state refresh failed", error);
+    } finally { checking = false; }
   };
   check();
   setInterval(check, 5000);
+}
+
+let notesScope = null;
+const noteResults = new Map();
+async function syncTaskNotes(scope) {
+  if (notesScope !== scope) { noteResults.clear(); notesScope = scope; }
+  if (!scope) return;
+  const exchange = async (receive) => {
+    const response = await postJson("/api/desktop/task-notes", {
+      scope, displays: taskWindows.displays(scope), results: [...noteResults.values()], receive,
+    });
+    if (!response) return null;
+    for (const id of response.acknowledged ?? []) noteResults.delete(id);
+    if (response.scope !== scope) { taskWindows.keepScope(response.scope); noteResults.clear(); return null; }
+    return response;
+  };
+  const response = await exchange(true);
+  if (!response) return;
+  for (const r of (response.requests ?? []).slice(0, 24)) {
+    if (typeof r.id !== "string" || noteResults.has(r.id)) continue;
+    const result = Date.parse(r.expiresAt) > Date.now()
+      ? taskWindows.show(r.taskId, scope, r.taskCreatedAt, r.displayId, r.remember)
+      : { status: "failed", note: "The request expired before the note could open." };
+    noteResults.set(r.id, { id: r.id, ...result });
+  }
+  if (noteResults.size) await exchange(false);
 }
 
 /**
@@ -558,6 +651,7 @@ async function boot() {
     // The window's key, as a cookie only this app's window has; it's gone when the app quits.
     await session.defaultSession.cookies.set({ url: ORIGIN, name: UI_COOKIE, value: UI_KEY, httpOnly: true, sameSite: "strict" });
     serverReady = true;
+    taskWindows.reload();
     if (win) {
       const window = win;
       await window.loadURL(`${ORIGIN}/today`);
@@ -678,7 +772,7 @@ if (process.argv.includes("--install")) {
   });
   // macOS: clicking the Dock icon, or opening the app again from Finder, brings the window back.
   app.on("activate", (_e, hasVisibleWindows) => {
-    if (!hasVisibleWindows) showWindow();
+    if (!hasVisibleWindows || !win?.isVisible()) showWindow();
   });
   app.on("before-quit", () => {
     quitting = true;

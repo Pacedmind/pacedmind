@@ -44,6 +44,7 @@ const TOOL_GROUPS: [string, string[]][] = [
   ["Tasks", ["list_tasks", "get_task", "create_task", "create_tasks", "update_task", "bulk_update_tasks", "connect_tasks", "disconnect_tasks", "delete_task"]],
   ["Calendar", ["list_events", "create_event", "update_event", "delete_event", "get_agenda", "reschedule_day"]],
   ["Computers", ["list_computers", "set_folder"]],
+  ["Task notes", ["list_task_note_displays", "show_task_note"]],
   ["Sessions", ["list_sessions", "start_session", "close_session", "request_changes", "get_next_task", "start_task", "attach_image", "report_progress", "ask_user", "finish_task"]],
 ];
 

@@ -22,6 +22,12 @@ type Store = typeof cloud;
 // This computer's store must answer everything the account's does, with the same types.
 const stores: { cloud: Store; local: Store } = { cloud, local };
 
+export const getTaskNoteDisplays = via("getTaskNoteDisplays");
+export const saveTaskNoteDisplays = via("saveTaskNoteDisplays");
+export const listTaskNoteRequests = via("listTaskNoteRequests");
+export const createTaskNoteRequest = via("createTaskNoteRequest");
+export const settleTaskNoteRequest = via("settleTaskNoteRequest");
+
 /** A store function that runs on whichever store is in use when it's called. */
 function via<K extends keyof Store>(name: K): Store[K] {
   const call = async (...args: unknown[]) => {

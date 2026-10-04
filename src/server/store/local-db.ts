@@ -89,6 +89,12 @@ CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS preferences (
   id INTEGER PRIMARY KEY AUTOINCREMENT, topic TEXT NOT NULL, text TEXT NOT NULL, source TEXT NOT NULL DEFAULT 'you', updated_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS task_note_requests (
+  id TEXT PRIMARY KEY, task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  task_created_at TEXT NOT NULL, display_id TEXT NOT NULL, remember INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'pending', requested_at TEXT NOT NULL, expires_at TEXT NOT NULL, note TEXT
+);
+CREATE INDEX IF NOT EXISTS task_note_requests_pending ON task_note_requests(status, requested_at);
 `;
 
 type Row = Record<string, unknown>;

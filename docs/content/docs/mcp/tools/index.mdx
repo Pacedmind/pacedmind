@@ -1,6 +1,6 @@
 ---
 title: Tool reference
-description: Conventions shared by all 42 tools of PacedMind's MCP server (references, dates, statuses, clearing values, errors) and an index of every tool.
+description: Conventions shared by all 44 tools of PacedMind's MCP server (references, dates, statuses, clearing values, errors) and an index of every tool.
 ---
 
 The pages in this section describe every tool of the `pacedmind` MCP server with its parameters and what it returns. Agents see the same descriptions and parameter schemas in their MCP client; this reference is for the people who use and configure them.
@@ -95,6 +95,8 @@ Sessions that PacedMind starts get 20 of the tools, marked **Allowed without ask
 | [`reschedule_day`](/mcp/tools/calendar#reschedule_day) | Move one day's plans to another day. |
 | [`list_computers`](/mcp/tools/computers#list_computers) | The user's computers, what their agents have, and what each does with a session you ask for. |
 | [`set_folder`](/mcp/tools/computers#set_folder) | Ask a computer to use a folder for a project, an area or a task. |
+| [`list_task_note_displays`](/mcp/tools/computers#list_task_note_displays) | Connected displays, remembered choice and recent note delivery results. |
+| [`show_task_note`](/mcp/tools/computers#show_task_note) | Show one task in its own floating window and arrange notes on the chosen display. |
 | [`list_sessions`](/mcp/tools/sessions#list_sessions) | Agent sessions, newest first. |
 | [`start_session`](/mcp/tools/sessions#start_session) | Ask to start an agent on a task, on this computer or another: in a terminal, its desktop app or its cloud. |
 | [`close_session`](/mcp/tools/sessions#close_session) | Mark a stuck session closed. |

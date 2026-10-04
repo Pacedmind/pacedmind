@@ -28,6 +28,7 @@ import { InlineMarkdown } from "./markdown";
 import { MarkdownEditor } from "./markdown-editor";
 import { AnswerForm, Gallery, ReportBody, RequestChangesForm, SessionPlan, SessionReport, sameText } from "./report";
 import { Button, IconButton, Menu, cx, useAction } from "./ui";
+import { FloatTaskButton } from "./float-task-button";
 
 /** "in a terminal", "in the Claude app" or "in Claude Code on the web". */
 const placeOf = (agent: AgentId, surface: Surface) =>
@@ -216,6 +217,7 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
         <span className="text-faint">›</span>
         <span className="font-mono text-[11.5px] text-mut2">{task.key}</span>
         <span className="flex-1" />
+        <FloatTaskButton task={task} scope={ctx.floatingScope} />
         <IconButton label="Delete task" onClick={() => { if (confirm(`Delete ${task.key}?`)) { run(() => deleteTaskAction(task.id)); onClose(); } }}>
           <Icon name="trash" size={15} />
         </IconButton>

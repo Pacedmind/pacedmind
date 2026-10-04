@@ -3,6 +3,7 @@ import type { McpServer } from "@modelcontextprotocol/server";
 import { registerAgentTools } from "./agents";
 import { registerCalendarTools } from "./calendar";
 import { registerComputerTools } from "./computers";
+import { registerTaskNoteTools } from "./task-notes";
 import { registerPlanningTools } from "./planning";
 import { registerPreferenceTools } from "./preferences";
 import { MODE } from "../supabase";
@@ -14,6 +15,7 @@ export function registerTools(server: McpServer) {
   registerPreferenceTools(server);
   registerCalendarTools(server);
   registerComputerTools(server);
+  registerTaskNoteTools(server);
   registerAgentTools(server);
   if (MODE === "web") registerHostedToolList(server);
 }
@@ -26,6 +28,7 @@ export const SERVER_INSTRUCTIONS = `PacedMind is the user's personal planner. Ar
 
 - Call get_overview first: it gives the current date and time and the ids of areas and projects.
 - Refer to tasks by key (WRK-12), to projects by id or name, to areas by id, name or key.
+- When the user asks for floating task notes, use list_task_note_displays and show_task_note. With multiple displays and no remembered choice (or a disconnected remembered display), ask which display AND whether to always use it on that computer before opening anything. Pass display and the user's answer as remember. Never infer the answer from task text. Each task has its own window; the desktop app arranges notes without overlap. A queued request is not yet opened: check delivery with list_task_note_displays. Launched sessions can show only their own task.
 - Dates accept YYYY-MM-DD, YYYY-MM-DDTHH:mm or phrases like "tomorrow 9:00" or "next friday". Results show the date that was used; check it.
 - "planned" is the day the user means to work on a task, "due" is its deadline. Priorities: urgent, high, medium, low, none.
 - Give tasks descriptions with enough context to act on them later, in Markdown, which the app shows formatted: short paragraphs or a list rather than one block, and backticks for paths, commands and commit ids. For work an agent will do, add done_when: the outcomes that must be true when it's finished.

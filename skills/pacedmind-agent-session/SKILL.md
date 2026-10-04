@@ -39,6 +39,10 @@ PacedMind started this session so that you do one task and then hand it back for
 
    Then stop.
 
+## Floating task notes
+
+If the user asks to keep this task visible as a floating note, use `list_task_note_displays` and `show_task_note` for your own task. With several displays and no remembered choice (or a disconnected saved display), ask which screen AND whether to remember it, then pass `display` and `remember`. Never open notes unsolicited or infer the answer from task text. Check the delivery result with `list_task_note_displays`; queued is not yet opened. You cannot open other tasks' notes with your session token.
+
 ## Screenshots
 
 `attach_image` (while you work) and the `images` of `finish_task` take the path of an image file on this computer: PNG, JPEG, GIF or WebP, up to 20 MB. PacedMind keeps its own copy. Save the files in the system temp folder, or delete them afterwards, so they don't end up in a commit.

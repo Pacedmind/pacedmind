@@ -68,6 +68,9 @@ How the user likes to work, in their own words: one short sentence each, under a
 
 ## Computers
 
+- `list_task_note_displays` (read): connected displays on `computer` (name or id; this computer locally, or the only one currently reporting displays in Cloud), their labels, ids, usable sizes, positions, note capacity, remembered choice and recent delivery receipts.
+- `show_task_note`: one existing `task` in its own movable, always-on-top window, arranged with other notes on the selected display. Only when the user asks for notes. With several displays and no remembered choice, or a disconnected remembered choice, first ask which display AND whether to always use it on that computer. Pass its `display` id and `remember: true` or `false`; never guess the answer. Omit both only for a remembered choice or the sole display. True saves after a successful opening; false leaves the saved preference unchanged. Call once per task. A launched session may show only its own task. A queued request expires in two minutes: check `list_task_note_displays` for opened or failed before claiming it appeared. Requires the desktop app to be running and Cloud computer access when signed in.
+
 - `list_computers` (read): the user's computers with the PacedMind desktop app: online or when last seen, the default one and this one, what each has of Claude Code and Codex (CLI and sign-in, desktop app, MCP servers, claude.ai connectors, plugins, skills), and what it does with a session you ask it for.
 - `set_folder`: asks to use a folder (its absolute path there) on one of the user's computers for a project, an area (its workspace) or a task. Folders are each computer's own settings: the user allows it in PacedMind on that computer, which checks the folder is there first. Without `computer`, this computer. Only when the user asks.
 

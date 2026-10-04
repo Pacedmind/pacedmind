@@ -121,6 +121,13 @@ html[data-theme="light"] {
   }
 }
 
+/* Frameless task notes: only the header drags; the controls remain clickable. */
+.task-note-titlebar { -webkit-app-region: drag; }
+.task-note-titlebar button { -webkit-app-region: no-drag; }
+.task-note-progress { appearance: none; border: 0; border-radius: 2px; overflow: hidden; }
+.task-note-progress::-webkit-progress-bar { background: var(--color-line2); }
+.task-note-progress::-webkit-progress-value { background: var(--color-fg3); }
+
 /* A single header replaces Windows' title text and the former sidebar logo row. */
 .app-titlebar {
   -webkit-app-region: drag;

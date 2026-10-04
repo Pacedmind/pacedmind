@@ -7,7 +7,8 @@ import { plannedFolder, plannedSurface } from "./launcher";
 import { changesProblemIn, changesViaIn } from "./ops";
 import * as repo from "./repo";
 import { usesCloud } from "./scope";
-import { MODE } from "./supabase";
+import { MODE, authState } from "./supabase";
+import { floatingTaskScope } from "./floating-tasks";
 import { agentOf, isLiveSession, type Area, type Project, type Session, type Task, type TaskContext, type Usage } from "@/lib/types";
 import { NO_USE, addUse, sessionUse, type AgentUse } from "@/lib/usage";
 
@@ -38,6 +39,7 @@ export async function taskContext(tasks: Task[]): Promise<TaskContext> {
   return {
     areas, projects, sessions, sessionEvents, reports: Object.fromEntries(reports), pending: Object.fromEntries(pending), changesOk, changesVia,
     desktop: MODE === "desktop", deviceId: MODE === "desktop" && (await usesCloud()) ? thisDeviceId() : null,
+    floatingScope: floatingTaskScope(await authState()),
     asksTrust: MODE === "desktop" ? asksTrust(tasks, sessions, projects) : undefined,
     tools: await accountTools(),
     agentUse,

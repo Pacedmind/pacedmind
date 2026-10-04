@@ -1,4 +1,6 @@
 import "server-only";
+import type { NoteDisplays, TaskNoteInput, TaskNoteRequest } from "@/lib/task-notes";
+import { localNoteDisplays, publishNoteDisplays } from "../task-note-displays";
 import { checkedModelSelection, modelSelectionOf } from "@/lib/agent-models";
 import crypto from "node:crypto";
 import { removeImageFiles, type StoredImage } from "../attachments";
@@ -33,6 +35,33 @@ import { cleanNeeds } from "@/lib/needs";
  */
 
 type Row = Record<string, unknown>;
+
+export async function getTaskNoteDisplays(): Promise<NoteDisplays | null> { return localNoteDisplays("local"); }
+export async function saveTaskNoteDisplays(_deviceId: string, value: NoteDisplays) { publishNoteDisplays("local", value); }
+const toTaskNote = (r: Row): TaskNoteRequest => ({
+  id: String(r.id), deviceId: "", taskId: Number(r.task_id), taskCreatedAt: String(r.task_created_at), displayId: String(r.display_id),
+  remember: !!r.remember, status: String(r.status) as TaskNoteRequest["status"], requestedAt: String(r.requested_at),
+  expiresAt: String(r.expires_at), note: r.note == null ? null : String(r.note),
+});
+export async function listTaskNoteRequests(): Promise<TaskNoteRequest[]> {
+  return db().prepare("SELECT * FROM task_note_requests WHERE requested_at > ? ORDER BY requested_at DESC LIMIT 40")
+    .all(new Date(Date.now() - 10 * 60_000).toISOString()).map((r) => toTaskNote(r));
+}
+export async function createTaskNoteRequest(input: TaskNoteInput): Promise<TaskNoteRequest> {
+  return tx(() => {
+    const now = new Date().toISOString();
+    db().prepare("DELETE FROM task_note_requests WHERE expires_at < ?").run(new Date(Date.now() - 86400_000).toISOString());
+    const waiting = db().prepare("SELECT count(*) AS n FROM task_note_requests WHERE status IN ('pending', 'dispatched') AND expires_at > ?").get(now);
+    if (Number(waiting?.n) >= 24) throw new Error("Too many notes are waiting to be opened. Wait for the desktop app.");
+    const id = crypto.randomUUID();
+    db().prepare("INSERT INTO task_note_requests (id, task_id, task_created_at, display_id, remember, requested_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+      .run(id, input.taskId, input.taskCreatedAt, input.displayId, +input.remember, now, new Date(Date.now() + 120_000).toISOString());
+    return toTaskNote(db().prepare("SELECT * FROM task_note_requests WHERE id = ?").get(id)!);
+  });
+}
+export async function settleTaskNoteRequest(id: string, from: TaskNoteRequest["status"], status: TaskNoteRequest["status"], note: string | null = null): Promise<boolean> {
+  return db().prepare("UPDATE task_note_requests SET status = ?, note = ? WHERE id = ? AND status = ?").run(status, note?.slice(0, 500) ?? null, id, from).changes > 0;
+}
 type Value = string | number | null;
 const s = (v: unknown) => (v == null ? null : String(v));
 const n = (v: unknown) => (v == null ? null : Number(v));

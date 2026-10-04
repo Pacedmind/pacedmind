@@ -1,4 +1,5 @@
 import "server-only";
+import { noteDisplaysOf, type NoteDisplays, type TaskNoteInput, type TaskNoteRequest } from "@/lib/task-notes";
 import { checkedModelSelection, modelSelectionOf, modelCatalogOf } from "@/lib/agent-models";
 import crypto from "node:crypto";
 import type { PostgrestError } from "@supabase/supabase-js";
@@ -29,6 +30,36 @@ import {
   type PushSubscriptionInput, type SessionAsk, type Subtask, type Surface, type Task,
 } from "@/lib/types";
 import { cleanNeeds } from "@/lib/needs";
+
+export async function getTaskNoteDisplays(deviceId: string): Promise<NoteDisplays | null> {
+  const db = await accountDb();
+  const row = one(await db.from("devices").select("note_displays").eq("id", deviceId).is("revoked_at", null).maybeSingle());
+  return noteDisplaysOf(row?.note_displays);
+}
+export async function saveTaskNoteDisplays(deviceId: string, value: NoteDisplays) {
+  const db = await accountDb();
+  check(await db.from("devices").update({ note_displays: value }).eq("id", deviceId));
+}
+const toTaskNote = (r: Row): TaskNoteRequest => ({
+  id: String(r.id), deviceId: String(r.device_id), taskId: Number(r.task_id), taskCreatedAt: String(r.task_created_at),
+  displayId: String(r.display_id), remember: r.remember === true, status: String(r.status) as TaskNoteRequest["status"],
+  requestedAt: String(r.requested_at), expiresAt: String(r.expires_at), note: s(r.note),
+});
+export async function listTaskNoteRequests(deviceId: string): Promise<TaskNoteRequest[]> {
+  const db = await accountDb();
+  return many(await db.from("task_note_requests").select("*").eq("device_id", deviceId)
+    .gte("requested_at", new Date(Date.now() - 10 * 60_000).toISOString()).order("requested_at", { ascending: false }).limit(40)).map(toTaskNote);
+}
+export async function createTaskNoteRequest(input: TaskNoteInput): Promise<TaskNoteRequest> {
+  const db = await accountDb();
+  return toTaskNote(one(await db.from("task_note_requests").insert({
+    device_id: input.deviceId, task_id: input.taskId, task_created_at: input.taskCreatedAt, display_id: input.displayId, remember: input.remember,
+  }).select().single())!);
+}
+export async function settleTaskNoteRequest(id: string, from: TaskNoteRequest["status"], status: TaskNoteRequest["status"], note: string | null = null): Promise<boolean> {
+  const db = await accountDb();
+  return !!one(await db.from("task_note_requests").update({ status, note: note?.slice(0, 500) ?? null }).eq("id", id).eq("status", from).select("id").maybeSingle());
+}
 
 /*
  * The account's data in PacedMind Cloud (Supabase), used while someone is signed in; repo.ts picks this or

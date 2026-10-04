@@ -31,6 +31,10 @@ Start with `get_overview` whenever you need today's date, the ids of areas and p
   - `reschedule_day` moves a whole day.
 - Error results explain what was wrong and usually list the valid options, so read them before retrying.
 
+## Floating task notes
+
+When the user asks to put tasks on their desktop as floating notes, use `list_task_note_displays` then `show_task_note` once per task. With multiple screens and no saved choice, or if the saved screen is disconnected, ask which screen AND whether to always use it for notes on that computer. Pass the returned display id and the user's answer as `remember`. Do not guess either answer or store it as a general planner preference. Each task gets its own movable window; the app arranges notes on the selected screen. Check delivery in `list_task_note_displays` before saying the notes are open. If a screen is full, offer another screen or ask which notes to close.
+
 ## Writing tasks the user can act on
 
 A good task is one the user (or an agent) can pick up weeks later without asking questions.

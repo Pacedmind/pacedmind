@@ -9,7 +9,7 @@ import { POLL_EVENT, publishLaunchState } from "./request-status";
  * Re-renders the page when data changed somewhere else, e.g. an agent reported progress over MCP. Each answer also
  * carries the account's requests to its computers, for the chips that show what became of them (request-status.tsx).
  */
-export function LiveRefresh({ every = 4000 }: { every?: number }) {
+export function LiveRefresh({ every = 4000, refreshOnMount = false }: { every?: number; refreshOnMount?: boolean }) {
   const router = useRouter();
   useEffect(() => {
     let last: string | null = null;
@@ -28,7 +28,8 @@ export function LiveRefresh({ every = 4000 }: { every?: number }) {
         const state = (await r.json()) as { version: string; requests?: unknown; codeFreshUntil?: unknown; asks?: unknown; plan?: unknown };
         publishLaunchState(state);
         publishPlan(state.plan);
-        if (last !== null && state.version !== last) router.refresh();
+        // A newly opened note may have loaded just before an agent's write and its first poll just after it.
+        if ((last === null && refreshOnMount) || (last !== null && state.version !== last)) router.refresh();
         last = state.version;
       } catch {
         // The server is restarting; try again on the next tick.
@@ -50,6 +51,6 @@ export function LiveRefresh({ every = 4000 }: { every?: number }) {
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener(POLL_EVENT, check);
     };
-  }, [router, every]);
+  }, [router, every, refreshOnMount]);
   return null;
 }

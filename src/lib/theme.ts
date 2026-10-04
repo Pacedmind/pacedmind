@@ -9,6 +9,10 @@ declare global {
       setTheme: (theme: Theme) => void;
       /** The system's folder dialog (desktop/preload.cjs); missing in a browser and in apps built before it. */
       pickFolder?: (near?: string | null) => Promise<string | null>;
+      /** Independent, always-on-top task notes; missing in older desktop builds. */
+      floatTask?: (id: number, scope: string, createdAt: string) => Promise<boolean | { ok: boolean; error?: string }>;
+      closeTaskNote?: () => Promise<boolean>;
+      showFloatingTask?: (href: string) => Promise<boolean>;
     };
   }
 }

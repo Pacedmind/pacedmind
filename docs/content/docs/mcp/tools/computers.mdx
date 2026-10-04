@@ -1,9 +1,36 @@
 ---
 title: Computers
-description: "Reference for the computer tools: list_computers, what each of the user's computers has and does with a session an agent asks for, and set_folder, which asks a computer to use a folder."
+description: "Computer tools: inspect computers and displays, show floating task notes, and ask a computer to use a folder."
 ---
 
-Agent sessions run on the user's computers, the ones with the PacedMind desktop app, and each computer keeps its own folders and settings. These tools show an agent the computers and let it ask one for a folder. Starting a session on one is [`start_session`](/mcp/tools/sessions#start_session) with `computer`.
+Agent sessions run on the user's computers, the ones with the PacedMind desktop app, and each computer keeps its own folders and settings. These tools show an agent the computers, display floating task notes and let it ask a computer for a folder. Starting a session on one is [`start_session`](/mcp/tools/sessions#start_session) with `computer`.
+
+## `list_task_note_displays`
+
+**Read-only. Allowed without asking.**
+
+Lists connected displays on a computer running PacedMind: their labels, ids, usable dimensions, positions, primary display, note capacity and remembered choice. It also shows the results of recent requests to open notes. A launched agent session sees receipts only for its own task.
+
+The optional `computer` is a name or id from `list_computers`. Without it, the local connection uses this computer; PacedMind Cloud uses the only computer currently reporting its displays. With several available computers, ask the user which one.
+
+With multiple displays and no remembered choice, ask **which display to use and whether to always use it for task notes on that computer**. If the remembered display is disconnected, ask again. Display ids come from this tool; the numbered list helps the user choose.
+
+## `show_task_note`
+
+**Shows a desktop window. Only when the user asks for task notes.**
+
+Opens one task in an independent, always-on-top window and arranges the notes on the selected display without overlap. An already open task reuses its window. Call once per task. A session launched by PacedMind can show only its own task. This does not start a session or change the task's status.
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `task` | string | yes | Task key. |
+| `computer` | string | no | As in `list_task_note_displays`. |
+| `display` | string | for an explicit choice | Display id returned by `list_task_note_displays`. |
+| `remember` | boolean | with `display` | The user's answer: `true` saves the choice on that computer; `false` uses it once and leaves an existing preference unchanged. |
+
+Omit both `display` and `remember` to use a remembered choice or the only connected display. With several displays and no remembered choice, the tool returns the choices without opening a note. It also refuses an explicit display until the agent passes the user's answer about remembering it. Preferences are separate for each computer and planner.
+
+The reply says **queued**, with a request id. Check `list_task_note_displays` for **opened** or the reason it failed; queued does not mean it has appeared yet. Requests expire after two minutes and are delivered once. If the selected screen is disconnected or full, ask for another display or for a note to be closed. The choice is saved only after a note opens successfully. Cloud requests require established computer access, as other computer tools do.
 
 ## `list_computers`
 

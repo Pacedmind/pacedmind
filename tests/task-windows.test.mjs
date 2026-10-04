@@ -1,0 +1,200 @@
+import assert from "node:assert/strict";
+import { EventEmitter } from "node:events";
+import { test } from "node:test";
+import { createTaskWindows } from "../desktop/task-windows.mjs";
+import { noteCapacity, noteLayout } from "../desktop/task-note-layout.mjs";
+
+const origin = "http://127.0.0.1:4319";
+const createdAt = "2026-10-04T10:00:00";
+const account = "11111111-1111-4111-8111-111111111111";
+
+function fixture(platform = "win32") {
+  const windows = [];
+  const opened = [];
+  const preferred = new Map();
+  const displays = [{ id: 1, label: "Left", workArea: { x: -1280, y: 0, width: 1280, height: 720 } }];
+  class Window extends EventEmitter {
+    constructor(options) {
+      super();
+      this.options = options;
+      this.webContents = new EventEmitter();
+      this.webContents.mainFrame = { url: "" };
+      this.webContents.setWindowOpenHandler = (fn) => { this.openHandler = fn; };
+      this.webContents.reload = () => { this.reloaded = true; };
+      windows.push(this);
+    }
+    setMenuBarVisibility() {}
+    getBounds() { const { x, y, width, height } = this.options; return { x, y, width, height }; }
+    setBounds(bounds) { Object.assign(this.options, bounds); }
+    setVisibleOnAllWorkspaces(...args) { this.workspaces = args; }
+    loadURL(url) { this.webContents.mainFrame.url = url; return Promise.resolve(); }
+    isDestroyed() { return !!this.closed; }
+    isMinimized() { return !!this.minimized; }
+    restore() { this.minimized = false; }
+    show() { this.shown = true; }
+    showInactive() { this.shown = true; }
+    focus() { this.focused = true; }
+    close() { this.closed = true; this.emit("closed"); }
+    setBackgroundColor(color) { this.background = color; }
+  }
+  const notes = createTaskWindows({
+    BrowserWindow: Window, origin, preload: "/app/preload.cjs", icon: "icon.ico", platform,
+    screen: {
+      getCursorScreenPoint: () => ({ x: -500, y: 100 }), getDisplayNearestPoint: () => displays[0],
+      getAllDisplays: () => displays, getPrimaryDisplay: () => displays[0],
+      getDisplayMatching: (r) => displays.find((d) => r.x >= d.workArea.x && r.x < d.workArea.x + d.workArea.width) ?? displays[0],
+    },
+    preferredDisplay: (scope) => preferred.get(scope) ?? null,
+    rememberDisplay: (scope, display) => preferred.set(scope, display),
+    theme: () => ({ name: "dark", background: "#010101" }), showMain: (url) => opened.push(url),
+  });
+  const event = (window) => ({ sender: window.webContents, senderFrame: window.webContents.mainFrame });
+  return { notes, windows, opened, event, displays, preferred };
+}
+
+test("each task gets an independent topmost window; repeated clicks restore the existing note", () => {
+  const { notes, windows } = fixture();
+  assert.equal(notes.open(1, "local", createdAt), true);
+  assert.equal(notes.open(2, "local", createdAt), true);
+  const [first, second] = windows;
+  for (const window of windows) {
+    assert.equal(window.options.alwaysOnTop, true);
+    assert.equal(window.options.parent, undefined);
+    assert.equal(window.options.webPreferences.backgroundThrottling, false);
+    assert.equal(window.options.webPreferences.nodeIntegration, false);
+    assert.equal(window.options.webPreferences.sandbox, true);
+    assert.equal(window.options.webPreferences.contextIsolation, true);
+    assert.ok(window.options.x >= -1280 && window.options.x + window.options.width <= 0);
+    assert.ok(window.options.y >= 0 && window.options.y + window.options.height <= 720);
+  }
+  assert.notEqual(first.options.x, second.options.x);
+  first.minimized = true;
+  notes.open(1, "local", createdAt);
+  assert.equal(windows.length, 2);
+  assert.equal(first.minimized, false);
+  assert.equal(first.focused, true);
+  first.close();
+  assert.equal(second.closed, undefined);
+  notes.open(1, "local", createdAt);
+  assert.equal(windows.length, 3);
+});
+
+test("grids never overlap or leave usable screen bounds, including portrait and scaled negative-origin screens", () => {
+  for (const area of [
+    { x: -1920, y: -100, width: 1920, height: 1040 }, { x: 0, y: 40, width: 1280, height: 680 },
+    { x: 2560, y: -300, width: 720, height: 1240 }, { x: 0, y: 0, width: 400, height: 300 },
+  ]) {
+    for (let count = 1; count <= noteCapacity(area); count++) {
+      const layout = noteLayout(area, count);
+      assert.equal(layout.length, count);
+      for (const [i, r] of layout.entries()) {
+        assert.ok(r.width >= 280 && r.height >= 200);
+        assert.ok(r.x >= area.x && r.x + r.width <= area.x + area.width);
+        assert.ok(r.y >= area.y && r.y + r.height <= area.y + area.height);
+        for (const other of layout.slice(i + 1)) assert.ok(r.x + r.width <= other.x || other.x + other.width <= r.x || r.y + r.height <= other.y || other.y + other.height <= r.y);
+      }
+    }
+    assert.equal(noteLayout(area, noteCapacity(area) + 1), null);
+  }
+});
+
+test("three displays, one remembered choice per account, one-off overrides and disconnected screens", () => {
+  const { notes, displays, preferred, windows } = fixture();
+  displays.push({ id: 2, label: "Centre", workArea: { x: 0, y: 0, width: 1920, height: 1040 } });
+  displays.push({ id: 3, label: "Right", workArea: { x: 1920, y: -200, width: 1440, height: 900 } });
+  assert.equal(notes.displays("local").displays.length, 3);
+  assert.equal(notes.displays("local").defaultDisplay, null);
+  assert.equal(notes.show(1, "local", createdAt, "3", true).status, "opened");
+  assert.equal(notes.show(2, "local", createdAt, "3").status, "opened");
+  assert.equal(notes.displays("local").displays[2].openCount, 2);
+  assert.equal(preferred.get("local"), "3");
+  assert.equal(notes.displays(account).defaultDisplay, null);
+  assert.equal(notes.show(3, "local", createdAt, "2", false).status, "opened");
+  assert.equal(preferred.get("local"), "3");
+  assert.equal(windows[0].getBounds().x >= 1920, true);
+  const before = windows.length;
+  displays.pop();
+  assert.equal(notes.show(4, "local", createdAt, "3", true).status, "failed");
+  assert.equal(windows.length, before);
+});
+
+test("full displays refuse an extra note without saving a preference or moving existing notes", () => {
+  const { notes, windows, displays, preferred } = fixture();
+  displays[0].workArea = { x: 0, y: 0, width: 400, height: 300 };
+  assert.equal(notes.show(1, "local", createdAt, "1").status, "opened");
+  const before = windows[0].getBounds();
+  assert.equal(notes.show(2, "local", createdAt, "1", true).status, "failed");
+  assert.equal(windows.length, 1);
+  assert.deepEqual(windows[0].getBounds(), before);
+  assert.equal(preferred.size, 0);
+  assert.equal(notes.show(1, "local", createdAt, "1", true).status, "opened");
+  assert.equal(preferred.get("local"), "1");
+});
+
+test("note controls accept only their own main frame and only planner destinations", () => {
+  const { notes, windows, opened, event } = fixture();
+  notes.open(1, "local", createdAt);
+  const window = windows[0];
+  const owner = event(window);
+  const subframe = { ...owner, senderFrame: { url: owner.senderFrame.url } };
+  assert.equal(notes.close(subframe), false);
+  assert.equal(notes.showInPlanner(subframe, "/inbox?task=WRK-1"), false);
+  assert.equal(notes.close({ sender: {}, senderFrame: owner.senderFrame }), false);
+  for (const href of ["https://example.com", "//example.com", "/auth/callback?code=x", "/inbox?task=x&next=//example.com", "/project/../login"]) {
+    assert.equal(notes.showInPlanner(owner, href), false);
+  }
+  assert.equal(notes.showInPlanner(owner, "/area/work/todos?task=WRK-1"), true);
+  assert.deepEqual(opened, [`${origin}/area/work/todos?task=WRK-1`]);
+  const url = window.webContents.mainFrame.url;
+  window.webContents.mainFrame.url = "https://example.com";
+  assert.equal(notes.close(owner), false);
+  window.webContents.mainFrame.url = url;
+  assert.equal(notes.close(owner), true);
+  assert.equal(window.closed, true);
+});
+
+test("notes refuse navigation, popups and malformed task references", () => {
+  const { notes, windows } = fixture();
+  for (const id of [0, -1, 1.5, "1", NaN, Infinity, Number.MAX_SAFE_INTEGER + 1]) assert.equal(notes.open(id, "local", createdAt), false);
+  for (const scope of ["", "https://example.com", "local/../other", null]) assert.equal(notes.open(1, scope, createdAt), false);
+  assert.equal(notes.open(1, "local", "wrong"), false);
+  assert.equal(windows.length, 0);
+  notes.open(1, "local", createdAt);
+  const window = windows[0];
+  assert.deepEqual(window.openHandler({ url: "https://example.com" }), { action: "deny" });
+  for (const type of ["will-navigate", "will-redirect"]) {
+    for (const url of ["https://example.com", `${origin}/today`, "data:text/html,bad"]) {
+      let blocked = false;
+      window.webContents.emit(type, { preventDefault: () => { blocked = true; } }, url);
+      assert.equal(blocked, true);
+    }
+  }
+});
+
+test("switching accounts closes old notes and resetting a task cannot reuse its old window", () => {
+  const { notes, windows } = fixture();
+  notes.open(1, "local", createdAt);
+  notes.open(1, account, createdAt);
+  notes.keepScope(account);
+  assert.equal(windows[0].closed, true);
+  assert.equal(windows[1].closed, undefined);
+  notes.open(1, account, "2026-10-05T10:00:00");
+  assert.equal(windows[1].closed, true);
+  assert.equal(windows[2].closed, undefined);
+  notes.keepScope(null);
+  assert.equal(windows[2].closed, true);
+});
+
+test("Mac notes cover workspaces; theme changes and server restarts reach every open note", () => {
+  const { notes, windows } = fixture("darwin");
+  notes.open(1, "local", createdAt);
+  notes.open(2, "local", createdAt);
+  notes.setBackgroundColor("#f5f5f6");
+  notes.reload();
+  for (const window of windows) {
+    assert.deepEqual(window.workspaces, [true, { visibleOnFullScreen: true }]);
+    assert.equal(window.options.icon, undefined);
+    assert.equal(window.background, "#f5f5f6");
+    assert.equal(window.reloaded, true);
+  }
+});

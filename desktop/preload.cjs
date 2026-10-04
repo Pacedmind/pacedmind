@@ -11,4 +11,13 @@ contextBridge.exposeInMainWorld("pacedMindDesktop", {
   pickFolder(near) {
     return ipcRenderer.invoke("pacedmind:pick-folder", typeof near === "string" ? near : null);
   },
+  floatTask(id, scope, createdAt) {
+    return ipcRenderer.invoke("pacedmind:float-task", id, scope, createdAt);
+  },
+  closeTaskNote() {
+    return ipcRenderer.invoke("pacedmind:close-task-note");
+  },
+  showFloatingTask(href) {
+    return ipcRenderer.invoke("pacedmind:show-floating-task", href);
+  },
 });

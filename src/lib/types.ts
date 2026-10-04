@@ -756,6 +756,8 @@ export interface TaskContext {
   changesVia?: Record<string, string>;
   /** In the desktop app, which keeps this computer's folders and starts sessions here; false in the web app. */
   desktop?: boolean;
+  /** The desktop store these tasks came from; floating notes keep this identity across account changes. */
+  floatingScope?: string | null;
   /** This computer's id in the account's list (desktop app, signed in and registered); null otherwise. */
   deviceId?: string | null;
   /**

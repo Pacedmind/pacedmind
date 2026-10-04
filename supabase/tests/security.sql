@@ -1510,6 +1510,11 @@ begin
     select count(*) into n from auth.users where id = b; out := out || '13b account rows left=' || n || ' (want 0)' || E'\n';
   exception when others then out := out || '13 ERROR ' || sqlerrm || E'\n'; end;
 
+  -- Task-note request behavioral checks live in task_notes.sql; keep its RLS boundary in the main audit too.
+  select count(*) into n from pg_policies where schemaname = 'public' and tablename = 'task_note_requests' and permissive = 'RESTRICTIVE';
+  out := out || '26 task-note restrictive policies=' || n || ' (want 3)' || E'\n';
+  select count(*) into n from pg_class where oid = 'public.task_note_requests'::regclass and relrowsecurity;
+  out := out || '26b task-note RLS=' || n || ' (want 1)' || E'\n';
   raise exception E'RESULTS (rolled back)\n%', out;
 end
 $test$;
