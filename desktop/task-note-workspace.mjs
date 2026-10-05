@@ -1,7 +1,7 @@
-import { noteLayout } from "./task-note-layout.mjs";
+import { noteLayout, noteMinimum } from "./task-note-layout.mjs";
 
-export const DEFAULT_LAYOUT = { size: "medium", group: "none", order: "manual", emphasis: true, animation: "shuffle", regions: {} };
-const choices = { size: ["small", "medium", "large"], group: ["none", "focus", "project", "area", "priority"], order: ["manual", "relevance", "deadline"], animation: ["shuffle", "right", "diagonal", "together", "none"] };
+export const DEFAULT_LAYOUT = { size: "medium", group: "none", arrangement: "grid", order: "manual", emphasis: true, animation: "shuffle", regions: {} };
+const choices = { size: ["xs", "small", "medium", "large"], group: ["none", "focus", "project", "area", "priority", "status", "deadline"], arrangement: ["grid", "columns", "rows"], order: ["manual", "relevance", "deadline"], animation: ["shuffle", "right", "diagonal", "together", "none"] };
 export const refOf = (n) => `${n.id}:${n.createdAt}`;
 export function layoutSettings(raw) {
   const result = { ...DEFAULT_LAYOUT, regions: {} };
@@ -14,7 +14,7 @@ export function layoutSettings(raw) {
 }
 export function validRegion(r) {
   return r && [r.x, r.y, r.width, r.height].every(Number.isFinite) && r.x >= 0 && r.y >= 0 &&
-    r.width >= .05 && r.height >= .05 && r.x + r.width <= 1.001 && r.y + r.height <= 1.001;
+    r.width > 0 && r.height > 0 && r.x + r.width <= 1.001 && r.y + r.height <= 1.001;
 }
 const rank = { urgent: 4, high: 3, medium: 2, low: 1, none: 0 };
 function day(now) { return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`; }
@@ -37,6 +37,12 @@ export function noteGroups(notes, settings, now = new Date()) {
       key = focus ? "focus" : ["in_progress", "in_review"].includes(m.status) ? "progress" : "later";
       name = { focus: "Focus", progress: "In progress", later: "Later" }[key];
     }
+    if (mode === "status") { key = `status:${m.status ?? "todo"}`; name = ({ backlog: "Backlog", todo: "To do", in_progress: "In progress", in_review: "In review", done: "Done", canceled: "Canceled" })[m.status] ?? "To do"; }
+    if (mode === "deadline") {
+      const due = m.dueDate?.slice(0, 10), today = day(now), week = new Date(now); week.setDate(week.getDate() + 7);
+      key = !due ? "no-date" : due < today ? "overdue" : due === today ? "today" : due <= day(week) ? "week" : "later";
+      name = { "no-date": "No deadline", overdue: "Overdue", today: "Today", week: "Next 7 days", later: "Later" }[key];
+    }
     if (!groups.has(key)) groups.set(key, { key, name, notes: [] });
     groups.get(key).notes.push(n);
   }
@@ -46,7 +52,8 @@ export function noteGroups(notes, settings, now = new Date()) {
       Number(importance(b.meta, now) === "strong") - Number(importance(a.meta, now) === "strong") ||
       (rank[b.meta?.priority] ?? 0) - (rank[a.meta?.priority] ?? 0) || (a.meta?.dueDate ?? "9999").localeCompare(b.meta?.dueDate ?? "9999") || a.id - b.id);
   }
-  return [...groups.values()].sort((a, b) => settings.group === "focus" ? ["focus", "progress", "later"].indexOf(a.key) - ["focus", "progress", "later"].indexOf(b.key) : settings.group === "priority" ? (rank[b.key.split(":")[1]] ?? 0) - (rank[a.key.split(":")[1]] ?? 0) : a.name.localeCompare(b.name));
+  const sequence = settings.group === "focus" ? ["focus", "progress", "later"] : settings.group === "status" ? ["status:backlog", "status:todo", "status:in_progress", "status:in_review", "status:done", "status:canceled"] : settings.group === "deadline" ? ["overdue", "today", "week", "later", "no-date"] : null;
+  return [...groups.values()].sort((a, b) => sequence ? sequence.indexOf(a.key) - sequence.indexOf(b.key) : settings.group === "priority" ? (rank[b.key.split(":")[1]] ?? 0) - (rank[a.key.split(":")[1]] ?? 0) : a.name.localeCompare(b.name));
 }
 export function pixelRegion(area, r) {
   return { x: area.x + Math.round(r.x * area.width), y: area.y + Math.round(r.y * area.height), width: Math.floor(r.width * area.width), height: Math.floor(r.height * area.height) };
@@ -68,7 +75,8 @@ function partition(groups, area, size, budget = { left: 500 }) {
       const ratio = left.reduce((s, g) => s + g.notes.length, 0) / total;
       for (const fraction of [ratio, .5, ratio - .08, ratio + .08]) {
         const distance = Math.round(area[dimension] * fraction);
-        if (distance < 220 || area[dimension] - distance < 220) continue;
+        const minimum = noteMinimum(size)[dimension] + 32;
+        if (distance < minimum || area[dimension] - distance < minimum) continue;
         const a = { ...area, [dimension]: distance }, b = { ...area, [axis]: area[axis] + distance, [dimension]: area[dimension] - distance };
         const first = partition(left, a, size, budget);
         if (!first) continue;
@@ -83,7 +91,15 @@ export function workspaceLayout(area, notes, settings) {
   if (!notes.length) return { groups: [], placements: [] };
   const groups = noteGroups(notes, settings);
   // Bound the search for very fragmented project lists. A single grid keeps every note reachable.
-  let regions = groups.length <= 10 ? partition(groups, area, settings.size) : null;
+  let regions;
+  if (settings.arrangement === "columns" || settings.arrangement === "rows") {
+    const axis = settings.arrangement === "columns" ? "x" : "y", dimension = axis === "x" ? "width" : "height";
+    regions = groups.map((group, i) => {
+      const start = Math.round(area[dimension] * i / groups.length), end = Math.round(area[dimension] * (i + 1) / groups.length);
+      return { group, area: { ...area, [axis]: area[axis] + start, [dimension]: end - start } };
+    });
+    if (regions.some(r => !noteLayout(r.area, r.group.notes.length, settings.size, settings.arrangement))) regions = null;
+  } else regions = groups.length <= 10 ? partition(groups, area, settings.size) : null;
   if (!regions) {
     const layout = noteLayout(area, notes.length, settings.size);
     if (!layout) return null;
@@ -93,7 +109,7 @@ export function workspaceLayout(area, notes, settings) {
   if (regions.some((r, i) => regions.slice(i + 1).some(other => overlaps(r.area, other.area)))) return null;
   const placements = [];
   for (const r of regions) {
-    const layout = noteLayout(r.area, r.group.notes.length, settings.size);
+    const layout = noteLayout(r.area, r.group.notes.length, settings.size, settings.arrangement);
     if (!layout) return null;
     r.group.notes.forEach((note, i) => placements.push({ note, bounds: layout[i] }));
   }

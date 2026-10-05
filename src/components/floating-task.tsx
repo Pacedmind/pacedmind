@@ -32,6 +32,14 @@ export function FloatingTask({ data, version }: { data: FloatingTaskData | null;
 
   return (
     <main aria-label="Floating task" className="task-note-surface flex h-full flex-col overflow-hidden border border-line2 bg-panel">
+      {data && task && <div className="task-note-xs min-h-0 flex-1 items-center gap-2 px-2">
+        <span className="task-note-titlebar flex h-full w-3 shrink-0 items-center text-mut2" title="Drag to move"><Icon name="layers" size={12} /></span>
+        <button type="button" title={task.title} className={cx("min-w-0 flex-1 text-left text-[13px] leading-snug text-fg2", closed && "line-through text-mut")} onClick={() => window.pacedMindDesktop?.showFloatingTask?.(data.href)}><span className="line-clamp-2">{task.title}</span></button>
+        <div className="task-note-xs-controls flex shrink-0 flex-col">
+          <IconButton label="Open task details" onClick={() => window.pacedMindDesktop?.showFloatingTask?.(data.href)}><Icon name="external" size={12} /></IconButton>
+          <IconButton label="Close compact note" onClick={() => window.pacedMindDesktop?.closeTaskNote?.()}><Icon name="x" size={12} /></IconButton>
+        </div>
+      </div>}
       <header className="task-note-titlebar flex h-10 shrink-0 items-center gap-2 border-b border-line px-3 text-[11px] text-mut">
         <Icon name="layers" size={13} />
         <span title="Drag to move this note. It stays above other windows." className="flex-1 select-none">Always on top</span>

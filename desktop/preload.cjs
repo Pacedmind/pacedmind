@@ -24,10 +24,16 @@ contextBridge.exposeInMainWorld("pacedMindDesktop", {
     return ipcRenderer.invoke("pacedmind:toggle-task-notes");
   },
   taskNoteLayout() { return ipcRenderer.invoke("pacedmind:task-note-layout"); },
+  chooseTaskNoteDisplay(requestId, answer) { return ipcRenderer.invoke("pacedmind:choose-task-note-display", requestId, answer); },
+  onTaskNoteDisplayRequest(listener) {
+    const receive = (_event, value) => { if (value === null || (value && typeof value.requestId === "string" && Array.isArray(value.displays))) listener(value); };
+    ipcRenderer.on("pacedmind:task-note-display-request", receive);
+    return () => ipcRenderer.removeListener("pacedmind:task-note-display-request", receive);
+  },
   setTaskNoteLayout(input) { return ipcRenderer.invoke("pacedmind:set-task-note-layout", input); },
   reportTaskNote(data) { ipcRenderer.send("pacedmind:task-note-metadata", data); },
   onTaskNoteStyle(listener) {
-    const receive = (_event, value) => { if (value && ["small", "medium", "large"].includes(value.size) && ["strong", "normal", "quiet"].includes(value.emphasis)) listener(value); };
+    const receive = (_event, value) => { if (value && ["xs", "small", "medium", "large"].includes(value.size) && ["strong", "normal", "quiet"].includes(value.emphasis)) listener(value); };
     ipcRenderer.on("pacedmind:task-note-style", receive);
     return () => ipcRenderer.removeListener("pacedmind:task-note-style", receive);
   },

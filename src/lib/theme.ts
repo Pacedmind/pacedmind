@@ -1,4 +1,5 @@
 import type { NoteLayoutChange, NoteLayoutReply, NoteStyle } from "./task-note-workspace";
+import type { NoteDisplayPrompt } from "./task-notes";
 export type Theme = "dark" | "light";
 export type ThemePreference = Theme | "system";
 export type TaskNotesState = { count: number; visible: boolean; ok?: boolean; error?: string; message?: string };
@@ -18,6 +19,8 @@ declare global {
       taskNotesState?: () => Promise<TaskNotesState | null>;
       toggleTaskNotes?: () => Promise<TaskNotesState | null>;
       taskNoteLayout?: () => Promise<NoteLayoutReply | null>;
+      chooseTaskNoteDisplay?: (requestId: string, answer: { displayId: string; remember: boolean } | null) => Promise<boolean>;
+      onTaskNoteDisplayRequest?: (listener: (prompt: NoteDisplayPrompt | null) => void) => () => void;
       setTaskNoteLayout?: (input: NoteLayoutChange) => Promise<NoteLayoutReply | null>;
       reportTaskNote?: (data: Record<string, unknown>) => void;
       onTaskNoteStyle?: (listener: (style: NoteStyle) => void) => () => void;

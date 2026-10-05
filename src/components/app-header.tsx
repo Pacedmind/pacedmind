@@ -9,6 +9,7 @@ import { BrandWordmark } from "./brand-wordmark";
 import { Icon } from "./icons";
 import { useAction } from "./ui";
 import { TaskNoteLayout } from "./task-note-layout";
+import { TaskNoteDisplayPicker } from "./task-note-display-picker";
 import { Popover, PopoverItem, PopoverLabel, PopoverSeparator, type Anchor } from "./popover";
 
 type NavigationState = EventTarget & { canGoBack: boolean; canGoForward: boolean };
@@ -67,6 +68,7 @@ export function AppHeader({ email }: { email: string | null }) {
         </Link>
         <TaskNotesToggle />
         <TaskNoteLayout />
+        <TaskNoteDisplayPicker />
         {email ? <AccountMenu email={email} /> : (
           // No account (the desktop app with this computer's own data): the way to PacedMind Cloud.
           <div className="app-titlebar__account">

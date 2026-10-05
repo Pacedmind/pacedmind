@@ -4,8 +4,9 @@ import { test } from "node:test";
 import { createTaskWindows } from "../desktop/task-windows.mjs";
 import { registerTaskNoteControls } from "../desktop/task-note-controls.mjs";
 import { noteCapacity, noteLayout } from "../desktop/task-note-layout.mjs";
-import { animationDelays, importance, layoutSettings, workspaceLayout } from "../desktop/task-note-workspace.mjs";
+import { animationDelays, importance, layoutSettings, noteGroups, workspaceLayout } from "../desktop/task-note-workspace.mjs";
 import { createNoteMotion } from "../desktop/task-note-motion.mjs";
+import { createTaskNoteOpener } from "../desktop/task-note-opener.mjs";
 
 const origin = "http://127.0.0.1:4319";
 const createdAt = "2026-10-04T10:00:00";
@@ -24,6 +25,7 @@ function fixture(platform = "win32") {
       this.options = options;
       this.webContents = new EventEmitter();
       this.webContents.mainFrame = { url: "" };
+      this.webContents.isDestroyed = () => this.isDestroyed();
       this.webContents.setWindowOpenHandler = (fn) => { this.openHandler = fn; };
       this.webContents.reload = () => { this.reloaded = true; };
       this.messages = [];
@@ -469,4 +471,90 @@ test("layout IPC refuses foreign windows, subframes, missing scopes, and oversiz
   assert.equal((await change(event(planner), { payload: "x".repeat(33000) })).ok, false);
   scope = undefined;
   assert.equal(await change(event(planner), { displayId: "1" }), null);
+});
+
+test("in-app monitor choice binds to the planner frame, remembers only explicit answers, and rechecks scope", async () => {
+  const { notes, Window, event, displays, preferred } = fixture(), planner = new Window({});
+  displays.push({ id: 2, label: "Other", workArea: { x: 0, y: 0, width: 1920, height: 1080 } });
+  await planner.loadURL(`${origin}/today`);
+  const handlers = new Map(); let scope = "local";
+  const open = createTaskNoteOpener({ ipcMain: { handle: (key, fn) => handlers.set(key, fn) }, taskWindows: notes, planner: () => planner, origin, readScope: async () => scope });
+  const answer = handlers.get("pacedmind:choose-task-note-display");
+  const task = [{ id: 1, createdAt }];
+  const begin = async () => { const result = open(event(planner), task, "local"); await new Promise(setImmediate); return { result, prompt: planner.messages.at(-1)[1] }; };
+  const first = await begin();
+  assert.equal(notes.state().count, 0);
+  assert.equal(await open(event(planner), task, "local"), false);
+  assert.equal(answer({ ...event(planner), senderFrame: { url: `${origin}/today` } }, first.prompt.requestId, { displayId: "2", remember: true }), false);
+  assert.equal(answer(event(planner), "stale", { displayId: "2", remember: true }), false);
+  assert.equal(answer(event(planner), first.prompt.requestId, { displayId: "2" }), false);
+  assert.equal(answer(event(planner), first.prompt.requestId, null), true);
+  assert.deepEqual(await first.result, { ok: true }); assert.equal(preferred.size, 0);
+  const second = await begin(); scope = account;
+  assert.equal(answer(event(planner), second.prompt.requestId, { displayId: "2", remember: true }), true);
+  assert.equal(await second.result, false); assert.equal(notes.state().count, 0); assert.equal(preferred.size, 0);
+  scope = "local";
+  const third = await begin();
+  answer(event(planner), third.prompt.requestId, { displayId: "2", remember: true });
+  assert.deepEqual(await third.result, { ok: true }); assert.equal(preferred.get("local"), "2");
+  assert.equal(answer(event(planner), third.prompt.requestId, { displayId: "1", remember: true }), false);
+});
+
+test("screen choice cancels on closing the planner and never saves a disconnected display", async () => {
+  const { notes, Window, event, displays, preferred } = fixture(), planner = new Window({});
+  displays.push({ id: 2, label: "Other", workArea: { x: 0, y: 0, width: 1920, height: 1080 } });
+  await planner.loadURL(`${origin}/today`);
+  const handlers = new Map();
+  const open = createTaskNoteOpener({ ipcMain: { handle: (key, fn) => handlers.set(key, fn) }, taskWindows: notes, planner: () => planner, origin, readScope: async () => "local" });
+  const first = open(event(planner), [{ id: 1, createdAt }], "local"); await new Promise(setImmediate);
+  planner.emit("close"); assert.deepEqual(await first, { ok: true });
+  const second = open(event(planner), [{ id: 1, createdAt }], "local"); await new Promise(setImmediate);
+  const prompt = planner.messages.at(-1)[1]; displays.pop();
+  handlers.get("pacedmind:choose-task-note-display")(event(planner), prompt.requestId, { displayId: "2", remember: true });
+  assert.equal((await second).ok, false); assert.equal(preferred.size, 0); assert.equal(notes.state().count, 0);
+});
+
+test("XS cards, rows and columns stay readable without overlap on different screen geometries", () => {
+  for (const area of [{ x: -2560, y: 0, width: 2560, height: 1392 }, { x: 0, y: -1920, width: 1080, height: 1920 }]) {
+    const small = noteLayout(area, 46, "xs");
+    assert.equal(small.length, 46);
+    const notes = Array.from({ length: 18 }, (_, id) => ({ id, createdAt, meta: { status: id % 2 ? "todo" : "in_progress" } }));
+    for (const arrangement of ["grid", "columns", "rows"]) {
+      const plan = workspaceLayout(area, notes, layoutSettings({ size: "xs", group: "status", arrangement }));
+      assert.equal(plan.placements.length, 18);
+      for (const [i, { bounds: a }] of plan.placements.entries()) {
+        assert.ok(a.width >= 220 && a.height >= 72);
+        assert.ok(a.x >= area.x && a.y >= area.y && a.x + a.width <= area.x + area.width && a.y + a.height <= area.y + area.height);
+        for (const { bounds: b } of plan.placements.slice(i + 1)) assert.ok(a.x + a.width <= b.x || b.x + b.width <= a.x || a.y + a.height <= b.y || b.y + b.height <= a.y);
+      }
+    }
+  }
+  const { notes, windows } = fixture();
+  notes.configure("local", { displayId: "1", settings: { size: "xs" } }); notes.show(1, "local", createdAt, "1");
+  assert.equal(windows[0].options.minHeight, 72); assert.ok(windows[0].getBounds().height < 100);
+  notes.configure("local", { displayId: "1", settings: { size: "large" } }); assert.ok(windows[0].getBounds().height >= 200);
+});
+
+test("each computer keeps its own monitor layout even for the same account and screen id", () => {
+  const first = fixture(), second = fixture();
+  second.displays[0].workArea = { x: 0, y: -1080, width: 1920, height: 1080 };
+  first.notes.configure(account, { displayId: "1", move: true, settings: { size: "xs", arrangement: "columns", group: "priority" } });
+  assert.equal(first.preferred.get(account), "1");
+  assert.equal(second.preferred.size, 0);
+  assert.deepEqual(second.notes.workspace(account).displays[0].settings, layoutSettings(null));
+  second.notes.configure(account, { displayId: "1", move: true, settings: { size: "large", arrangement: "rows" } });
+  assert.equal(first.notes.workspace(account).displays[0].settings.size, "xs");
+  assert.equal(second.notes.workspace(account).displays[0].settings.arrangement, "rows");
+});
+
+test("deadline groups are chronological and XS cannot exceed the shared refresh inventory", () => {
+  const tasks = [null, "2026-10-20", "2026-10-05", "2026-10-01", "2026-10-10"].map((dueDate, id) => ({ id, meta: { dueDate } }));
+  assert.deepEqual(noteGroups(tasks, layoutSettings({ group: "deadline" }), new Date(2026, 9, 5)).map(g => g.key), ["overdue", "today", "week", "later", "no-date"]);
+  const { notes, displays } = fixture();
+  displays[0].workArea = { x: 0, y: 0, width: 3840, height: 2160 };
+  notes.configure("local", { displayId: "1", settings: { size: "xs" } });
+  for (let id = 1; id <= 200; id++) assert.equal(notes.show(id, "local", createdAt, "1").status, "opened");
+  assert.equal(notes.show(201, "local", createdAt, "1").status, "failed");
+  assert.equal(notes.displays("local").displays[0].capacity, 200);
+  assert.equal(notes.tasks("local").length, 200);
 });

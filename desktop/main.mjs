@@ -9,6 +9,7 @@ import http from "node:http";
 import path from "node:path";
 import { createTaskWindows } from "./task-windows.mjs";
 import { registerTaskNoteControls } from "./task-note-controls.mjs";
+import { createTaskNoteOpener } from "./task-note-opener.mjs";
 
 const PORT = 4319;
 const ORIGIN = `http://127.0.0.1:${PORT}`;
@@ -214,40 +215,8 @@ registerTaskNoteControls({ ipcMain, taskWindows, planner: () => win, origin: ORI
   },
 });
 
-let choosingNoteDisplay = false;
-async function showTaskNotes(event, tasks, scope) {
-  if (!serverReady || !win || event.sender !== win.webContents || event.senderFrame !== win.webContents.mainFrame) return false;
-  if (!sameOrigin(event.senderFrame.url)) return false;
-  if (choosingNoteDisplay || (await readTaskNoteScope()) !== scope) return false;
-  const snapshot = taskWindows.displays(scope);
-  let display = snapshot.displays.find((d) => d.id === snapshot.defaultDisplay)?.id;
-  let remember = false;
-  if (!display && snapshot.displays.length === 1 && !snapshot.defaultDisplay) display = snapshot.displays[0].id;
-  if (!display) {
-    choosingNoteDisplay = true;
-    try {
-      const answer = await dialog.showMessageBox(win, {
-        type: "question", title: "Task notes", message: "Which display should show the task notes?",
-        detail: (snapshot.defaultDisplay ? "The remembered display is disconnected.\n\n" : "") + snapshot.displays.map((d, i) => `${i + 1}. ${d.label} · ${d.width} × ${d.height}${d.primary ? " (primary)" : ""} · position ${d.x}, ${d.y}`).join("\n"),
-        buttons: [...snapshot.displays.map((_, i) => `Display ${i + 1}`), "Cancel"],
-        cancelId: snapshot.displays.length, defaultId: Math.max(0, snapshot.displays.findIndex((d) => d.primary)),
-        checkboxLabel: "Always use this display for task notes on this computer", checkboxChecked: false,
-      });
-      if (answer.response === snapshot.displays.length) return { ok: true }; // Cancel is not an error.
-      display = snapshot.displays[answer.response]?.id;
-      remember = answer.checkboxChecked;
-    } finally { choosingNoteDisplay = false; }
-  }
-  if ((await readTaskNoteScope()) !== scope || !win || event.sender !== win.webContents ||
-      event.senderFrame !== win.webContents.mainFrame || !sameOrigin(event.senderFrame.url)) return false;
-  let opened = 0;
-  for (const { id, createdAt } of tasks) {
-    const result = taskWindows.show(id, scope, createdAt, display, remember);
-    if (result.status !== "opened") return { ok: false, error: `${opened ? `Opened ${opened} of ${tasks.length} notes. ` : ""}${result.note}` };
-    opened++;
-  }
-  return { ok: true };
-}
+const showTaskNotes = createTaskNoteOpener({ ipcMain, taskWindows, planner: () => win, origin: ORIGIN,
+  readScope: readTaskNoteScope, ready: () => serverReady });
 ipcMain.handle("pacedmind:float-task", (event, id, scope, createdAt) => showTaskNotes(event, [{ id, createdAt }], scope));
 ipcMain.handle("pacedmind:close-task-note", (event) => taskWindows.close(event));
 ipcMain.handle("pacedmind:show-floating-task", (event, href) => taskWindows.showInPlanner(event, href));

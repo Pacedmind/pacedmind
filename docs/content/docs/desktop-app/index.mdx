@@ -20,9 +20,9 @@ While the server starts, the window shows *Starting PacedMind…*.
 
 Select **Float task** in a task row or in the task details header to open that task in its own small window. This button is available in the desktop app.
 
-Each note stays above other windows. Drag its header to move it and drag its edges to resize it. Several tasks can have notes open at once; selecting **Float task** again brings that task's existing note forward.
+Each note stays above other windows. Drag its header to move it and drag its edges to resize it. Up to 200 tasks can have notes open at once; selecting **Float task** again brings that task's existing note forward.
 
-With several displays, PacedMind asks which one should show the note. Select **Always use this display for task notes on this computer** to remember your choice for this planner. Opening a note arranges the notes on that display in a grid, using its available space and leaving room for the taskbar or Dock. A full display asks you to close a note or choose another display. A disconnected remembered display needs a new choice.
+With several displays, a dialog inside PacedMind shows a miniature of each screen, its name and size. Select a screen and **Show notes**. Select **Remember this screen on this computer** to remember your choice for this planner, or **Cancel** to leave the notes closed. Opening a note arranges the notes on that display using its available space and leaving room for the taskbar or Dock. A full display asks you to close a note or choose another display. A disconnected remembered display needs a new choice.
 
 You can also ask a connected agent to show task notes. It checks the displays and, without a remembered choice, asks which one to use and whether to remember it. This works through the local connection or PacedMind Cloud while the desktop app is running; Cloud computer access must be set up. Each task still opens in its own window. See [Task note tools](/mcp/tools/computers#list_task_note_displays).
 
@@ -38,11 +38,12 @@ Closing the main window also hides all notes. Reopen PacedMind and select **Show
 
 ### Layout and screens
 
-Select the **Layout** icon beside **Show notes** or **Hide notes** in the top bar. Changes apply immediately. Settings and manually placed cards are saved for this account and display on this computer.
+Select the **Layout** icon beside **Show notes** or **Hide notes** in the top bar. Changes apply immediately. Settings and manually placed cards are saved for this account and display on this computer. Each computer has its own screen choices and layouts; they do not sync through Cloud. Connecting different monitors on another computer does not change this computer's arrangement.
 
 * **Screen** moves the open notes to that display and remembers it for future notes. Each screen keeps its own layout settings.
-* **Card size** offers **S**, **M** and **L**. Cards shrink to fit when needed, down to their minimum readable size.
-* **Group by** offers **None**, **Focus**, **Project**, **Area** and **Priority**. Focus contains urgent, high-priority, due and planned-for-today tasks; the remaining tasks go into In progress or Later.
+* **Card size** offers **XS**, **S**, **M** and **L**. XS shows just the title; select it to open the task details. Its move handle is on the left; controls appear on hover or keyboard focus. The other sizes show the full task card. Cards shrink to fit when needed, down to their minimum readable size.
+* **Arrangement** offers **Grid**, **Columns** and **Rows**. Columns place groups side by side; Rows place them above one another. With no grouping, these choices arrange individual cards vertically or horizontally.
+* **Group by** offers buttons for **None**, **Focus**, **Project**, **Area**, **Priority**, **Status** and **Due date**. Focus contains urgent, high-priority, due and planned-for-today tasks; the remaining tasks go into In progress or Later. Due date separates overdue tasks, today, the next seven days, later deadlines and tasks without a deadline. A preview shows the spaces and task counts; select it to edit them.
 * **Order** offers **Manual**, **Relevance** and **Due date**. Changing the order rearranges cards; live updates do not continually move them.
 * **Emphasize important** changes the surface of important or due cards. Lower-priority and completed cards are quieter; text remains readable. Emphasis updates as deadlines and planned days arrive.
 * **Animation** offers **Shuffle**, **Right to left**, **Corner to corner**, **Together** and **None**. It controls the sequence when showing, hiding, arranging or changing the theme of cards. The system's reduced-motion setting turns off motion. Closing the main window hides notes immediately.

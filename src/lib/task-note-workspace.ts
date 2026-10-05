@@ -1,7 +1,8 @@
 export type NoteRegion = { x: number; y: number; width: number; height: number };
 export type NoteLayoutSettings = {
-  size: "small" | "medium" | "large";
-  group: "none" | "focus" | "project" | "area" | "priority";
+  size: "xs" | "small" | "medium" | "large";
+  group: "none" | "focus" | "project" | "area" | "priority" | "status" | "deadline";
+  arrangement: "grid" | "columns" | "rows";
   order: "manual" | "relevance" | "deadline";
   emphasis: boolean;
   animation: "shuffle" | "right" | "diagonal" | "together" | "none";

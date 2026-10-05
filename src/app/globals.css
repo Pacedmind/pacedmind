@@ -124,6 +124,11 @@ html[data-theme="light"] {
 /* Frameless task notes: only the header drags; the controls remain clickable. */
 .task-note-titlebar { -webkit-app-region: drag; }
 .task-note-titlebar button { -webkit-app-region: no-drag; }
+.task-note-xs { display: none; }
+html[data-note-size="xs"] .task-note-xs { display: flex; }
+html[data-note-size="xs"] .task-note-surface:has(.task-note-xs) > :not(.task-note-xs) { display: none; }
+.task-note-xs-controls { opacity: 0; transition: opacity 120ms ease; }
+.task-note-xs:hover .task-note-xs-controls, .task-note-xs:focus-within .task-note-xs-controls { opacity: 1; }
 .task-note-surface { background: var(--color-panel); }
 html[data-note-emphasis="strong"] .task-note-surface { background: color-mix(in srgb, var(--color-panel) 86%, var(--color-fg)); border-color: var(--color-line-strong); }
 html[data-note-emphasis="quiet"] .task-note-surface { background: var(--color-bg); }

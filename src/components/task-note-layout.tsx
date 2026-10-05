@@ -9,6 +9,15 @@ import { Button, cx } from "./ui";
 
 const field = "h-8 max-w-[166px] rounded-md border border-ctl bg-panel px-2 text-[12px] text-fg2";
 const subscribeDesktop = () => () => {};
+const groups: { value: NoteLayoutSettings["group"]; label: string; description: string }[] = [
+  { value: "none", label: "None", description: "Keep all cards together." },
+  { value: "focus", label: "Focus", description: "Separate what needs attention, work in progress and later tasks." },
+  { value: "project", label: "Project", description: "Give each project its own space." },
+  { value: "area", label: "Area", description: "Keep work, personal and other areas apart." },
+  { value: "priority", label: "Priority", description: "Put urgent and high-priority tasks first." },
+  { value: "status", label: "Status", description: "Arrange tasks by their stage of work." },
+  { value: "deadline", label: "Due date", description: "Overdue, today, the next 7 days and later." },
+];
 export function TaskNoteLayout() {
   const supported = useSyncExternalStore(subscribeDesktop, () => !!window.pacedMindDesktop?.taskNoteLayout, () => false);
   const [anchor, setAnchor] = useState<Anchor | null>(null);
@@ -50,7 +59,7 @@ export function TaskNoteLayout() {
       onClick={e => { if (anchor) { setAnchor(null); return; } const r = e.currentTarget.getBoundingClientRect(); setAnchor({ x: r.left - 6, y: r.bottom + 4 }); void read(); }}>
       <Icon name="appWindow" size={15} />
     </button>
-    {anchor && <Popover anchor={anchor} width={294} onClose={() => setAnchor(null)} className="p-4">
+    {anchor && <Popover anchor={anchor} width={330} onClose={() => setAnchor(null)} className="p-4">
       <div className="mb-3 text-[13px] font-medium text-strong">Layout</div>
       {!workspace && !error && <p className="text-[12px] text-mut">Loading…</p>}
       {display && <div className="flex flex-col gap-3.5 text-[12px] text-fg2">
@@ -61,15 +70,26 @@ export function TaskNoteLayout() {
         </label>
         <div className="flex items-center justify-between gap-3">Card size
           <div role="group" aria-label="Card size" className="flex rounded-md border border-ctl p-0.5">
-            {(["small", "medium", "large"] as const).map((size, i) => <button key={size} type="button" aria-label={`${size} task notes`} aria-pressed={display.settings.size === size}
-              className={cx("h-7 w-10 rounded text-[12px]", display.settings.size === size ? "bg-sel text-strong" : "text-mut hover:bg-hover")}
-              onClick={() => set({ size })}>{["S", "M", "L"][i]}</button>)}
+            {(["xs", "small", "medium", "large"] as const).map((size, i) => <button key={size} type="button" aria-label={`${size} task notes`} aria-pressed={display.settings.size === size} title={size === "xs" ? "Titles only" : undefined}
+              className={cx("h-7 w-9 rounded text-[12px]", display.settings.size === size ? "bg-sel text-strong" : "text-mut hover:bg-hover")}
+              onClick={() => set({ size })}>{["XS", "S", "M", "L"][i]}</button>)}
           </div>
         </div>
-        <label className="flex items-center justify-between gap-3">Group by<select aria-label="Group task notes" className={field} value={display.settings.group}
-          onChange={e => set({ group: e.target.value as NoteLayoutSettings["group"], regions: {} })}>
-          <option value="none">None</option><option value="focus">Focus</option><option value="project">Project</option><option value="area">Area</option><option value="priority">Priority</option>
-        </select></label>
+        {display.settings.size === "xs" && <p className="-mt-2 text-[11px] text-mut">Titles only. Select a title to open the task.</p>}
+        <div className="flex flex-col gap-2"><span>Arrangement</span><div role="group" aria-label="Arrangement" className="grid grid-cols-3 gap-2">
+          {(["grid", "columns", "rows"] as const).map(value => <button key={value} type="button" aria-label={`Arrange in ${value}`} aria-pressed={display.settings.arrangement === value}
+            onClick={() => set({ arrangement: value, regions: {} })} className={cx("flex flex-col items-center gap-2 rounded-md border px-2 py-2", display.settings.arrangement === value ? "border-accent bg-sel text-strong" : "border-line2 text-mut hover:bg-hover")}>
+            <span aria-hidden className={cx("grid h-6 w-10 gap-0.5", value === "grid" ? "grid-cols-3" : value === "columns" ? "grid-cols-3" : "grid-rows-3")}>
+              {Array.from({ length: value === "grid" ? 6 : 3 }, (_, i) => <span key={i} className="rounded-[1px] bg-current opacity-50" />)}
+            </span>{({ grid: "Grid", columns: "Columns", rows: "Rows" })[value]}</button>)}
+        </div></div>
+        <div className="flex flex-col gap-2"><span>Group by</span><div role="group" aria-label="Group task notes" className="flex flex-wrap gap-1.5">
+          {groups.map(g => <button key={g.value} type="button" aria-label={`Group by ${g.label}`} aria-pressed={display.settings.group === g.value}
+            onClick={() => set({ group: g.value, regions: {} })} className={cx("rounded-md border px-2.5 py-1.5 text-[11px]", display.settings.group === g.value ? "border-line-strong bg-sel text-strong" : "border-line2 text-mut hover:bg-hover")}>{g.label}</button>)}
+        </div><p className="min-h-7 text-[11px] leading-relaxed text-mut">{groups.find(g => g.value === display.settings.group)?.description}</p></div>
+        {!!display.groups.length && <button type="button" aria-label="Edit arrangement preview" title="Edit these spaces" onClick={() => { setAnchor(null); setEditor(true); }} className="relative h-20 overflow-hidden rounded-md border border-line2 bg-bg">
+          {display.groups.map(g => <span key={g.key} className="absolute overflow-hidden rounded border border-line2 bg-panel p-1.5 text-left text-[10px] text-mut" style={{ left: `${g.x * 100}%`, top: `${g.y * 100}%`, width: `${g.width * 100}%`, height: `${g.height * 100}%` }}>{g.name} <span className="text-fg2">{g.count}</span></span>)}
+        </button>}
         <label className="flex items-center justify-between gap-3">Order<select aria-label="Order task notes" className={field} value={display.settings.order} onChange={e => set({ order: e.target.value as NoteLayoutSettings["order"] })}>
           <option value="manual">Manual</option><option value="relevance">Relevance</option><option value="deadline">Due date</option>
         </select></label>
@@ -112,7 +132,9 @@ function SpacesEditor({ display, error, update, onClose }: { display: NoteDispla
     if (kind === "cards") update({ displayId: display.id, ref: id, bounds });
     else update({ displayId: display.id, settings: { regions: { ...Object.fromEntries(display.groups.map(g => [g.key, { x: g.x, y: g.y, width: g.width, height: g.height }])), [id]: bounds } } });
   }
-  const clamp = (r: NoteRegion): NoteRegion => { const width = Math.max(.05, Math.min(1, r.width)), height = Math.max(.05, Math.min(1, r.height)); return { x: Math.max(0, Math.min(1 - width, r.x)), y: Math.max(0, Math.min(1 - height, r.y)), width, height }; };
+  const minWidth = kind === "cards" ? (display.settings.size === "xs" ? 220 : 280) / display.width : .01;
+  const minHeight = kind === "cards" ? (display.settings.size === "xs" ? 72 : 200) / display.height : .01;
+  const clamp = (r: NoteRegion): NoteRegion => { const width = Math.min(1, Math.max(minWidth, r.width)), height = Math.min(1, Math.max(minHeight, r.height)); return { x: Math.max(0, Math.min(1 - width, r.x)), y: Math.max(0, Math.min(1 - height, r.y)), width, height }; };
   return createPortal(<div className="fixed inset-0 z-[70] flex items-center justify-center bg-overlay p-5" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
     <div ref={dialog} role="dialog" aria-modal="true" aria-label="Arrange task spaces" className="flex max-h-[90vh] w-[800px] max-w-full flex-col gap-4 overflow-y-auto rounded-xl border border-line2 bg-raised p-5 shadow-[var(--shadow-popover)]">
       <div className="flex items-center justify-between"><h2 className="text-[15px] font-medium text-strong">Arrange spaces · {display.label}</h2><Button autoFocus variant="ghost" onClick={onClose}>Done</Button></div>
@@ -126,7 +148,7 @@ function SpacesEditor({ display, error, update, onClose }: { display: NoteDispla
             onPointerUp={() => { if (drag.current && draft) commit(i.id, clamp(draft)); drag.current = null; setDraft(null); }}
             onPointerCancel={() => { drag.current = null; setDraft(null); }}>{i.label}</button>
           <button type="button" aria-label={`Resize ${i.label}`} className="absolute bottom-0 right-0 h-5 w-5 touch-none cursor-se-resize text-mut" onPointerDown={e => { setSelected(i.id); setDraft(i); drag.current = { x: e.clientX, y: e.clientY, region: i, id: i.id, resize: true }; e.currentTarget.setPointerCapture(e.pointerId); }}
-            onPointerMove={e => { if (!drag.current || !canvas.current) return; const b = canvas.current.getBoundingClientRect(), d = drag.current; setDraft({ ...d.region, width: Math.max(.05, Math.min(1 - d.region.x, d.region.width + (e.clientX - d.x) / b.width)), height: Math.max(.05, Math.min(1 - d.region.y, d.region.height + (e.clientY - d.y) / b.height)) }); }}
+            onPointerMove={e => { if (!drag.current || !canvas.current) return; const b = canvas.current.getBoundingClientRect(), d = drag.current; setDraft({ ...d.region, width: Math.min(1 - d.region.x, Math.max(minWidth, d.region.width + (e.clientX - d.x) / b.width)), height: Math.min(1 - d.region.y, Math.max(minHeight, d.region.height + (e.clientY - d.y) / b.height)) }); }}
             onPointerUp={() => { if (drag.current && draft) commit(i.id, draft); drag.current = null; setDraft(null); }} onPointerCancel={() => { drag.current = null; setDraft(null); }}>↘</button>
         </div>; })}
         {!items.length && <p className="p-5 text-[12px] text-mut">{kind === "spaces" ? "Show notes and choose a grouping to arrange spaces." : "Show notes to arrange them here."}</p>}

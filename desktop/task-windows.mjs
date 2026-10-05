@@ -1,4 +1,4 @@
-import { noteCapacity, noteLayout } from "./task-note-layout.mjs";
+import { noteCapacity, noteLayout, noteMinimum } from "./task-note-layout.mjs";
 import { animationDelays, importance, layoutSettings, normalRegion, pixelRegion, refOf, validRegion, workspaceLayout } from "./task-note-workspace.mjs";
 import { createNoteMotion } from "./task-note-motion.mjs";
 
@@ -64,15 +64,17 @@ export function createTaskWindows({ BrowserWindow, screen, origin, preload, them
     const group = onDisplay(displayId, scope), plan = workspaceLayout(display.workArea, group, settings);
     if (!plan) return null;
     const delays = animationDelays(group, settings.animation);
+    const minimum = noteMinimum(settings.size);
     for (const placement of plan.placements) {
       const { note } = placement;
       let { bounds } = placement;
       const saved = restore ? readLayout(scope, displayId)?.positions?.[refOf(note)] : null;
       if (validRegion(saved)) {
         const previous = pixelRegion(display.workArea, saved);
-        if (previous.width >= 280 && previous.height >= 200) bounds = previous;
+        if (previous.width >= minimum.width && previous.height >= minimum.height) bounds = previous;
       }
       note.targetBounds = bounds;
+      note.window.setMinimumSize?.(minimum.width, minimum.height);
       motion.run(note, { bounds, opacity: note.hidden ? 0 : 1, delay: delays.get(note), immediate: !animated || note.hidden || settings.animation === "none" });
       publish(note);
     }
@@ -125,7 +127,7 @@ export function createTaskWindows({ BrowserWindow, screen, origin, preload, them
       const settings = layoutSettings({ ...previous, ...input.settings });
       const group = input.move ? [...notes.values()].filter(n => n.scope === scope) : onDisplay(id, scope);
       if (!workspaceLayout(display.workArea, group, settings)) return { ok: false, error: "The spaces overlap or are too small for these cards. Enlarge them or reset the spaces." };
-      const resetPositions = ["size", "group", "order", "regions"].some(k => input.settings && k in input.settings);
+      const resetPositions = ["size", "group", "order", "regions", "arrangement"].some(k => input.settings && k in input.settings);
       const rearrange = input.move === true || resetPositions;
       save(scope, id, settings, resetPositions);
       if (input.move === true) { group.forEach(n => { n.displayId = id; }); rememberDisplay(scope, id); }
@@ -139,7 +141,8 @@ export function createTaskWindows({ BrowserWindow, screen, origin, preload, them
       const display = screen.getAllDisplays().find(d => String(d.id) === displayId);
       if (!note || !display || !validRegion(region)) return { ok: false, error: "This note is no longer on that display." };
       const bounds = pixelRegion(display.workArea, region);
-      if (bounds.width < 280 || bounds.height < 200) return { ok: false, error: "Cards need at least 280 × 200 pixels." };
+      const minimum = noteMinimum(config(scope, displayId).size);
+      if (bounds.width < minimum.width || bounds.height < minimum.height) return { ok: false, error: `Cards need at least ${minimum.width} × ${minimum.height} pixels.` };
       note.targetBounds = bounds;
       motion.run(note, { bounds, opacity: note.hidden ? 0 : 1, immediate: note.hidden || config(scope, displayId).animation === "none" });
       api.rememberPosition(note);
@@ -195,9 +198,9 @@ export function createTaskWindows({ BrowserWindow, screen, origin, preload, them
       const primary = screen.getPrimaryDisplay().id;
       const saved = preferredDisplay(scope);
       return {
-        displays: screen.getAllDisplays().map((d) => ({
+        displays: [...screen.getAllDisplays()].sort((a, b) => a.workArea.x - b.workArea.x || a.workArea.y - b.workArea.y).map((d) => ({
           id: String(d.id), label: (d.label || `Display ${d.id}`).replace(/[\u0000-\u001f\u007f]/g, " ").slice(0, 100),
-          ...d.workArea, primary: d.id === primary, capacity: noteCapacity(d.workArea), openCount: onDisplay(String(d.id), scope).length,
+          ...d.workArea, primary: d.id === primary, capacity: Math.min(200, noteCapacity(d.workArea, config(scope, String(d.id)).size)), openCount: onDisplay(String(d.id), scope).length,
         })),
         defaultDisplay: typeof saved === "string" && /^-?\d{1,20}$/.test(saved) ? saved : null, updatedAt: new Date().toISOString(),
       };
@@ -216,6 +219,7 @@ export function createTaskWindows({ BrowserWindow, screen, origin, preload, them
       if (!display) return { status: "failed", note: "That display is no longer connected. Ask the user to choose a display again." };
       const key = `${scope}:${id}`;
       const existing = notes.get(key);
+      if (!existing && notes.size >= 200) return { status: "failed", note: "Up to 200 task notes can be open at once. Close a note before opening another." };
       const group = onDisplay(displayId, scope).filter((n) => n !== existing);
       const layout = noteLayout(display.workArea, group.length + 1, config(scope, displayId).size);
       if (!layout) return { status: "failed", note: "This display has no room for another readable note. Ask the user to close a note or choose another display." };
@@ -234,8 +238,9 @@ export function createTaskWindows({ BrowserWindow, screen, origin, preload, them
       }
       existing?.window.close();
       const colors = theme();
+      const minimum = noteMinimum(config(scope, displayId).size);
       const window = new BrowserWindow({
-        ...layout.at(-1), minWidth: 280, minHeight: 200,
+        ...layout.at(-1), minWidth: minimum.width, minHeight: minimum.height,
         title: "PacedMind · Task note", frame: false, alwaysOnTop: true,
         resizable: true, maximizable: false, fullscreenable: false,
         skipTaskbar: true, autoHideMenuBar: true, show: false,
