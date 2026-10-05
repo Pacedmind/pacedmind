@@ -181,6 +181,7 @@ html[data-note-size="large"] .task-note-content h1 { font-size: 20px; }
 }
 
 .app-titlebar__button {
+  -webkit-app-region: no-drag;
   display: flex;
   align-items: center;
   justify-content: center;

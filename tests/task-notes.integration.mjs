@@ -194,6 +194,9 @@ try {
   assert.ok([first, second].every((w) => w.isAlwaysOnTop()));
   assert.deepEqual(db.prepare("SELECT id, status FROM tasks ORDER BY id").all(), beforeTasks);
   console.log("PASS: header hides and restores all notes, closing planner hides cards, note controls cannot toggle the group, task statuses unchanged");
+  // Programmatic click() bypasses Electron's title-bar hit testing. A native click
+  // reaches this control only when its rectangle is excluded from the drag region.
+  assert.equal(await planner.webContents.executeJavaScript("getComputedStyle(document.querySelector('button[aria-label=\"Task note layout\"]')).getPropertyValue('-webkit-app-region')"), "no-drag", "Layout must receive mouse clicks instead of dragging the window");
   await click(planner, "Task note layout");
   await until(async () => (await body(planner)).includes("Card size"), "layout popover");
   assert.equal(await click(planner, "large task notes"), true);
