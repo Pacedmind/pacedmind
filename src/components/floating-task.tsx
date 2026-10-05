@@ -3,15 +3,17 @@
 import { useEffect } from "react";
 import { setFloatingTaskDone } from "@/app/floating/task/[id]/actions";
 import { attentionOf, attentionWords, planOf } from "@/lib/dates";
-import { AGENT_LABEL, STATUS_LABEL, isLiveSession } from "@/lib/types";
+import { AGENT_LABEL, PRIORITY_LABEL, STATUS_LABEL, isLiveSession } from "@/lib/types";
 import type { FloatingTaskData } from "@/lib/floating-task";
 import { AgentIcon, Icon, StatusIcon } from "./icons";
 import { DueChip } from "./task-row";
 import { LiveRefresh } from "./live-refresh";
 import { Button, IconButton, Toaster, cx, useAction } from "./ui";
+import { useNoteAppearance } from "./task-note-appearance";
 
 export function FloatingTask({ data, version }: { data: FloatingTaskData | null; version: string }) {
   const { run, pending } = useAction();
+  useNoteAppearance(data);
   const task = data?.task;
   const done = task?.status === "done";
   const closed = done || task?.status === "canceled";
@@ -29,7 +31,7 @@ export function FloatingTask({ data, version }: { data: FloatingTaskData | null;
   useEffect(() => { document.title = task ? `${task.key} · ${task.title} — PacedMind` : "Task note — PacedMind"; }, [task]);
 
   return (
-    <main aria-label="Floating task" className="flex h-full flex-col overflow-hidden border border-line2 bg-panel">
+    <main aria-label="Floating task" className="task-note-surface flex h-full flex-col overflow-hidden border border-line2 bg-panel">
       <header className="task-note-titlebar flex h-10 shrink-0 items-center gap-2 border-b border-line px-3 text-[11px] text-mut">
         <Icon name="layers" size={13} />
         <span title="Drag to move this note. It stays above other windows." className="flex-1 select-none">Always on top</span>
@@ -39,7 +41,7 @@ export function FloatingTask({ data, version }: { data: FloatingTaskData | null;
         <IconButton label="Close note" onClick={() => window.pacedMindDesktop?.closeTaskNote?.()}><Icon name="x" size={15} /></IconButton>
       </header>
       {data && task ? <>
-        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
+        <div className="task-note-content flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
           <div className="flex min-w-0 items-center gap-2 text-[11px] text-mut">
             {data.color && <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: data.color }} />}
             <span className="min-w-0 flex-1 truncate">{data.place}</span>
@@ -49,6 +51,7 @@ export function FloatingTask({ data, version }: { data: FloatingTaskData | null;
           <div className="flex flex-wrap items-center gap-2.5 text-[12px] text-fg3" aria-live="polite">
             <span className="inline-flex items-center gap-1.5"><StatusIcon status={task.status} />{STATUS_LABEL[task.status]}</span>
             <DueChip due={task.dueDate} done={closed} />
+            {task.priority !== 0 && <span className="text-mut">{PRIORITY_LABEL[task.priority]}</span>}
           </div>
           {session && <section aria-label="Agent progress" aria-live="polite" className="flex flex-col gap-2 rounded-lg border border-line2 bg-bg p-3 text-[12px]">
             <div className="flex flex-wrap items-center gap-1.5 text-fg2">

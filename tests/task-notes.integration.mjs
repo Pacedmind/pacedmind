@@ -70,6 +70,8 @@ async function screenshot(win, name) {
 function TestWindow(options) {
   const window = new BrowserWindow({ ...options, opacity: 0, focusable: false, skipTaskbar: true });
   window.setIgnoreMouseEvents(true);
+  // Production animations may adjust opacity; fixtures must remain invisible throughout.
+  window.setOpacity = () => {};
   return window;
 }
 app.whenReady().then(async () => {
@@ -85,8 +87,10 @@ try {
   assert.equal(tasks.length, 2);
   let theme = "dark";
   const preferred = new Map();
+  const layouts = new Map();
   const planner = new TestWindow({ show: false, width: 1280, height: 850, webPreferences: { sandbox: true, contextIsolation: true, preload: path.join(root, "desktop/preload.cjs"), additionalArguments: ["--pacedmind-theme=dark"] } });
   const notes = createTaskWindows({ BrowserWindow: TestWindow, screen: (await import("electron")).screen, origin,
+    readLayout: (scope, display) => layouts.get(`${scope}:${display}`), writeLayout: (scope, display, settings) => layouts.set(`${scope}:${display}`, settings),
     preload: path.join(root, "desktop/preload.cjs"), theme: () => ({ name: theme, background: theme === "dark" ? "#010101" : "#f5f5f6" }),
     icon: path.join(root, "desktop/icon.ico"), showMain: (url) => { void planner.loadURL(url); },
     preferredDisplay: (scope) => preferred.get(scope) ?? null, rememberDisplay: (scope, display) => preferred.set(scope, display),
@@ -107,7 +111,7 @@ try {
   ipcMain.handle("pacedmind:float-task", (e, id, scope, createdAt) => e.sender === planner.webContents && e.senderFrame === planner.webContents.mainFrame && notes.open(id, scope, createdAt));
   ipcMain.handle("pacedmind:close-task-note", (e) => notes.close(e));
   ipcMain.handle("pacedmind:show-floating-task", (e, href) => notes.showInPlanner(e, href));
-  ipcMain.on("pacedmind:set-theme", () => {});
+  ipcMain.on("pacedmind:set-theme", (event, next) => { if (event.sender !== planner.webContents) return; theme = next; notes.setTheme(next, next === "light" ? "#f5f5f6" : "#010101"); });
   // The production main process performs this once for all notes; renderers never poll /api/state.
   let polling = false;
   let autoPoll = true;
@@ -190,13 +194,57 @@ try {
   assert.ok([first, second].every((w) => w.isAlwaysOnTop()));
   assert.deepEqual(db.prepare("SELECT id, status FROM tasks ORDER BY id").all(), beforeTasks);
   console.log("PASS: header hides and restores all notes, closing planner hides cards, note controls cannot toggle the group, task statuses unchanged");
+  await click(planner, "Task note layout");
+  await until(async () => (await body(planner)).includes("Card size"), "layout popover");
+  assert.equal(await click(planner, "large task notes"), true);
+  await until(() => first.webContents.executeJavaScript("document.documentElement.dataset.noteSize === 'large'"), "large card styles");
+  await sleep(500);
+  assert.ok(first.getBounds().width >= 280 && first.getBounds().height >= 200);
+  const select = (label, value) => planner.webContents.executeJavaScript(`(() => { const s = document.querySelector('select[aria-label=${JSON.stringify(label)}]'); s.value=${JSON.stringify(value)}; s.dispatchEvent(new Event('change',{bubbles:true})); })()`);
+  await select("Group task notes", "focus");
+  await until(() => notes.workspace("local").displays.find(d => d.id === noteDisplay).settings.group === "focus", "group persisted");
+  await select("Task note animation", "diagonal");
+  await until(() => notes.workspace("local").displays.find(d => d.id === noteDisplay).settings.animation === "diagonal", "animation persisted");
+  await screenshot(planner, "task-note-layout-menu.png");
+  const another = notes.displays("local").displays.find(d => d.id !== noteDisplay && d.capacity >= 2);
+  if (another) {
+    await select("Task note screen", another.id);
+    await until(() => notes.workspace("local").displays.find(d => d.id === another.id).openCount === 2, "moved both notes to selected monitor");
+    await sleep(600);
+    assert.ok([first, second].every(w => { const r = w.getBounds(); return r.x >= another.x && r.x + r.width <= another.x + another.width; }));
+    assert.equal(preferred.get("local"), another.id);
+    await select("Task note screen", noteDisplay);
+    await until(() => preferred.get("local") === noteDisplay, "original display restored");
+  }
+  await click(planner, "Arrange spaces");
+  await until(() => planner.webContents.executeJavaScript("!!document.querySelector('[aria-label=\"Arrange task spaces\"]')"), "space editor");
+  await screenshot(planner, "task-note-spaces-editor.png");
+  const chooseFirstItem = () => planner.webContents.executeJavaScript("document.querySelector('button[aria-label^=\"Move \"]').click()");
+  const editPercent = async (label, value) => {
+    await planner.webContents.executeJavaScript(`(() => { const input = document.querySelector('input[aria-label=${JSON.stringify(label)}]'); input.focus(); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, ${JSON.stringify(String(value))}); input.dispatchEvent(new Event('input', {bubbles:true})); })()`);
+    await sleep(80);
+    await planner.webContents.executeJavaScript(`document.querySelector('input[aria-label=${JSON.stringify(label)}]').dispatchEvent(new FocusEvent('focusout', {bubbles:true}))`);
+  };
+  await chooseFirstItem();
+  await editPercent("width percent", 90);
+  await until(() => Object.values(layouts.get(`local:${noteDisplay}`).regions).some(r => r.width === .9), "space resized through editor");
+  await click(planner, "Reset spaces");
+  await until(() => Object.keys(layouts.get(`local:${noteDisplay}`).regions).length === 0, "spaces reset");
+  await select("Edit spaces or cards", "cards");
+  await chooseFirstItem();
+  await editPercent("x percent", 25);
+  await until(() => Object.values(layouts.get(`local:${noteDisplay}`).positions).some(r => Math.abs(r.x - .25) < .001), "card moved through editor and saved");
+  await click(planner, "Done");
+  assert.equal(await first.webContents.executeJavaScript("window.pacedMindDesktop.setTaskNoteLayout({displayId:'1',move:true})"), null);
+  assert.deepEqual(db.prepare("SELECT id, status FROM tasks ORDER BY id").all(), beforeTasks);
+  console.log("PASS: native layout menu, large card renderer, grouping, persisted animation, screen change, editor and note IPC isolation");
   await sleep(4300);
   await call("start_task", { task: tasks[0].key, agent: "codex" });
   await call("report_progress", { task: tasks[0].key, message: "Checking the last installer details before the release.", plan: [{ step: "Review the release checklist", done: true }, { step: "Verify the installer", done: false }] });
   await until(async () => (await body(first)).includes("Checking the last installer") && (await body(first)).includes("1 / 2"), "agent live progress");
   await screenshot(first, "task-note-dark.png");
   theme = "light";
-  await planner.webContents.executeJavaScript("localStorage.setItem('pacedmind-theme', 'light')");
+  await planner.webContents.executeJavaScript("localStorage.setItem('pacedmind-theme', 'light'); document.documentElement.dataset.theme='light'; window.dispatchEvent(new Event('pacedmind:theme'))");
   await until(() => first.webContents.executeJavaScript("document.documentElement.dataset.theme === 'light'"), "theme storage sync");
   await screenshot(first, "task-note-light.png");
   await call("report_progress", { task: tasks[0].key, kind: "issue", message: "The installer needs one final adjustment." });
@@ -258,6 +306,7 @@ try {
       body: JSON.stringify({ scope: "local", displays: notes.displays("local"), results: [], ...patch }) });
     return { status: response.status, ...(response.ok ? await response.json() : {}) };
   };
+  preferred.clear(); // This scenario starts before a monitor choice, unlike the layout menu scenario.
   const snap = notes.displays("local");
   const chosen = snap.displays[0].id;
   // Simulated monitor inventory, delivered through the real main-process route and MCP tools.

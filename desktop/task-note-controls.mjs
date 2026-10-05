@@ -27,4 +27,17 @@ export function registerTaskNoteControls({ ipcMain, taskWindows, planner, origin
   };
   ipcMain.handle("pacedmind:task-notes-state", handle(false));
   ipcMain.handle("pacedmind:toggle-task-notes", handle(true));
+  // Layouts never accept a renderer-supplied account; each change rechecks the signed-in planner.
+  const workspace = (write) => async (event, input) => {
+    if (!allowed(event)) return null;
+    const scope = await readScope();
+    if (!scope || !allowed(event)) return null;
+    taskWindows.keepScope(scope);
+    if (!write) return { ok: true, workspace: taskWindows.workspace(scope) };
+    if (!input || typeof input !== "object" || JSON.stringify(input).length > 32000) return { ok: false, error: "Invalid layout." };
+    return input.ref ? taskWindows.moveNote(scope, input.displayId, input.ref, input.bounds) : taskWindows.configure(scope, input);
+  };
+  ipcMain.handle("pacedmind:task-note-layout", workspace(false));
+  ipcMain.handle("pacedmind:set-task-note-layout", workspace(true));
+  ipcMain.on("pacedmind:task-note-metadata", (event, data) => taskWindows.report(event, data));
 }

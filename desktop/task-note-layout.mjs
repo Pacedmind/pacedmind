@@ -9,13 +9,14 @@ export function noteCapacity(area) {
 }
 
 /** A compact grid in the usable desktop, in Electron's DIP coordinates (also on scaled/negative-origin screens). */
-export function noteLayout(area, count) {
+export function noteLayout(area, count, size = "medium") {
   if (!Number.isSafeInteger(count) || count < 1 || count > noteCapacity(area)) return null;
   let best = null;
   for (let columns = 1; columns <= count; columns++) {
     const rows = Math.ceil(count / columns);
-    const width = Math.min(360, Math.floor((area.width - 2 * MARGIN - (columns - 1) * GAP) / columns));
-    const height = Math.min(380, Math.floor((area.height - 2 * MARGIN - (rows - 1) * GAP) / rows));
+    const [preferredWidth, preferredHeight] = { small: [280, 200], medium: [360, 280], large: [440, 380] }[size] ?? [360, 280];
+    const width = Math.min(preferredWidth, Math.floor((area.width - 2 * MARGIN - (columns - 1) * GAP) / columns));
+    const height = Math.min(preferredHeight, Math.floor((area.height - 2 * MARGIN - (rows - 1) * GAP) / rows));
     if (width < MIN_WIDTH || height < MIN_HEIGHT) continue;
     const score = width * height;
     const unused = columns * rows - count;

@@ -124,6 +124,15 @@ html[data-theme="light"] {
 /* Frameless task notes: only the header drags; the controls remain clickable. */
 .task-note-titlebar { -webkit-app-region: drag; }
 .task-note-titlebar button { -webkit-app-region: no-drag; }
+.task-note-surface { background: var(--color-panel); }
+html[data-note-emphasis="strong"] .task-note-surface { background: color-mix(in srgb, var(--color-panel) 86%, var(--color-fg)); border-color: var(--color-line-strong); }
+html[data-note-emphasis="quiet"] .task-note-surface { background: var(--color-bg); }
+html[data-theme="light"][data-note-emphasis="strong"] .task-note-surface { background: var(--color-panel); }
+html[data-note-size="small"] .task-note-titlebar { height: 30px; }
+html[data-note-size="small"] .task-note-content { padding: 10px 12px; gap: 7px; }
+html[data-note-size="small"] .task-note-content h1 { font-size: 14px; }
+html[data-note-size="small"] .task-note-surface footer { padding: 7px 12px; }
+html[data-note-size="large"] .task-note-content h1 { font-size: 20px; }
 .task-note-progress { appearance: none; border: 0; border-radius: 2px; overflow: hidden; }
 .task-note-progress::-webkit-progress-bar { background: var(--color-line2); }
 .task-note-progress::-webkit-progress-value { background: var(--color-fg3); }

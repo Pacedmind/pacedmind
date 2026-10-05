@@ -4,6 +4,8 @@ import { test } from "node:test";
 import { createTaskWindows } from "../desktop/task-windows.mjs";
 import { registerTaskNoteControls } from "../desktop/task-note-controls.mjs";
 import { noteCapacity, noteLayout } from "../desktop/task-note-layout.mjs";
+import { animationDelays, importance, layoutSettings, workspaceLayout } from "../desktop/task-note-workspace.mjs";
+import { createNoteMotion } from "../desktop/task-note-motion.mjs";
 
 const origin = "http://127.0.0.1:4319";
 const createdAt = "2026-10-04T10:00:00";
@@ -13,6 +15,7 @@ function fixture(platform = "win32") {
   const windows = [];
   const opened = [];
   const preferred = new Map();
+  const layouts = new Map();
   const changes = [];
   const displays = [{ id: 1, label: "Left", workArea: { x: -1280, y: 0, width: 1280, height: 720 } }];
   class Window extends EventEmitter {
@@ -34,6 +37,9 @@ function fixture(platform = "win32") {
     loadURL(url) { this.webContents.mainFrame.url = url; return Promise.resolve(); }
     isDestroyed() { return !!this.closed; }
     isMinimized() { return !!this.minimized; }
+    isVisible() { return !!this.shown; }
+    setOpacity(value) { this.opacity = value; }
+    getOpacity() { return this.opacity ?? 1; }
     restore() { this.minimized = false; }
     setAlwaysOnTop(value) { this.options.alwaysOnTop = value; }
     moveTop() { this.occluded = false; }
@@ -45,6 +51,9 @@ function fixture(platform = "win32") {
     setBackgroundColor(color) { this.background = color; }
   }
   const notes = createTaskWindows({
+    animate: false,
+    readLayout: (scope, id) => layouts.get(`${scope}:${id}`),
+    writeLayout: (scope, id, value) => layouts.set(`${scope}:${id}`, value),
     BrowserWindow: Window, origin, preload: "/app/preload.cjs", icon: "icon.ico", platform,
     screen: {
       getCursorScreenPoint: () => ({ x: -500, y: 100 }), getDisplayNearestPoint: () => displays[0],
@@ -57,7 +66,7 @@ function fixture(platform = "win32") {
     onChange: (state) => changes.push(state),
   });
   const event = (window) => ({ sender: window.webContents, senderFrame: window.webContents.mainFrame });
-  return { notes, windows, opened, event, displays, preferred, changes, Window };
+  return { notes, windows, opened, event, displays, preferred, changes, Window, layouts };
 }
 
 test("each task gets an independent topmost window; repeated clicks restore the existing note", () => {
@@ -77,6 +86,7 @@ test("each task gets an independent topmost window; repeated clicks restore the 
   }
   assert.notEqual(first.options.x, second.options.x);
   first.minimized = true;
+  first.emit("ready-to-show");
   notes.open(1, "local", createdAt);
   assert.equal(windows.length, 2);
   assert.equal(first.minimized, false);
@@ -168,7 +178,7 @@ test("group controls accept only the current planner and clear hidden notes afte
   await planner.loadURL(`${origin}/today`);
   let scope = "local";
   const handlers = new Map();
-  registerTaskNoteControls({ ipcMain: { handle: (name, fn) => handlers.set(name, fn) }, taskWindows: notes,
+  registerTaskNoteControls({ ipcMain: { on() {}, handle: (name, fn) => handlers.set(name, fn) }, taskWindows: notes,
     planner: () => planner, origin, readScope: async () => scope });
   const toggle = handlers.get("pacedmind:toggle-task-notes");
   const state = handlers.get("pacedmind:task-notes-state");
@@ -195,7 +205,7 @@ test("Hide notes and the header state work without a server response", async () 
   await planner.loadURL(`${origin}/today`);
   const handlers = new Map();
   let reads = 0;
-  registerTaskNoteControls({ ipcMain: { handle: (name, fn) => handlers.set(name, fn) }, taskWindows: notes,
+  registerTaskNoteControls({ ipcMain: { on() {}, handle: (name, fn) => handlers.set(name, fn) }, taskWindows: notes,
     planner: () => planner, origin, readScope: async () => { reads++; return undefined; } });
   notes.show(1, "local", createdAt, "1");
   windows[1].emit("ready-to-show");
@@ -214,7 +224,7 @@ test("Show notes starts a fresh set when none are open, then toggles that set", 
   await planner.loadURL(`${origin}/today`);
   const handlers = new Map();
   let calls = 0;
-  registerTaskNoteControls({ ipcMain: { handle: (name, fn) => handlers.set(name, fn) }, taskWindows: notes,
+  registerTaskNoteControls({ ipcMain: { on() {}, handle: (name, fn) => handlers.set(name, fn) }, taskWindows: notes,
     planner: () => planner, origin, readScope: async () => "local", openNotes: async (_event, scope) => {
       calls++;
       notes.show(1, scope, createdAt, "1");
@@ -340,6 +350,7 @@ test("46 notes share one inventory; version messages cannot cross accounts or re
   for (let id = 1; id <= 46; id++) assert.equal(notes.show(id, "local", createdAt, "1").status, "opened");
   assert.equal(notes.tasks("local").length, 46);
   assert.deepEqual(notes.tasks(account), []);
+  windows.forEach(w => { w.messages.length = 0; });
   const version = "a".repeat(64);
   notes.updateVersions(account, [{ id: 1, createdAt, version }]);
   notes.updateVersions("local", [{ id: 1, createdAt: "2000-01-01T00:00:00", version }]);
@@ -352,4 +363,110 @@ test("46 notes share one inventory; version messages cannot cross accounts or re
   assert.equal(notes.tasks("local").length, 45);
   notes.updateVersions("local", [{ id: 1, createdAt, version }]);
   assert.equal(windows[0].messages.length, 1);
+});
+
+test("layout settings and custom spaces cannot put cards outside a display or overlap groups", () => {
+  const area = { x: -2560, y: -200, width: 2560, height: 1392 };
+  const notes = Array.from({ length: 23 }, (_, i) => ({ id: i + 1, createdAt, meta: { priority: i % 3 ? "medium" : "high", projectId: String(i % 3), projectName: `Project ${i % 3}` } }));
+  for (const size of ["small", "medium", "large"]) for (const group of ["none", "project", "priority", "focus"]) {
+    const plan = workspaceLayout(area, notes, layoutSettings({ size, group }));
+    assert.equal(plan.placements.length, 23);
+    for (const { bounds: r } of plan.placements) {
+      assert.ok(r.width >= 280 && r.height >= 200);
+      assert.ok(r.x >= area.x && r.y >= area.y && r.x + r.width <= area.x + area.width && r.y + r.height <= area.y + area.height);
+    }
+  }
+  const settings = layoutSettings({ group: "project" });
+  const groups = workspaceLayout(area, notes, settings).groups;
+  settings.regions = Object.fromEntries(groups.map(g => [g.key, { x: 0, y: 0, width: 1, height: 1 }]));
+  assert.equal(workspaceLayout(area, notes, settings), null);
+  assert.deepEqual(layoutSettings({ size: "huge", regions: { evil: { x: -1, y: 0, width: 10, height: 10 } } }), layoutSettings(null));
+});
+
+test("changing screens is atomic, saved per account, and keeps hidden cards hidden", () => {
+  const { notes, windows, displays, preferred, layouts } = fixture();
+  displays.push({ id: 2, label: "Right", workArea: { x: 1280, y: 0, width: 1920, height: 1080 } });
+  notes.show(1, "local", createdAt, "1"); notes.show(2, "local", createdAt, "1");
+  windows.forEach(w => w.emit("ready-to-show")); notes.hideAll();
+  const result = notes.configure("local", { displayId: "2", move: true, settings: { size: "large", animation: "right" } });
+  assert.equal(result.ok, true); assert.equal(preferred.get("local"), "2");
+  assert.ok(windows.every(w => w.getBounds().x >= 1280 && !w.shown));
+  assert.equal(layouts.get("local:2").size, "large");
+  assert.equal(notes.workspace(account).displays[1].settings.size, "medium");
+  const before = windows.map(w => w.getBounds());
+  assert.equal(notes.configure("local", { displayId: "lost", move: true }).ok, false);
+  assert.deepEqual(windows.map(w => w.getBounds()), before);
+});
+
+test("manual card positions survive a screen round-trip and reopening, until an explicit rearrange", () => {
+  const { notes, windows, displays, layouts } = fixture();
+  displays.push({ id: 2, label: "Right", workArea: { x: 1280, y: 0, width: 1920, height: 1080 } });
+  notes.show(1, "local", createdAt, "1");
+  const ref = `1:${createdAt}`;
+  const left = { x: .3, y: .2, width: .4, height: .5 };
+  assert.equal(notes.moveNote("local", "1", ref, left).ok, true);
+  const before = windows[0].getBounds();
+  notes.configure("local", { displayId: "2", move: true });
+  const right = { x: .5, y: .3, width: .3, height: .4 };
+  assert.equal(notes.moveNote("local", "2", ref, right).ok, true);
+  const other = windows[0].getBounds();
+  notes.configure("local", { displayId: "1", move: true });
+  assert.deepEqual(windows[0].getBounds(), before);
+  notes.configure("local", { displayId: "1", settings: { emphasis: false, animation: "none" } });
+  assert.deepEqual(windows[0].getBounds(), before);
+  windows[0].close(); notes.show(1, "local", createdAt, "1");
+  assert.deepEqual(windows[1].getBounds(), before);
+  notes.configure("local", { displayId: "2", move: true });
+  assert.deepEqual(windows[1].getBounds(), other);
+  notes.configure("local", { displayId: "2", settings: { size: "small" } });
+  assert.deepEqual(layouts.get("local:2").positions, {});
+  assert.notDeepEqual(windows[1].getBounds(), other);
+  assert.equal(layouts.has(`${account}:2`), false);
+});
+
+test("metadata maps numeric priorities and ignores another frame", () => {
+  const { notes, windows, event } = fixture();
+  notes.show(1, "local", createdAt, "1");
+  const owner = event(windows[0]);
+  notes.report(owner, { title: "Urgent", priority: 1, status: "todo" });
+  assert.equal(windows[0].messages.at(-1)[1].emphasis, "strong");
+  assert.equal(notes.report({ ...owner, senderFrame: { url: owner.senderFrame.url } }, { priority: 4 }), false);
+  notes.report(owner, { title: "Low", priority: 4, status: "todo" });
+  assert.equal(windows[0].messages.at(-1)[1].emphasis, "quiet");
+});
+
+test("motion sequencing is spatial, bounded for 46 notes, and urgency uses local dates", () => {
+  const notes = Array.from({ length: 46 }, (_, id) => ({ id, window: { getBounds: () => ({ x: (id % 8) * 300 - 2560, y: Math.floor(id / 8) * 210 }) } }));
+  const right = animationDelays(notes, "right"), diagonal = animationDelays(notes, "diagonal");
+  assert.ok(right.get(notes[7]) < right.get(notes[0]));
+  assert.ok(diagonal.get(notes[0]) < diagonal.get(notes[45]));
+  for (const kind of ["right", "diagonal", "shuffle", "together", "none"]) assert.ok(Math.max(...animationDelays(notes, kind).values()) <= 180);
+  assert.equal(importance({ status: "todo", priority: "low", plannedDate: "2026-10-05" }, new Date(2026, 9, 5)), "strong");
+  assert.equal(importance({ status: "done", priority: "urgent" }), "quiet");
+});
+
+test("interrupting an animation cannot execute an old hide callback", async () => {
+  const { Window } = fixture(), window = new Window({ x: 0, y: 0, width: 280, height: 200 });
+  const note = { window, ready: true }, motion = createNoteMotion();
+  let hidden = false;
+  motion.run(note, { opacity: 0, delay: 80, done: () => { hidden = true; } });
+  motion.run(note, { opacity: 1 });
+  await new Promise(r => setTimeout(r, 360));
+  assert.equal(hidden, false); assert.equal(window.opacity, 1);
+  note.reducedMotion = true;
+  motion.run(note, { opacity: 0, delay: 100, done: () => { hidden = true; } });
+  assert.equal(hidden, true); assert.equal(window.opacity, 0);
+});
+
+test("layout IPC refuses foreign windows, subframes, missing scopes, and oversize payloads", async () => {
+  const { notes, Window, event } = fixture(), planner = new Window({});
+  await planner.loadURL(`${origin}/today`);
+  const handlers = new Map(); let scope = "local";
+  registerTaskNoteControls({ ipcMain: { on() {}, handle: (key, fn) => handlers.set(key, fn) }, taskWindows: notes, planner: () => planner, origin, readScope: async () => scope });
+  const change = handlers.get("pacedmind:set-task-note-layout");
+  assert.equal(await change({ ...event(planner), senderFrame: { url: `${origin}/today` } }, {}), null);
+  assert.equal((await change(event(planner), { displayId: "1", settings: { size: "large" } })).ok, true);
+  assert.equal((await change(event(planner), { payload: "x".repeat(33000) })).ok, false);
+  scope = undefined;
+  assert.equal(await change(event(planner), { displayId: "1" }), null);
 });

@@ -4,8 +4,8 @@ const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("pacedMindDesktop", {
   initialTheme: process.argv.includes("--pacedmind-theme=light") ? "light" : "dark",
-  setTheme(theme) {
-    if (theme === "dark" || theme === "light") ipcRenderer.send("pacedmind:set-theme", theme);
+  setTheme(theme, preference) {
+    if (theme === "dark" || theme === "light") ipcRenderer.send("pacedmind:set-theme", theme, preference === "system" ? "system" : theme);
   },
   // The system's folder dialog, starting at `near` when it's a folder; the chosen folder, or null when cancelled.
   pickFolder(near) {
@@ -22,6 +22,19 @@ contextBridge.exposeInMainWorld("pacedMindDesktop", {
   },
   toggleTaskNotes() {
     return ipcRenderer.invoke("pacedmind:toggle-task-notes");
+  },
+  taskNoteLayout() { return ipcRenderer.invoke("pacedmind:task-note-layout"); },
+  setTaskNoteLayout(input) { return ipcRenderer.invoke("pacedmind:set-task-note-layout", input); },
+  reportTaskNote(data) { ipcRenderer.send("pacedmind:task-note-metadata", data); },
+  onTaskNoteStyle(listener) {
+    const receive = (_event, value) => { if (value && ["small", "medium", "large"].includes(value.size) && ["strong", "normal", "quiet"].includes(value.emphasis)) listener(value); };
+    ipcRenderer.on("pacedmind:task-note-style", receive);
+    return () => ipcRenderer.removeListener("pacedmind:task-note-style", receive);
+  },
+  onTaskNoteTheme(listener) {
+    const receive = (_event, value) => { if (value && ["dark", "light"].includes(value.theme) && [0, 240].includes(value.duration)) listener(value); };
+    ipcRenderer.on("pacedmind:task-note-theme", receive);
+    return () => ipcRenderer.removeListener("pacedmind:task-note-theme", receive);
   },
   onTaskNotesChanged(listener) {
     const receive = (_event, state) => {

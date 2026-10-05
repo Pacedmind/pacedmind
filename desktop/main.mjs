@@ -1,7 +1,7 @@
 // PacedMind desktop app. Runs the built Next.js server (server/server.js) with Electron's own Node,
 // shows it in a window and keeps running in the tray (the menu bar on macOS), so agents can still
 // report back after the window is closed. Built and installed by scripts/build-desktop.mjs.
-import { app, BrowserWindow, Menu, Notification, Tray, dialog, ipcMain, nativeImage, nativeTheme, safeStorage, screen, session, shell } from "electron";
+import { app, BrowserWindow, Menu, Notification, Tray, dialog, ipcMain, nativeImage, nativeTheme, safeStorage, screen, session, shell, systemPreferences } from "electron";
 import { spawn } from "node:child_process";
 import { createHash, createHmac, randomBytes } from "node:crypto";
 import fs from "node:fs";
@@ -193,6 +193,12 @@ const taskWindows = createTaskWindows({
   theme: () => ({ name: activeTheme, ...THEME_COLORS[activeTheme] }), showMain: showWindow,
   preferredDisplay: (scope) => readState().taskNoteDisplays?.[scope] ?? null,
   rememberDisplay: (scope, display) => writeState({ taskNoteDisplays: { ...readState().taskNoteDisplays, [scope]: display } }),
+  readLayout: (scope, display) => readState().taskNoteLayouts?.[scope]?.[display],
+  writeLayout: (scope, display, settings) => {
+    const layouts = readState().taskNoteLayouts ?? {};
+    writeState({ taskNoteLayouts: { ...layouts, [scope]: { ...layouts[scope], [display]: settings } } });
+  },
+  reduceMotion: () => systemPreferences.getAnimationSettings().prefersReducedMotion,
   onChange: (state) => { if (win && !win.isDestroyed()) win.webContents.send("pacedmind:task-notes-changed", state); },
 });
 async function readTaskNoteScope() {
@@ -246,14 +252,14 @@ ipcMain.handle("pacedmind:float-task", (event, id, scope, createdAt) => showTask
 ipcMain.handle("pacedmind:close-task-note", (event) => taskWindows.close(event));
 ipcMain.handle("pacedmind:show-floating-task", (event, href) => taskWindows.showInPlanner(event, href));
 
-ipcMain.on("pacedmind:set-theme", (event, theme) => {
+ipcMain.on("pacedmind:set-theme", (event, theme, preference) => {
   if ((theme !== "dark" && theme !== "light") || !win || event.sender !== win.webContents || event.senderFrame !== win.webContents.mainFrame) return;
   try { if (new URL(event.senderFrame.url).origin !== ORIGIN) return; } catch { return; }
   activeTheme = theme;
   const colors = THEME_COLORS[theme];
-  nativeTheme.themeSource = theme;
+  nativeTheme.themeSource = preference === "system" ? "system" : theme;
   win.setBackgroundColor(colors.background);
-  taskWindows.setBackgroundColor(colors.background);
+  taskWindows.setTheme(theme, colors.background);
   if (process.platform === "win32") win.setTitleBarOverlay({ color: colors.background, symbolColor: colors.symbol, height: 40 });
   if (readState().theme !== theme) writeState({ theme });
 });
