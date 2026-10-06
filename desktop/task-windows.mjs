@@ -265,6 +265,8 @@ export function createTaskWindows({ BrowserWindow, screen, origin, preload, them
         publish(note);
         reveal(note);
       });
+      // Native restore may reset the window level after restore() returns on macOS.
+      window.on("restore", () => { if (!note.hidden) showOnTop(window); });
       let positionTimer;
       const manual = () => { note.manualMove = true; motion.cancel(note); };
       window.on("will-move", manual); window.on("will-resize", manual);
