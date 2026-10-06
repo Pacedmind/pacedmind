@@ -24,7 +24,8 @@
     "stripe:prices": "node scripts/stripe-prices.mjs",
     "stripe:setup": "node scripts/stripe-setup.mjs",
     "lint": "eslint",
-    "typecheck": "next typegen && tsc --noEmit"
+    "typecheck": "next typegen && tsc --noEmit",
+    "test:i18n": "node --import tsx --test tests/i18n.test.ts tests/notification-language.test.mjs"
   },
   "dependencies": {
     "@codemirror/commands": "^6.11.1",

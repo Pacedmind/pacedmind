@@ -1,7 +1,9 @@
 "use client";
+import { useTranslation } from "@/components/language";
+import { type Translator } from "@/lib/i18n";
 
 import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from "react";
-import { addDays, addMonths, format, isSameMonth, startOfMonth } from "date-fns";
+import { addDays, addMonths, isSameMonth, startOfMonth } from "date-fns";
 import { addDaysStr, dateOnly, hhmm, minutesOf, mondayOf, parseLocal, parseTime, timeOf, toDateStr, todayStr } from "@/lib/dates";
 import { parseWhen } from "@/lib/parse";
 import { Icon } from "./icons";
@@ -22,6 +24,7 @@ export function DatePicker({ value, withTime, onChange, onDone, children }: {
   /** At the bottom, after the time (Clear). */
   children?: ReactNode;
 }) {
+  const tx = useTranslation();
   const date = value ? dateOnly(value) : "";
   // The time just set, until `value` has it (a task's save takes a moment), so a day picked next keeps it.
   const [ownTime, setOwnTime] = useState<string | null>(null);
@@ -41,13 +44,13 @@ export function DatePicker({ value, withTime, onChange, onDone, children }: {
   const typedValue = typed && at(typed.dayGiven || !date ? typed.day : date, typed.time ?? time);
   const now = new Date();
   const suggestions: [string, number][] = [
-    ["Today", 0], ["Tomorrow", 1], ["Weekend", (6 - now.getDay() + 7) % 7], ["Next week", 8 - (now.getDay() || 7)],
+    [tx("Today"), 0], [tx("Tomorrow"), 1], [tx("Weekend"), (6 - now.getDay() + 7) % 7], [tx("Next week"), 8 - (now.getDay() || 7)],
   ];
   const row = "flex h-7 items-center justify-between gap-2 rounded-md px-2 text-[12.5px]";
   return (
     <div className="flex flex-col">
-      <input ref={input} value={text} onChange={(e) => setText(e.target.value)} aria-label="Type a date"
-        placeholder={withTime ? "Type a date: fri 10:00" : "Type a date: next fri"}
+      <input ref={input} value={text} onChange={(e) => setText(e.target.value)} aria-label={tx("Type a date")}
+        placeholder={withTime ? tx("Type a date: fri 10:00") : tx("Type a date: next fri")}
         onKeyDown={(e) => {
           if (e.key === "Enter") { e.preventDefault(); if (typedValue) onChange(typedValue, true); }
           if (e.key === "Escape" && text) { e.stopPropagation(); setText(""); }
@@ -58,10 +61,10 @@ export function DatePicker({ value, withTime, onChange, onDone, children }: {
         <div className="h-[58px]">
           {typedValue ? (
             <button type="button" onClick={() => onChange(typedValue, true)} className={cx(row, "w-full bg-sel text-strong")}>
-              {format(parseLocal(typedValue), timeOf(typedValue) ? "EEEE d MMMM, HH:mm" : "EEEE d MMMM")}
+              {tx.date(parseLocal(typedValue), timeOf(typedValue) ? "EEEE d MMMM, HH:mm" : "EEEE d MMMM")}
               <span className="text-[11px] text-dim">Enter</span>
             </button>
-          ) : <p className={cx(row, "text-dim")}>No date in that</p>}
+          ) : <p className={cx(row, "text-dim")}>{tx("No date in that")}</p>}
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-0.5">
@@ -69,9 +72,9 @@ export function DatePicker({ value, withTime, onChange, onDone, children }: {
             const d = addDays(now, n);
             const day = toDateStr(d);
             return (
-              <button key={label} type="button" title={format(d, "EEEE d MMMM")} onClick={() => pickDay(day)}
+              <button key={label} type="button" title={tx.date(d, "EEEE d MMMM")} onClick={() => pickDay(day)}
                 className={cx(row, "hover:bg-sel", day === date ? "text-strong" : "text-fg2")}>
-                {label}<span className="text-[11px] text-dim">{format(d, n < 2 ? "EEE" : "EEE d")}</span>
+                {label}<span className="text-[11px] text-dim">{tx.date(d, n < 2 ? "EEE" : "EEE d")}</span>
               </button>
             );
           })}
@@ -92,8 +95,7 @@ export function DatePicker({ value, withTime, onChange, onDone, children }: {
           {children}
           {withTime && onDone && (
             <button type="button" onClick={onDone} className={cx("h-7 rounded-md border border-line2 bg-hover px-3 text-[12.5px] text-fg hover:bg-sel", !children && "ml-auto")}>
-              Done
-            </button>
+              {tx("Done")}</button>
           )}
         </div>
       )}
@@ -112,6 +114,7 @@ function TimeField({ value, onChange, inputRef }: {
   onChange: (time: string, final: boolean) => void;
   inputRef?: RefObject<HTMLInputElement | null>;
 }) {
+  const tx = useTranslation();
   // What's typed, until it's taken (Enter, a pick, leaving the field).
   const [draft, setDraft] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
@@ -155,19 +158,19 @@ function TimeField({ value, onChange, inputRef }: {
     <div className="relative flex items-center">
       <span className="pointer-events-none absolute left-2 text-mut"><Icon name="clock" size={13} /></span>
       {/* The list opens on a click, typing or the arrow keys, not on focus: a day picked moves focus here. */}
-      <input ref={inputRef} value={draft ?? value} placeholder="Add time" aria-label="Time" inputMode="text" autoComplete="off"
+      <input ref={inputRef} value={draft ?? value} placeholder={tx("Add time")} aria-label={tx("Time")} inputMode="text" autoComplete="off"
         role="combobox" aria-expanded={open} aria-controls={listId}
         onClick={() => setOpen(true)} onBlur={leave} onKeyDown={key}
         onChange={(e) => { setDraft(e.target.value); setOpen(true); }}
         className={cx("h-7 w-[108px] rounded-md border bg-input pl-7 pr-2 text-[12px] tabular-nums placeholder:text-dim",
           draft !== null && draft.trim() && !typed ? "border-danger-line" : "border-line2")} />
       {value && draft === null && (
-        <button type="button" aria-label="Remove time" onClick={() => onChange("", false)}
+        <button type="button" aria-label={tx("Remove time")} onClick={() => onChange("", false)}
           className="ml-0.5 grid h-6 w-6 place-items-center rounded-md text-mut hover:bg-sel hover:text-fg2"><Icon name="x" size={12} /></button>
       )}
       {open && (
         // Above the field, over the calendar, so it stays inside the picker.
-        <div ref={list} id={listId} role="listbox" aria-label="Times"
+        <div ref={list} id={listId} role="listbox" aria-label={tx("Times")}
           className="absolute bottom-full left-0 z-10 mb-1 max-h-44 w-[108px] overflow-y-auto rounded-md border border-line2 bg-raised p-1 shadow-[var(--shadow-popover)]">
           {SLOTS.map((s) => (
             <button key={s} type="button" role="option" aria-selected={s === near} data-t={s} tabIndex={-1}
@@ -182,11 +185,12 @@ function TimeField({ value, onChange, inputRef }: {
   );
 }
 
-const WEEKDAYS = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
+const WEEKDAYS = (tx: Translator) => ([tx("Mo"), tx("Tu"), tx("We"), tx("Th"), tx("Fr"), tx("Sa"), tx("Su")]);
 const STEP: Record<string, number> = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 };
 
 /** A month to pick a day from, weeks from Monday. `value` and the picked day are "YYYY-MM-DD" ("" for none). */
 function MiniCalendar({ value, onPick }: { value: string; onPick: (day: string) => void }) {
+  const tx = useTranslation();
   const today = todayStr();
   const [month, setMonth] = useState(() => startOfMonth(parseLocal(value || today)));
   // The day the arrow keys move from; Tab lands on it.
@@ -210,14 +214,14 @@ function MiniCalendar({ value, onPick }: { value: string; onPick: (day: string) 
   return (
     <div>
       <div className="mb-1 flex items-center justify-between pl-1.5">
-        <span className="text-[12.5px] font-medium text-fg2">{format(month, "MMMM yyyy")}</span>
+        <span className="text-[12.5px] font-medium text-fg2">{tx.date(month, "MMMM yyyy")}</span>
         <div className="flex">
-          <button type="button" aria-label="Previous month" onClick={() => turn(-1)} className={nav}><Icon name="chevronLeft" size={13} /></button>
-          <button type="button" aria-label="Next month" onClick={() => turn(1)} className={nav}><Icon name="chevronRight" size={13} /></button>
+          <button type="button" aria-label={tx("Previous month")} onClick={() => turn(-1)} className={nav}><Icon name="chevronLeft" size={13} /></button>
+          <button type="button" aria-label={tx("Next month")} onClick={() => turn(1)} className={nav}><Icon name="chevronRight" size={13} /></button>
         </div>
       </div>
       <div className="grid grid-cols-7 text-center text-[10.5px] leading-6 text-dim" aria-hidden="true">
-        {WEEKDAYS.map((w) => <span key={w}>{w}</span>)}
+        {WEEKDAYS(tx).map((w) => <span key={w}>{w}</span>)}
       </div>
       <div ref={grid} className="grid grid-cols-7 gap-y-0.5">
         {days.map((d, i) => {
@@ -225,7 +229,7 @@ function MiniCalendar({ value, onPick }: { value: string; onPick: (day: string) 
           const picked = day === value;
           return (
             <button key={day} type="button" data-day={day} tabIndex={day === tabDay ? 0 : -1}
-              aria-label={format(d, "EEEE d MMMM yyyy")} aria-pressed={picked} aria-current={day === today ? "date" : undefined}
+              aria-label={tx.date(d, "EEEE d MMMM yyyy")} aria-pressed={picked} aria-current={day === today ? "date" : undefined}
               onClick={() => onPick(day)} onKeyDown={(e) => move(e, day)} onFocus={() => setFocus(day)}
               className={cx("h-7 rounded-md text-[12px] tabular-nums",
                 picked ? "bg-accent font-semibold text-bg"

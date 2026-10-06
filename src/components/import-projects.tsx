@@ -1,4 +1,6 @@
 "use client";
+import { useTranslation } from "@/components/language";
+import { createTranslator, type Translator } from "@/lib/i18n";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
@@ -9,26 +11,26 @@ import type { AgentId, Area } from "@/lib/types";
 import { AgentIcon, AreaMark, Icon } from "./icons";
 import { Button, Menu, cx, useAction } from "./ui";
 
-const SOURCE_LABEL: Record<ImportSource, string> = {
-  "claude-app": "Claude app", "claude-cli": "Claude Code CLI", "codex-app": "Codex app", "codex-cli": "Codex CLI",
-};
+const SOURCE_LABEL = (tx: Translator): Record<ImportSource, string> => ({
+  "claude-app": tx("Claude app"), "claude-cli": tx("Claude Code CLI"), "codex-app": tx("Codex app"), "codex-cli": tx("Codex CLI"),
+});
 
-const HOW_LABEL: Record<NonNullable<FoundArea["joins"]>["how"], string> = {
-  marker: "pacedmind.md", repo: "repository", projects: "its projects", name: "same name",
-};
+const HOW_LABEL = (tx: Translator): Record<NonNullable<FoundArea["joins"]>["how"], string> => ({
+  marker: "pacedmind.md", repo: tx("repository"), projects: tx("its projects"), name: tx("same name"),
+});
 
 /** An area folder's choice: a new area, taken as one project, or (any other value) the id of an area you have. */
 const NEW = "new";
 const ONE = "one";
 
 /** "today", "yesterday", "5 days ago", "3 months ago", in calendar days. */
-function ago(ms: number, now: number): string {
+function ago(ms: number, now: number, tx: Translator = createTranslator("en")): string {
   const days = differenceInCalendarDays(now, ms);
-  if (days < 1) return "today";
-  if (days < 2) return "yesterday";
-  if (days < 31) return `${days} days ago`;
+  if (days < 1) return tx("today");
+  if (days < 2) return tx("yesterday");
+  if (days < 31) return tx("{0} days ago", [days]);
   const months = Math.round(days / 30.4);
-  return months < 12 ? `${months} month${months > 1 ? "s" : ""} ago` : "over a year ago";
+  return months < 12 ? tx("{0} month{1} ago", [months, months > 1 ? "s" : ""]) : tx("over a year ago");
 }
 
 /** When anything last happened there: an agent's session, or git's own files. */
@@ -47,8 +49,6 @@ function lastAgent(p: FoundProject): AgentId | null {
 function defaultArea(areas: Area[]): string {
   return (areas.find((a) => /dev|code|project|build/i.test(a.name)) ?? areas[0])?.id ?? "";
 }
-
-const count = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 function Check({ on, off, label, onClick }: { on: boolean; off?: boolean; label: string; onClick: () => void }) {
   return (
@@ -75,6 +75,7 @@ function NameField({ value, label, onChange }: { value: string; label: string; o
  * starts (`auto`, only when it finds something), and from Settings.
  */
 export function ImportProjects({ areas, auto = false, onClose }: { areas: Area[]; auto?: boolean; onClose: () => void }) {
+  const tx = useTranslation();
   const { run, pending } = useAction();
   const [found, setFound] = useState<{ projects: FoundProject[]; areas: FoundArea[] } | null>(null);
   const [picked, setPicked] = useState<Set<string>>(new Set());
@@ -179,34 +180,34 @@ export function ImportProjects({ areas, auto = false, onClose }: { areas: Area[]
     const agents = (["claude", "codex"] as AgentId[]).filter((a) => p.used[a] !== undefined);
     return (
       <div key={p.folder} className={cx("flex items-center gap-3 rounded-lg py-2 pr-3", indent ? "pl-9" : "pl-3", !off && "hover:bg-hover")}>
-        <Check on={on} off={off} label={`Import ${p.name}`} onClick={() => flip(setPicked, p.folder)} />
+        <Check on={on} off={off} label={tx("Import {0}", [p.name])} onClick={() => flip(setPicked, p.folder)} />
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           <div className="flex min-w-0 items-center gap-2">
             {joining(p) ? (
               <span className={cx("truncate text-[13px]", on ? "text-fg" : "text-fg2")}>{p.joins!.name}</span>
             ) : on ? (
-              <NameField value={names[p.folder] ?? p.name} label={`Name for ${p.folder}`} onChange={(v) => setNames((n) => ({ ...n, [p.folder]: v }))} />
+              <NameField value={names[p.folder] ?? p.name} label={tx("Name for {0}", [p.folder])} onChange={(v) => setNames((n) => ({ ...n, [p.folder]: v }))} />
             ) : (
               <span className={cx("truncate text-[13px]", off ? "text-mut2" : "text-fg2")}>{p.name}</span>
             )}
             {p.joins && !off && (
               <button type="button" onClick={() => flip(setApart, p.folder)}
-                title={joining(p) ? `Your project ${p.joins.name} gets this folder here. Select to make a new project instead.` : `Select to give this folder to your project ${p.joins.name} instead.`}
+                title={joining(p) ? tx("Your project {0} gets this folder here. Select to make a new project instead.", [p.joins.name]) : tx("Select to give this folder to your project {0} instead.", [p.joins.name])}
                 className={cx("flex h-5 shrink-0 items-center gap-1 rounded border px-1.5 text-[11px]",
                   joining(p) ? "border-accent/50 text-accent-fg" : "border-line2 text-mut2 hover:text-fg3")}>
-                <Icon name={joining(p) ? "link" : "plus"} size={11} />{joining(p) ? "Existing project" : "New project"}
+                <Icon name={joining(p) ? "link" : "plus"} size={11} />{joining(p) ? tx("Existing project") : tx("New project")}
               </button>
             )}
-            {p.holds > 1 && <span className="shrink-0 text-[11px] text-mut2">{p.holds} repositories</span>}
-            {p.copyOf && !off && <span title="Another copy of the same repository" className="shrink-0 text-[11px] text-mut2">copy of {p.copyOf}</span>}
+            {p.holds > 1 && <span className="shrink-0 text-[11px] text-mut2">{p.holds} {" "}{tx("repositories")}</span>}
+            {p.copyOf && !off && <span title={tx("Another copy of the same repository")} className="shrink-0 text-[11px] text-mut2">{tx("copy of")}{" "}{p.copyOf}</span>}
           </div>
           <span title={p.folder} className="truncate font-mono text-[11px] text-mut2">{p.folder}</span>
         </div>
-        <span title={p.sources.map((s) => SOURCE_LABEL[s]).join(", ")} className="flex shrink-0 items-center gap-1.5 text-mut">
+        <span title={p.sources.map((s) => tx(SOURCE_LABEL(tx)[s])).join(", ")} className="flex shrink-0 items-center gap-1.5 text-mut">
           {agents.map((a) => <AgentIcon key={a} agent={a} size={13} />)}
         </span>
         <span title={p.problem ?? undefined} className="w-[112px] shrink-0 text-right text-[12px] text-mut2 max-sm:w-[76px]">
-          {taken ? "Already a project" : p.problem ? "Can't be used" : last ? ago(last, now) : ""}
+          {taken ? tx("Already a project") : p.problem ? tx("Can't be used") : last ? ago(last, now, tx) : ""}
         </span>
       </div>
     );
@@ -223,38 +224,38 @@ export function ImportProjects({ areas, auto = false, onClose }: { areas: Area[]
           <button type="button" className={cx("flex h-5 shrink-0 items-center gap-1 rounded border px-1.5 text-[11px]",
             t === NEW ? "border-line2 text-mut2 hover:text-fg3" : "border-accent/50 text-accent-fg")}>
             <Icon name={t === ONE ? "layers" : t === NEW ? "plus" : "link"} size={11} />
-            {t === ONE ? (b.asProject ? `Project ${b.asProject.name}` : "One project") : t === NEW ? "New area" : "Existing area"}
+            {t === ONE ? (b.asProject ? tx("Project {0}", [b.asProject.name]) : tx("One project")) : t === NEW ? tx("New area") : tx("Existing area")}
             <Icon name="chevronDown" size={10} />
           </button>
         }
         items={[
-          { value: NEW, label: "New area", icon: <Icon name="plus" size={13} /> },
+          { value: NEW, label: tx("New area"), icon: <Icon name="plus" size={13} /> },
           ...areas.map((a) => ({ value: a.id, label: a.name, icon: <AreaMark area={a} size={13} />,
-            hint: b.joins?.id === a.id ? HOW_LABEL[b.joins.how] : undefined })),
-          { value: ONE, label: b.asProject ? `One project: ${b.asProject.name}` : "One project, not an area", icon: <Icon name="layers" size={13} /> },
+            hint: b.joins?.id === a.id ? tx(HOW_LABEL(tx)[b.joins.how]) : undefined })),
+          { value: ONE, label: b.asProject ? tx("One project: {0}", [b.asProject.name]) : tx("One project, not an area"), icon: <Icon name="layers" size={13} /> },
         ]}
         onSelect={(v) => { setTarget((x) => ({ ...x, [b.folder]: v })); setBoxOn((s) => new Set(s).add(b.folder)); }} />
     );
     return (
       <div className="flex items-center gap-3 rounded-lg px-3 py-2 hover:bg-hover">
-        <Check on={on} off={linked || !!b.problem} label={`Set up ${b.name}`} onClick={() => flip(setBoxOn, b.folder)} />
+        <Check on={on} off={linked || !!b.problem} label={tx("Set up {0}", [b.name])} onClick={() => flip(setBoxOn, b.folder)} />
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           <div className="flex min-w-0 items-center gap-2">
             {mine ? <AreaMark area={mine} size={14} /> : <Icon name={t === ONE ? "layers" : "folder"} size={14} className="shrink-0 text-mut2" />}
             {mine ? (
               <span className={cx("truncate text-[13px] font-medium", on ? "text-fg" : "text-fg2")}>{mine.name}</span>
             ) : on && !linked ? (
-              <NameField value={boxNames[b.folder] ?? b.name} label={`Name for ${b.folder}`} onChange={(v) => setBoxNames((n) => ({ ...n, [b.folder]: v }))} />
+              <NameField value={boxNames[b.folder] ?? b.name} label={tx("Name for {0}", [b.folder])} onChange={(v) => setBoxNames((n) => ({ ...n, [b.folder]: v }))} />
             ) : (
               <span className="truncate text-[13px] font-medium text-fg2">{b.name}</span>
             )}
             {choice}
-            {linked && <span className="shrink-0 text-[11px] text-mut2">workspace here</span>}
+            {linked && <span className="shrink-0 text-[11px] text-mut2">{tx("workspace here")}</span>}
           </div>
           <span title={b.folder} className="truncate font-mono text-[11px] text-mut2">{b.folder}</span>
         </div>
         <span title={b.problem ?? undefined} className="shrink-0 text-right text-[12px] text-mut2">
-          {b.problem ? "Can't be used" : !linked && t !== NEW && t !== ONE && b.joins?.id === t ? HOW_LABEL[b.joins.how] : ""}
+          {b.problem ? tx("Can't be used") : !linked && t !== NEW && t !== ONE && b.joins?.id === t ? tx(HOW_LABEL(tx)[b.joins.how]) : ""}
         </span>
       </div>
     );
@@ -262,27 +263,26 @@ export function ImportProjects({ areas, auto = false, onClose }: { areas: Area[]
 
   const loose = shown.filter((p) => !boxOf(p));
   const joins = available.filter(joining).length;
-  const parts = [newAreas && count(newAreas, "area"), spaces && count(spaces, "workspace"), projectCount && count(projectCount, "project")].filter(Boolean);
+  const parts = [newAreas && tx.count(newAreas, "area"), spaces && tx.count(spaces, "workspace"), projectCount && tx.count(projectCount, "project")].filter(Boolean);
 
   return createPortal(
     <div className="fixed inset-0 z-[70] flex items-start justify-center bg-overlay px-4 pt-[9vh]" onMouseDown={(e) => { if (e.target === e.currentTarget) close(); }}>
-      <div role="dialog" aria-modal="true" aria-label="Bring your projects over"
+      <div role="dialog" aria-modal="true" aria-label={tx("Bring your projects over")}
         className="flex max-h-[80vh] w-[720px] max-w-full flex-col overflow-hidden rounded-xl border border-line2 bg-raised shadow-[var(--shadow-popover)]">
         <div className="flex flex-col gap-1.5 border-b border-line px-6 pb-4 pt-5 max-sm:px-4">
           <div className="flex items-center gap-2">
             <AgentIcon agent="claude" size={15} className="text-fg3" />
             <AgentIcon agent="codex" size={15} className="text-fg3" />
-            <h2 className="ml-1 text-[15px] font-semibold text-strong">Bring your projects over</h2>
+            <h2 className="ml-1 text-[15px] font-semibold text-strong">{tx("Bring your projects over")}</h2>
           </div>
           <p className="text-[12.5px] leading-relaxed text-mut">
             {found
               ? available.length || boxes.some((b) => !b.areaId)
                 ? <>
-                  A folder of repositories becomes an area, and the repositories in it its projects.
-                  {joins > 0 && ` ${joins === 1 ? "One is a project you already have" : `${joins} are projects you already have`}: ${joins === 1 ? "it gets" : "they get"} ${joins === 1 ? "its folder" : "their folders"} here.`}
+                  {tx("A folder of repositories becomes an area, and the repositories in it its projects.")}{joins > 0 && tx(" {0}: {1} {2} here.", [joins === 1 ? tx("One is a project you already have") : tx("{0} are projects you already have", [joins]), joins === 1 ? tx("it gets") : tx("they get"), joins === 1 ? tx("its folder") : tx("their folders")])}
                 </>
-                : "Everything you work on with Claude Code and Codex on this computer is already here."
-              : "Looking through your folders, Claude Code and Codex on this computer…"}
+                : tx("Everything you work on with Claude Code and Codex on this computer is already here.")
+              : tx("Looking through your folders, Claude Code and Codex on this computer…")}
           </p>
         </div>
 
@@ -293,7 +293,7 @@ export function ImportProjects({ areas, auto = false, onClose }: { areas: Area[]
               {!(boxOn.has(b.folder) && isOne(b)) && shown.filter((p) => boxOf(p) === b).map((p) => projectRow(p, true))}
             </div>
           ))}
-          {loose.length > 0 && boxes.length > 0 && <h3 className="px-3 pb-1 pt-3 text-[12px] font-medium text-mut2">Other folders</h3>}
+          {loose.length > 0 && boxes.length > 0 && <h3 className="px-3 pb-1 pt-3 text-[12px] font-medium text-mut2">{tx("Other folders")}</h3>}
           {loose.map((p) => projectRow(p, false))}
         </div>
 
@@ -301,11 +301,11 @@ export function ImportProjects({ areas, auto = false, onClose }: { areas: Area[]
         <div className="flex items-center gap-2 border-t border-line px-6 py-3.5 max-sm:flex-wrap max-sm:px-4">
           {needsArea && (
             <>
-              <span className="whitespace-nowrap text-[12.5px] text-mut2">{boxes.length ? "Other projects to" : "Add to"}</span>
+              <span className="whitespace-nowrap text-[12.5px] text-mut2">{boxes.length ? tx("Other projects to") : tx("Add to")}</span>
               <Menu width={200}
                 trigger={
                   <button type="button" className="flex h-7 items-center gap-1.5 rounded-md border border-line2 px-2 text-[12.5px] text-fg2 hover:bg-hover">
-                    {area && <AreaMark area={area} size={13} />}{area?.name ?? "Pick an area"}<Icon name="chevronDown" size={11} className="text-mut2" />
+                    {area && <AreaMark area={area} size={13} />}{area?.name ?? tx("Pick an area")}<Icon name="chevronDown" size={11} className="text-mut2" />
                   </button>
                 }
                 items={areas.map((a) => ({ value: a.id, label: a.name, icon: <AreaMark area={a} size={13} /> }))}
@@ -314,9 +314,9 @@ export function ImportProjects({ areas, auto = false, onClose }: { areas: Area[]
           )}
           <span className="flex-1" />
           <div className="ml-auto flex gap-2">
-            <Button variant="ghost" onClick={close}>{auto ? "Not now" : "Cancel"}</Button>
+            <Button variant="ghost" onClick={close}>{auto ? tx("Not now") : tx("Cancel")}</Button>
             <Button variant="primary" disabled={pending || !parts.length || (needsArea && !areaId)} onClick={submit}>
-              {parts.length ? `Add ${parts.length > 1 ? `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}` : parts[0]}` : "Add projects"}
+              {parts.length ? tx("Add {0}", [parts.length > 1 ? tx("{0} and {1}", [parts.slice(0, -1).join(", "), parts[parts.length - 1]]) : parts[0]]) : tx("Add projects")}
             </Button>
           </div>
         </div>

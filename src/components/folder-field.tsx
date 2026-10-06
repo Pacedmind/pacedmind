@@ -1,4 +1,5 @@
 "use client";
+import { useTranslation } from "@/components/language";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -64,11 +65,12 @@ export function FolderField({ label, value, inherited, own = "own", empty, empty
   variant?: "box" | "row";
   disabled?: boolean;
 }) {
+  const tx = useTranslation();
   const ours = usePacedMindFolder();
   const [typing, setTyping] = useState(false);
   const [draft, setDraft] = useState("");
   const shown = value ?? inherited?.folder ?? null;
-  const tag = !shown ? null : ours(shown) ? "PacedMind's" : value ? own : inherited!.from;
+  const tag = !shown ? null : ours(shown) ? tx("PacedMind's") : value ? own : inherited!.from;
   const choose = async () => {
     const dialog = folderDialog();
     if (!dialog) {
@@ -87,7 +89,7 @@ export function FolderField({ label, value, inherited, own = "own", empty, empty
 
   const box = variant === "box";
   const field = typing
-    ? <input autoFocus value={draft} aria-label={label} placeholder={shown ?? "Absolute folder path"}
+    ? <input autoFocus value={draft} aria-label={label} placeholder={shown ?? tx("Absolute folder path")}
         onChange={(e) => setDraft(e.target.value)} onBlur={finish}
         onKeyDown={(e) => {
           if (e.key === "Enter") finish();
@@ -96,14 +98,14 @@ export function FolderField({ label, value, inherited, own = "own", empty, empty
         className={cx("w-full min-w-0 rounded-md border border-ctl bg-input px-2 font-mono text-[11.5px] text-fg2 outline-none", box ? "h-8" : "h-7")} />
     : <div className={cx("flex min-w-0 items-center", box ? "h-8 rounded-md border border-ctl bg-input pr-1" : "h-7")}>
         <button type="button" onClick={choose} disabled={disabled} aria-label={label}
-          title={`${shown ?? emptyTitle ?? empty}\nClick to choose a folder`}
+          title={tx("{0}\nClick to choose a folder", [shown ?? emptyTitle ?? empty])}
           className={cx("flex h-full min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-left hover:bg-hover disabled:opacity-50", !box && "text-fg2")}>
           <Icon name="folder" size={14} className="shrink-0 text-mut" />
           {shown
             ? <Path folder={shown} className="text-fg2" />
             : <span className="min-w-0 truncate text-[12.5px] text-mut2">{empty}</span>}
           {tag && <span className="shrink-0 text-[11.5px] text-mut2">{tag}</span>}
-          {box && <span className="ml-auto shrink-0 pl-2 text-[12px] text-mut">Choose…</span>}
+          {box && <span className="ml-auto shrink-0 pl-2 text-[12px] text-mut">{tx("Choose…")}</span>}
         </button>
         {value && <IconButton label={clear} onClick={() => onChange(null)} disabled={disabled} className="shrink-0"><Icon name="x" size={13} /></IconButton>}
       </div>;
@@ -126,18 +128,19 @@ export function Path({ folder, className }: { folder: string; className?: string
 export function Found({ found, foundFor, onUse, disabled, className }: {
   found: FoundFolder[]; foundFor?: string; onUse: (folder: string) => void; disabled?: boolean; className?: string;
 }) {
+  const tx = useTranslation();
   const [first, ...more] = found;
-  const why = (f: FoundFolder) => f.how === "marker" ? "Its pacedmind.md names it"
-    : f.how === "repo" ? `It holds ${repoLink(f.repo)?.label ?? f.repo}` : f.how === "projects" ? "Its projects are this area's" : "It has the same name";
+  const why = (f: FoundFolder) => f.how === "marker" ? tx("Its pacedmind.md names it")
+    : f.how === "repo" ? tx("It holds {0}", [repoLink(f.repo)?.label ?? f.repo]) : f.how === "projects" ? tx("Its projects are this area's") : tx("It has the same name");
   return <div className={cx("flex min-w-0 items-center gap-1.5 text-[11.5px] text-mut2", className)}>
-    <span className="shrink-0">Found here:</span>
-    <span className="min-w-0 truncate font-mono text-fg3" title={`Found on this computer${foundFor ? ` for ${foundFor}` : ""}: ${first.folder}\n${why(first)}`}>
+    <span className="shrink-0">{tx("Found here:")}</span>
+    <span className="min-w-0 truncate font-mono text-fg3" title={tx("Found on this computer{0}: {1}\n{2}", [foundFor ? tx(" for {0}", [foundFor]) : "", first.folder, why(first)])}>
       {shortFolder(first.folder)}
     </span>
     {more.length > 0 && <Menu align="right" width={320} trigger={<button type="button" className="shrink-0 rounded px-1 hover:bg-hover hover:text-fg2">+{more.length}</button>}
-      items={found.map((f) => ({ value: f.folder, label: <span className="font-mono text-[11.5px]" title={f.folder}>{f.folder}</span>, hint: f.how === "marker" ? "pacedmind.md" : f.how === "repo" ? "repository" : f.how === "projects" ? "its projects" : "name" }))}
+      items={found.map((f) => ({ value: f.folder, label: <span className="font-mono text-[11.5px]" title={f.folder}>{f.folder}</span>, hint: f.how === "marker" ? "pacedmind.md" : f.how === "repo" ? "repository" : f.how === "projects" ? tx("its projects") : "name" }))}
       onSelect={onUse} />}
-    <Button size="sm" disabled={disabled} onClick={() => onUse(first.folder)} className="shrink-0" title={why(first)}>Use</Button>
+    <Button size="sm" disabled={disabled} onClick={() => onUse(first.folder)} className="shrink-0" title={why(first)}>{tx("Use")}</Button>
   </div>;
 }
 
@@ -146,6 +149,7 @@ export function Found({ found, foundFor, onUse, disabled, className }: {
  * in one click, or none yet. A click chooses the folder in the system's dialog (a browser goes to Settings → Projects).
  */
 export function ProjectFolderChip({ project, areaFolder }: { project: Pick<Project, "id" | "name" | "folder">; areaFolder: string | null }) {
+  const tx = useTranslation();
   const { desktop, folders } = useExecution();
   const { pending, run } = useAction();
   const ours = usePacedMindFolder();
@@ -155,19 +159,19 @@ export function ProjectFolderChip({ project, areaFolder }: { project: Pick<Proje
   const chip = "inline-flex h-7 max-w-[220px] items-center gap-1.5 rounded-md border border-ctl px-2.5 text-[12.5px] text-fg2 hover:bg-hover disabled:opacity-50";
   if (found.length) {
     return <button type="button" disabled={pending} className={chip} onClick={() => run(() => linkFoundFolderAction(project.id, found[0].folder))}
-      title={`Found on this computer: ${found[0].folder}\nClick to use it for ${project.name}`}>
-      <Icon name="folder" size={13} className="shrink-0" /><span className="truncate @max-2xl:hidden">Found here · Use</span>
+      title={tx("Found on this computer: {0}\nClick to use it for {1}", [found[0].folder, project.name])}>
+      <Icon name="folder" size={13} className="shrink-0" /><span className="truncate @max-2xl:hidden">{tx("Found here · Use")}</span>
     </button>;
   }
   const choose = async () => {
     const dialog = folderDialog();
     if (!dialog) return router.push("/settings/projects");
     const picked = await dialog(project.folder ?? areaFolder);
-    if (picked && picked !== project.folder) run(() => updateProjectAction(project.id, { folder: picked }), "Folder saved");
+    if (picked && picked !== project.folder) run(() => updateProjectAction(project.id, { folder: picked }), tx("Folder saved"));
   };
-  const label = project.folder ? (ours(project.folder) ? "PacedMind's folder" : folderName(project.folder)) : areaFolder ? "Area's workspace" : "Not on this computer";
+  const label = project.folder ? (ours(project.folder) ? tx("PacedMind's folder") : folderName(project.folder)) : areaFolder ? tx("Area's workspace") : tx("Not on this computer");
   return <button type="button" disabled={pending} className={chip} onClick={choose}
-    title={`${project.folder ?? (areaFolder ? `No folder of its own: the area's workspace, ${areaFolder}` : "No folder on this computer: each task gets its own PacedMind folder")}\nClick to choose ${project.name}'s folder`}>
+    title={tx("{0}\nClick to choose {1}'s folder", [project.folder ?? (areaFolder ? tx("No folder of its own: the area's workspace, {0}", [areaFolder]) : tx("No folder on this computer: each task gets its own PacedMind folder")), project.name])}>
     <Icon name="folder" size={13} className="shrink-0" /><span className={cx("truncate @max-2xl:hidden", !project.folder && "text-mut")}>{label}</span>
   </button>;
 }

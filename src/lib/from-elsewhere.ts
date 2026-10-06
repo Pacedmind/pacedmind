@@ -1,3 +1,4 @@
+import type { Language } from "./i18n";
 import type { RemoteStart } from "./types";
 
 /*
@@ -19,7 +20,16 @@ export const remoteCodeLabel = (code: boolean) => (code ? "Code needed" : "No co
  * What a computer does with sessions asked for from the web app or another computer, in a sentence or three: `here` said
  * on that computer itself, `there` of another one.
  */
-export function fromElsewhereText(start: RemoteStart, code: boolean, where: "here" | "there"): string {
+export function fromElsewhereText(start: RemoteStart, code: boolean, where: "here" | "there", language: Language = "en"): string {
+  if (language === "pl") {
+    const place = where === "here" ? "tutaj" : "tam";
+    const what = "Sesje zgłaszane z aplikacji webowej, innych komputerów lub przez agenty";
+    if (start === "off") return `${what} są odrzucane ${place}.`;
+    const does = start === "ask" ? `${what} czekają ${place} na Twoją zgodę.` : `${what} ruszają ${place} od razu; sesje w chmurze agenta zawsze czekają na zgodę.`;
+    if (code) return `${does} Żądanie wymaga aktualnego kodu uwierzytelniającego, więc agenty nie mogą go wysłać.`;
+    const note = start === "auto" && where === "here" ? " Każda przeglądarka, komputer i połączony agent na Twoim koncie mogą uruchamiać tutaj sesje bez Ciebie. Używaj tego tylko na komputerze, na którym pozwalasz agentom pracować samodzielnie." : " Połączone agenty również mogą wysyłać żądania.";
+    return `${does} Kod nie jest wymagany.${note}`;
+  }
   const place = where === "here" ? "here" : "there";
   const what = "Sessions asked for from the web app, another computer or your agents";
   if (start === "off") return `${what} are refused${where === "here" ? "" : " there"}.`;

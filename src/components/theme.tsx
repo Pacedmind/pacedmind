@@ -1,4 +1,5 @@
 "use client";
+import { useTranslation } from "@/components/language";
 
 import { useEffect, useSyncExternalStore } from "react";
 import { THEME_STORAGE_KEY, type Theme, type ThemePreference } from "@/lib/theme";
@@ -52,10 +53,11 @@ export function ThemeSync() {
 }
 
 export function ThemeToggle() {
+  const tx = useTranslation();
   const theme = useTheme();
   const next = theme === "dark" ? "light" : "dark";
   return (
-    <button type="button" aria-label={`Switch to ${next} mode`} title={`Switch to ${next} mode`}
+    <button type="button" aria-label={tx("Switch to {0} mode", [tx(next)])} title={tx("Switch to {0} mode", [tx(next)])}
       onClick={() => setTheme(next)} className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-md text-mut hover:bg-hover hover:text-fg2">
       <Icon name={next === "light" ? "sun" : "moon"} size={16} />
     </button>
@@ -63,10 +65,11 @@ export function ThemeToggle() {
 }
 
 export function ThemeSelector() {
+  const tx = useTranslation();
   const theme = useSyncExternalStore(subscribe, preference, getServerTheme);
   return <Segmented value={theme} onChange={setTheme} options={[
-    { value: "dark", label: <><Icon name="moon" size={13} />Dark</> },
-    { value: "light", label: <><Icon name="sun" size={13} />Light</> },
-    { value: "system", label: <><Icon name="appWindow" size={13} />System</> },
+    { value: "dark", label: <><Icon name="moon" size={13} />{tx("Dark")}</> },
+    { value: "light", label: <><Icon name="sun" size={13} />{tx("Light")}</> },
+    { value: "system", label: <><Icon name="appWindow" size={13} />{tx("System")}</> },
   ]} />;
 }

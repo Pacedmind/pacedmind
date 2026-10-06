@@ -9,6 +9,8 @@ export const THEME_STORAGE_KEY = "pacedmind-theme";
 declare global {
   interface Window {
     pacedMindDesktop?: {
+      setLanguage?: (language: import("./i18n").Language) => void;
+      onLanguageChanged?: (listener: (language: import("./i18n").Language) => void) => () => void;
       initialTheme: Theme;
       setTheme: (theme: Theme, preference?: ThemePreference) => void;
       /** The system's folder dialog (desktop/preload.cjs); missing in a browser and in apps built before it. */

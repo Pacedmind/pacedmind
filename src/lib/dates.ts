@@ -1,4 +1,5 @@
 import { addDays, differenceInCalendarDays, format, startOfWeek } from "date-fns";
+import { createTranslator, formatDate, type Language } from "./i18n";
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
@@ -64,30 +65,32 @@ export function parseTime(text: string): string | null {
 export type DueTone = "overdue" | "today" | "soon" | "later";
 
 /** Short due label and tone for list chips, relative to today. */
-export function dueInfo(due: string | null, now = new Date()): { text: string; tone: DueTone; long: string } | null {
+export function dueInfo(due: string | null, now = new Date(), language: Language = "en"): { text: string; tone: DueTone; long: string } | null {
+  const tx = createTranslator(language);
+  const f = (d: Date, pattern: string) => formatDate(d, pattern, language);
   if (!due) return null;
   const today = toDateStr(now);
   const diff = dayDiff(today, due);
   const t = timeOf(due);
   const d = parseLocal(dateOnly(due));
   if (diff < 0) {
-    const text = diff === -1 ? "Yesterday" : `${-diff}d overdue`;
-    return { text, tone: "overdue", long: `${format(d, "EEE d MMM")} · ${-diff === 1 ? "1 day" : `${-diff} days`} late` };
+    const text = diff === -1 ? tx("Yesterday") : language === "pl" ? `${-diff} ${diff === -1 ? "dzień" : "dni"} po terminie` : `${-diff}d overdue`;
+    return { text, tone: "overdue", long: language === "pl" ? `${f(d, "EEE d MMM")} · ${-diff} ${diff === -1 ? "dzień" : "dni"} po terminie` : `${f(d, "EEE d MMM")} · ${-diff === 1 ? "1 day" : `${-diff} days`} late` };
   }
   if (diff === 0) {
     if (t) {
       const [h, m] = t.split(":").map(Number);
       const left = h * 60 + m - (now.getHours() * 60 + now.getMinutes());
-      const long = left > 0 ? `Today, ${t} · in ${Math.floor(left / 60)}h ${left % 60}m` : `Today, ${t} · passed`;
+      const long = language === "pl" ? `${tx("Today")}, ${t} · ${left > 0 ? `za ${Math.floor(left / 60)} godz. ${left % 60} min` : "termin minął"}` : left > 0 ? `Today, ${t} · in ${Math.floor(left / 60)}h ${left % 60}m` : `Today, ${t} · passed`;
       return { text: t, tone: left < 0 ? "overdue" : "today", long };
     }
-    return { text: "Today", tone: "today", long: "Today · by end of day" };
+    return { text: tx("Today"), tone: "today", long: tx("Today · by end of day") };
   }
-  const label = diff === 1 ? "Tomorrow" : diff < 7 ? format(d, "EEE d") : format(d, "d MMM");
+  const label = diff === 1 ? tx("Tomorrow") : diff < 7 ? f(d, "EEE d") : f(d, "d MMM");
   return {
     text: t ? `${label}, ${t}` : label,
     tone: diff <= 2 ? "soon" : "later",
-    long: `${format(d, "EEE d MMM")}${t ? `, ${t}` : ""} · in ${diff} day${diff === 1 ? "" : "s"}`,
+    long: `${f(d, "EEE d MMM")}${t ? `, ${t}` : ""} · ${language === "pl" ? `za ${diff} ${diff === 1 ? "dzień" : "dni"}` : `in ${diff} day${diff === 1 ? "" : "s"}`}`,
   };
 }
 
@@ -191,11 +194,14 @@ export interface PlanStep {
 export const planText = (steps: PlanStep[]) => steps.map((s) => `[${s.done ? "x" : " "}] ${s.text}`).join("\n");
 
 /** An event as a session's history shows it: a plan as how far along it is, the rest as its text. */
-export function eventLine(e: { kind: string; text: string }): string {
+export function eventLine(e: { kind: string; text: string }, language: Language = "en"): string {
+  const tx = createTranslator(language);
   if (e.kind === "plan") {
     const steps = e.text.split("\n").filter((l) => /^\[[ x]\] /.test(l));
-    return `Plan: ${steps.filter((l) => l.startsWith("[x]")).length} of ${steps.length} steps done`;
+    return tx("Plan: {0} of {1} steps done", [steps.filter((l) => l.startsWith("[x]")).length, steps.length]);
   }
+  // These events come from PacedMind itself. Agent reports, questions and requested changes keep their text.
+  if (["started", "connected", "mcp_status", "environment", "waiting", "permission", "input", "limit", "resumed", "closed", "ended", "failed", "setup", "send_prompt", "capacity", "locked", "done"].includes(e.kind)) return tx.generated(e.text || e.kind);
   return e.text || e.kind;
 }
 
@@ -210,6 +216,6 @@ export function planOf(events: { kind: string; text: string; at: string }[]): { 
   return steps.length ? { steps, at: e.at } : null;
 }
 
-export const fmtDay = (s: string) => format(parseLocal(dateOnly(s)), "EEE, d MMM");
-export const fmtShort = (s: string) => format(parseLocal(dateOnly(s)), "d MMM");
+export const fmtDay = (s: string, language: Language = "en") => formatDate(parseLocal(dateOnly(s)), "EEE, d MMM", language);
+export const fmtShort = (s: string, language: Language = "en") => formatDate(parseLocal(dateOnly(s)), "d MMM", language);
 export const fmtTime = (s: string) => format(parseLocal(s), "HH:mm");

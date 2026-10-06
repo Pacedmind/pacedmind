@@ -1,3 +1,4 @@
+import { getTranslation } from "@/server/i18n";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
@@ -6,10 +7,14 @@ import { nextStep, safeNext, withNext } from "@/server/auth-flow";
 import { AuthShell } from "../shell";
 import { SetupForm } from "../forms";
 
-export const metadata: Metadata = { title: "Two-factor sign-in · PacedMind" };
+export async function generateMetadata(): Promise<Metadata> {
+  const tx = await getTranslation();
+  return { title: tx("Two-factor sign-in · PacedMind") };
+}
 
 /** The first authenticator (required before anything else), or another one (?add=1, after signing in). */
 export default async function SetupPage(props: PageProps<"/login/setup">) {
+  const tx = await getTranslation();
   await connection();
   const state = await authState();
   const step = nextStep(state);
@@ -23,8 +28,8 @@ export default async function SetupPage(props: PageProps<"/login/setup">) {
   if (!first && !adding) redirect(next ?? "/settings/security");
   return (
     <AuthShell note={first
-      ? <>Protect {state.user.email} and unlock sessions on your computers. You can keep using the planner and MCP and set this up later.</>
-      : "A second authenticator keeps you in if you lose the first one."}>
+      ? <>{tx("Protect")}{" "}{state.user.email} {" "}{tx("and unlock sessions on your computers. You can keep using the planner and MCP and set this up later.")}</>
+      : tx("A second authenticator keeps you in if you lose the first one.")}>
       <SetupForm key={first ? "first" : "another"} first={first} email={state.user.email ?? ""} next={next} />
     </AuthShell>
   );

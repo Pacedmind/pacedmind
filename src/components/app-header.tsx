@@ -1,4 +1,5 @@
 "use client";
+import { useTranslation } from "@/components/language";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -46,24 +47,25 @@ export function toggleMenu() {
  * menu button instead of back and forward, which the browser has.
  */
 export function AppHeader({ email }: { email: string | null }) {
+  const tx = useTranslation();
   const history = useSyncExternalStore(subscribe, navigationSnapshot, initialNavigation);
   return (
     <header className="app-titlebar" aria-label="PacedMind">
       <div className="app-titlebar__content">
-        <button type="button" className="app-titlebar__button app-titlebar__menu" aria-label="Menu" onClick={toggleMenu}>
+        <button type="button" className="app-titlebar__button app-titlebar__menu" aria-label={tx("Menu")} onClick={toggleMenu}>
           <Icon name="menu" size={18} />
         </button>
-        <div className="app-titlebar__navigation" role="group" aria-label="Page navigation">
-          <button type="button" className="app-titlebar__button" aria-label="Go back" title="Go back (Alt+Left)"
+        <div className="app-titlebar__navigation" role="group" aria-label={tx("Page navigation")}>
+          <button type="button" className="app-titlebar__button" aria-label={tx("Go back")} title={tx("Go back (Alt+Left)")}
             disabled={!(history & 1)} onClick={() => window.history.back()}>
             <Icon name="arrowRight" size={16} className="rotate-180" />
           </button>
-          <button type="button" className="app-titlebar__button" aria-label="Go forward" title="Go forward (Alt+Right)"
+          <button type="button" className="app-titlebar__button" aria-label={tx("Go forward")} title={tx("Go forward (Alt+Right)")}
             disabled={!(history & 2)} onClick={() => window.history.forward()}>
             <Icon name="arrowRight" size={16} />
           </button>
         </div>
-        <Link href="/today" aria-label="PacedMind — Today" className="app-titlebar__home">
+        <Link href="/today" aria-label={tx("PacedMind — Today")} className="app-titlebar__home">
           <BrandWordmark className="w-[112px]" />
         </Link>
         <TaskNotesToggle />
@@ -72,10 +74,9 @@ export function AppHeader({ email }: { email: string | null }) {
         {email ? <AccountMenu email={email} /> : (
           // No account (the desktop app with this computer's own data): the way to PacedMind Cloud.
           <div className="app-titlebar__account">
-            <Link href="/login" title="Your tasks are on this computer only. Sign in to PacedMind Cloud to use them on your other computers too."
+            <Link href="/login" title={tx("Your tasks are on this computer only. Sign in to PacedMind Cloud to use them on your other computers too.")}
               className="flex h-7 items-center rounded-md border border-ctl px-2.5 text-[12.5px] text-fg2 hover:bg-hover">
-              Sign in
-            </Link>
+              {tx("Sign in")}</Link>
           </div>
         )}
       </div>
@@ -86,6 +87,7 @@ export function AppHeader({ email }: { email: string | null }) {
 const MENU_WIDTH = 240;
 
 function TaskNotesToggle() {
+  const tx = useTranslation();
   const [state, setState] = useState<TaskNotesState | null>(null);
   const { run, pending } = useAction();
   useEffect(() => {
@@ -101,18 +103,18 @@ function TaskNotesToggle() {
     return () => { active = false; unsubscribe?.(); };
   }, []);
   if (!state) return null;
-  const label = state.visible ? "Hide task notes" : "Show task notes";
+  const label = state.visible ? tx("Hide task notes") : tx("Show task notes");
   return (
     <button type="button" className="app-titlebar__button app-titlebar__notes" aria-label={label}
       aria-pressed={state.visible} disabled={pending}
-      title={state.count ? `${label} (${state.count})` : "Show all open tasks as notes"}
+      title={state.count ? `${label} (${state.count})` : tx("Show all open tasks as notes")}
       onClick={() => run(async () => {
         const next = await window.pacedMindDesktop?.toggleTaskNotes?.();
         if (next) { setState(next); return next; }
-        else return { ok: false, error: "Couldn't show or hide notes. Try again when PacedMind is ready." };
+        else return { ok: false, error: tx("Couldn't show or hide notes. Try again when PacedMind is ready.") };
       })}>
       <Icon name="layers" size={15} />
-      <span>{state.visible ? "Hide notes" : "Show notes"}</span>
+      <span>{state.visible ? tx("Hide notes") : tx("Show notes")}</span>
       {state.count > 0 && <span className="text-[11px] tabular-nums">{state.count}</span>}
     </button>
   );
@@ -120,12 +122,13 @@ function TaskNotesToggle() {
 
 /** The signed-in account, with Settings and Sign out. A portal popover, because the header clips its overflow. */
 function AccountMenu({ email }: { email: string }) {
+  const tx = useTranslation();
   const router = useRouter();
   const [anchor, setAnchor] = useState<Anchor | null>(null);
   const [pending, start] = useTransition();
   return (
     <div className="app-titlebar__account">
-      <button type="button" className="app-titlebar__button" aria-label={`Account: ${email}`} title={email} aria-haspopup="menu"
+      <button type="button" className="app-titlebar__button" aria-label={tx("Account: {0}", [email])} title={email} aria-haspopup="menu"
         onClick={(e) => {
           const r = e.currentTarget.getBoundingClientRect();
           // Below the button, right-aligned with it.
@@ -135,12 +138,12 @@ function AccountMenu({ email }: { email: string }) {
       </button>
       {anchor && (
         <Popover anchor={anchor} width={MENU_WIDTH} onClose={() => setAnchor(null)}>
-          <PopoverLabel>Signed in as</PopoverLabel>
+          <PopoverLabel>{tx("Signed in as")}</PopoverLabel>
           <div className="truncate px-2 pb-1.5 text-[12.5px] text-fg2">{email}</div>
           <PopoverSeparator />
-          <PopoverItem icon={<Icon name="settings" size={13} />} onClick={() => { setAnchor(null); router.push("/settings"); }}>Settings</PopoverItem>
+          <PopoverItem icon={<Icon name="settings" size={13} />} onClick={() => { setAnchor(null); router.push("/settings"); }}>{tx("Settings")}</PopoverItem>
           <PopoverItem icon={<Icon name="arrowRight" size={13} />} onClick={() => start(() => signOutAction())}>
-            {pending ? "Signing out…" : "Sign out"}
+            {pending ? tx("Signing out…") : tx("Sign out")}
           </PopoverItem>
         </Popover>
       )}

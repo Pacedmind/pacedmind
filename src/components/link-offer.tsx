@@ -1,4 +1,5 @@
 "use client";
+import { useTranslation } from "@/components/language";
 
 import { useState } from "react";
 import { dismissLinkOfferAction, linkFoundAction } from "@/app/actions";
@@ -23,6 +24,7 @@ const SHOWN = 4;
  * folder here in one go; Review opens the import to pick; Not now keeps the offer from coming back for these.
  */
 export function LinkOffer({ items, areas }: { items: Linkable[]; areas: Area[] }) {
+  const tx = useTranslation();
   const { run, pending } = useAction();
   const [open, setOpen] = useState(true);
   const [review, setReview] = useState(false);
@@ -30,8 +32,8 @@ export function LinkOffer({ items, areas }: { items: Linkable[]; areas: Area[] }
   if (!open) return null;
   const projects = items.filter((i) => i.kind === "project").length;
   const spaces = items.length - projects;
-  const what = [projects && `${projects} project${projects > 1 ? "s" : ""}`, spaces && `${spaces} area workspace${spaces > 1 ? "s" : ""}`]
-    .filter(Boolean).join(" and ");
+  const what = [projects && tx("{0} project{1}", [projects, projects > 1 ? "s" : ""]), spaces && tx("{0} area workspace{1}", [spaces, spaces > 1 ? "s" : ""])]
+    .filter(Boolean).join(tx(" and "));
   const link = () => {
     setOpen(false);
     run(() => linkFoundAction(items.map(({ kind, id, folder }) => ({ kind, id, folder }))));
@@ -43,10 +45,9 @@ export function LinkOffer({ items, areas }: { items: Linkable[]; areas: Area[] }
   return (
     <div role="dialog" aria-labelledby="link-offer-title"
       className="fixed bottom-4 right-4 z-40 flex w-[380px] flex-col gap-2 rounded-xl border border-line bg-panel p-4 shadow-lg max-md:inset-x-3 max-md:w-auto">
-      <p id="link-offer-title" className="text-[13px] font-semibold text-strong">Found on this computer</p>
+      <p id="link-offer-title" className="text-[13px] font-semibold text-strong">{tx("Found on this computer")}</p>
       <p className="text-[12.5px] leading-relaxed text-fg3">
-        {what} from your other computers {items.length > 1 ? "are" : "is"} here too. Linked, {items.length > 1 ? "their" : "its"} tasks run here as well.
-      </p>
+        {what} {" "}{tx("from your other computers")}{" "}{items.length > 1 ? "are" : "is"} {" "}{tx("here too. Linked,")}{" "}{items.length > 1 ? "their" : "its"} {tx("tasks run here as well.")}</p>
       <ul className="flex flex-col gap-1">
         {items.slice(0, SHOWN).map((i) => (
           <li key={`${i.kind}-${i.id}`} title={i.folder} className="flex min-w-0 items-center gap-2 text-[12.5px]">
@@ -55,12 +56,12 @@ export function LinkOffer({ items, areas }: { items: Linkable[]; areas: Area[] }
             <span className="min-w-0 truncate font-mono text-[11px] text-mut2">{i.folder}</span>
           </li>
         ))}
-        {items.length > SHOWN && <li className="text-[12px] text-mut2">and {items.length - SHOWN} more</li>}
+        {items.length > SHOWN && <li className="text-[12px] text-mut2">{tx("and")}{" "}{items.length - SHOWN} {" "}{tx("more")}</li>}
       </ul>
       <div className="mt-1 flex justify-end gap-2">
-        <Button size="sm" variant="ghost" disabled={pending} onClick={later}>Not now</Button>
-        <Button size="sm" disabled={pending} onClick={() => setReview(true)}>Review</Button>
-        <Button size="sm" variant="primary" disabled={pending} onClick={link}>Link</Button>
+        <Button size="sm" variant="ghost" disabled={pending} onClick={later}>{tx("Not now")}</Button>
+        <Button size="sm" disabled={pending} onClick={() => setReview(true)}>{tx("Review")}</Button>
+        <Button size="sm" variant="primary" disabled={pending} onClick={link}>{tx("Link")}</Button>
       </div>
     </div>
   );

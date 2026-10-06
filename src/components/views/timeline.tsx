@@ -1,10 +1,12 @@
 "use client";
+import { useTranslation } from "@/components/language";
+import { createTranslator, type Translator } from "@/lib/i18n";
 
 import { useRouter } from "next/navigation";
 import {
   useEffect, useLayoutEffect, useOptimistic, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent, type ReactNode,
 } from "react";
-import { format, getDaysInMonth } from "date-fns";
+import { getDaysInMonth } from "date-fns";
 import { deleteEdgeAction, linkTasksAction, updateTaskAction } from "@/app/actions";
 import { projectColor } from "@/lib/colors";
 import { addDaysStr, dateOnly, dayDiff, fmtDay, fmtShort, minutesOf, parseLocal, timeOf, toStamp } from "@/lib/dates";
@@ -61,24 +63,23 @@ function usePhone() {
 
 /* ---------- layout ---------- */
 
-
 /** The zoom buttons fit this many days in view; the wheel (with Ctrl, or over the days) zooms anywhere between. */
-const ZOOM: Record<TimelineZoom, { label: string; days: number; minDay: number }> = {
-  day: { label: "Day", days: 1, minDay: 480 },
-  week: { label: "Week", days: 7, minDay: 72 },
-  month: { label: "Month", days: 28, minDay: 18 },
-  quarter: { label: "Quarter", days: 91, minDay: 5 },
-};
+const ZOOM = (tx: Translator): Record<TimelineZoom, { label: string; days: number; minDay: number }> => ({
+  day: { label: tx("Day"), days: 1, minDay: 480 },
+  week: { label: tx("Week"), days: 7, minDay: 72 },
+  month: { label: tx("Month"), days: 28, minDay: 18 },
+  quarter: { label: tx("Quarter"), days: 91, minDay: 5 },
+});
 
 type Layer = "tasks" | "sessions" | "blocks" | "deadlines" | "deps";
 
-const LAYERS: { id: Layer; label: string }[] = [
-  { id: "tasks", label: "Tasks" },
-  { id: "sessions", label: "Sessions" },
-  { id: "blocks", label: "Time blocks" },
-  { id: "deadlines", label: "Deadlines" },
-  { id: "deps", label: "Dependencies" },
-];
+const LAYERS = (tx: Translator): { id: Layer; label: string }[] => ([
+  { id: "tasks", label: tx("Tasks") },
+  { id: "sessions", label: tx("Sessions") },
+  { id: "blocks", label: tx("Time blocks") },
+  { id: "deadlines", label: tx("Deadlines") },
+  { id: "deps", label: tx("Dependencies") },
+]);
 
 /** Pixels per day, from a whole quarter in view to a day whose hours are 200 px wide. */
 const MIN_DAY_W = 4;
@@ -182,7 +183,7 @@ function barBox(sp: Span, sc: Scale) {
 function buildRows(input: {
   areas: Area[]; projects: Project[]; tasks: Task[]; sessionsOf: Map<number, Session[]>; spans: Map<number, TaskSpan>;
   sc: Scale; expanded: Record<string, boolean>; collapsed: Record<string, boolean>;
-}): { rows: Row[]; height: number } {
+}, tx: Translator = createTranslator("en")): { rows: Row[]; height: number } {
   const { areas, projects, tasks, sessionsOf, spans, sc, expanded, collapsed } = input;
   const inRange = (sp: Span) => sp.e > 0 && sp.s < sc.days;
   // Open tasks always get a row; finished ones only while their bar or a session is in view.
@@ -204,7 +205,7 @@ function buildRows(input: {
   });
 
   add({ kind: "cap", id: "cap", y, h: ROW_H.cap });
-  const groups = [...areas.map((a) => ({ id: a.id, name: a.name, area: a })), { id: "", name: "Inbox", area: null }];
+  const groups = [...areas.map((a) => ({ id: a.id, name: a.name, area: a })), { id: "", name: tx("Inbox"), area: null }];
   for (const g of groups) {
     const own = projects.filter((p) => (g.id ? p.areaId === g.id : !areaIds.has(p.areaId)));
     const loose = tasks
@@ -285,30 +286,30 @@ function dragPatch(t: Task, sp: TaskSpan, part: BarPart, days: number, from: str
 }
 
 /** What a bar says about its new dates while it's dragged. */
-function dragLabel(sp: TaskSpan, part: BarPart, from: string): string {
+function dragLabel(sp: TaskSpan, part: BarPart, from: string, tx: Translator = createTranslator("en")): string {
   const first = addDaysStr(from, Math.floor(sp.s));
   const last = addDaysStr(from, Math.ceil(sp.e) - 1);
-  if (part === "start") return `Starts ${fmtDay(first)}`;
-  if (part === "end") return `Due ${fmtDay(last)}`;
-  return first === last ? fmtDay(first) : `${fmtShort(first)} to ${fmtShort(last)}`;
+  if (part === "start") return tx("Starts {0}", [fmtDay(first, tx.language)]);
+  if (part === "end") return tx("Due {0}", [fmtDay(last, tx.language)]);
+  return first === last ? fmtDay(first, tx.language) : tx("{0} to {1}", [fmtShort(first, tx.language), fmtShort(last, tx.language)]);
 }
 
-function dragMessage(t: Task, patch: DatePatch, part: BarPart): string {
-  if (part === "end") return `${t.key} is now due ${fmtDay(patch.dueDate!)}`;
-  if (part === "start") return `${t.key} now starts ${fmtDay(patch.plannedDate!)}${patch.dueDate ? ` and is due ${fmtDay(patch.dueDate)}` : ""}`;
-  return `Moved ${t.key} to ${fmtDay(patch.plannedDate!)}`;
+function dragMessage(t: Task, patch: DatePatch, part: BarPart, tx: Translator = createTranslator("en")): string {
+  if (part === "end") return tx("{0} is now due {1}", [t.key, fmtDay(patch.dueDate!, tx.language)]);
+  if (part === "start") return tx("{0} now starts {1}{2}", [t.key, fmtDay(patch.plannedDate!, tx.language), patch.dueDate ? tx(" and is due {0}", [fmtDay(patch.dueDate, tx.language)]) : ""]);
+  return tx("Moved {0} to {1}", [t.key, fmtDay(patch.plannedDate!, tx.language)]);
 }
 
 /** Why `to` can't wait for `from`, or null when it can: within one project, never a loop. */
-function linkProblem(from: Task, to: Task, edges: Dependency[]): string | null {
-  if (edges.some((e) => e.fromTaskId === from.id && e.toTaskId === to.id)) return `${to.key} already waits for ${from.key}`;
-  if (!isOpenTask(to)) return `${to.key} is ${to.status === "done" ? "done" : "canceled"} already`;
-  if (from.projectId !== to.projectId) return `${from.key} and ${to.key} are in different projects. Dependencies stay within one project.`;
+function linkProblem(from: Task, to: Task, edges: Dependency[], tx: Translator = createTranslator("en")): string | null {
+  if (edges.some((e) => e.fromTaskId === from.id && e.toTaskId === to.id)) return tx("{0} already waits for {1}", [to.key, from.key]);
+  if (!isOpenTask(to)) return tx("{0} is {1} already", [to.key, to.status === "done" ? "done" : "canceled"]);
+  if (from.projectId !== to.projectId) return tx("{0} and {1} are in different projects. Dependencies stay within one project.", [from.key, to.key]);
   const seen = new Set<number>();
   const stack = [to.id];
   while (stack.length) {
     const id = stack.pop()!;
-    if (id === from.id) return `${from.key} already waits for ${to.key}, so this would make a loop`;
+    if (id === from.id) return tx("{0} already waits for {1}, so this would make a loop", [from.key, to.key]);
     if (seen.has(id)) continue;
     seen.add(id);
     for (const e of edges) if (e.fromTaskId === id) stack.push(e.toTaskId);
@@ -365,15 +366,15 @@ function sessionColor(x: Session, color: string): string {
   return "var(--color-line-strong)";
 }
 
-const SESSION_STATE: Record<SessionStatus, string> = {
-  starting: "starting", running: "running", finished: "finished, waiting for you", done: "done", closed: "closed", failed: "couldn't start",
-};
+const SESSION_STATE = (tx: Translator): Record<SessionStatus, string> => ({
+  starting: tx("starting"), running: tx("running"), finished: tx("finished, waiting for you"), done: tx("done"), closed: tx("closed"), failed: tx("couldn't start"),
+});
 
-function sessionTitle(x: Session): string {
+function sessionTitle(x: Session, tx: Translator = createTranslator("en")): string {
   const end = x.finishedAt ?? x.endedAt;
-  const start = format(parseLocal(x.startedAt), "EEE d MMM, HH:mm");
-  const until = isActive(x) || !end ? "now" : format(parseLocal(end), dateOnly(end) === dateOnly(x.startedAt) ? "HH:mm" : "EEE d MMM, HH:mm");
-  return `${AGENT_LABEL[x.agent]} session · ${start} to ${until} · ${SESSION_STATE[x.status]}`;
+  const start = tx.date(parseLocal(x.startedAt), "EEE d MMM, HH:mm");
+  const until = isActive(x) || !end ? tx("now") : tx.date(parseLocal(end), dateOnly(end) === dateOnly(x.startedAt) ? "HH:mm" : "EEE d MMM, HH:mm");
+  return tx("{0} session · {1} to {2} · {3}", [tx(AGENT_LABEL[x.agent]), start, until, SESSION_STATE(tx)[x.status]]);
 }
 
 /**
@@ -399,12 +400,13 @@ const textWidth = (s: string) => s.length * 6;
 
 /** A small date hint at the edge for bars that are outside the visible range. */
 function EdgeHint({ span, sc }: { span: Span; sc: Scale }) {
+  const tx = useTranslation();
   if (span.e > 0 && span.s < sc.days) return null;
   const before = span.e <= 0;
   const day = addDaysStr(sc.from, before ? Math.ceil(span.e) - 1 : Math.floor(span.s));
   return (
     <span className={cx("absolute top-1/2 -translate-y-1/2 whitespace-nowrap text-[11px] text-dim", before ? "left-1.5" : "right-1.5")}>
-      {before ? `‹ ${fmtShort(day)}` : `${fmtShort(day)} ›`}
+      {before ? `‹ ${fmtShort(day, tx.language)}` : `${fmtShort(day, tx.language)} ›`}
     </span>
   );
 }
@@ -412,6 +414,7 @@ function EdgeHint({ span, sc }: { span: Span; sc: Scale }) {
 /* ---------- lanes ---------- */
 
 function CapLane({ loads, dayMinutes, sc, lo, hi }: { loads: Record<string, DayLoad>; dayMinutes: number; sc: Scale; lo: number; hi: number }) {
+  const tx = useTranslation();
   const w = Math.max(3, Math.min(28, sc.dayW * 0.52));
   return Array.from({ length: hi - lo }, (_, k) => {
     const i = lo + k;
@@ -420,7 +423,7 @@ function CapLane({ loads, dayMinutes, sc, lo, hi }: { loads: Record<string, DayL
     const min = (past ? loads[day]?.done : loads[day]?.planned) ?? 0;
     const x0 = sc.X(i);
     const cw = sc.X(i + 1) - x0;
-    const label = `${format(parseLocal(day), "EEE d MMM")} · ${min ? `${hours(min)} ${past ? "done" : "planned"}` : past ? "nothing done" : "nothing planned"}`;
+    const label = `${tx.date(parseLocal(day), "EEE d MMM")} · ${min ? `${hours(min)} ${tx(past ? "done" : "planned")}` : past ? tx("nothing done") : tx("nothing planned")}`;
     return (
       <span key={day} title={label} className="absolute inset-y-0" style={{ left: x0, width: cw }}>
         <span className="absolute bottom-1.5 rounded-[2px]"
@@ -434,13 +437,14 @@ function CapLane({ loads, dayMinutes, sc, lo, hi }: { loads: Record<string, DayL
 }
 
 function ProjectLane({ row, sc }: { row: ProjectRow; sc: Scale }) {
+  const tx = useTranslation();
   const { project: p, color, span } = row;
   if (!span) return null;
   const visible = span.e > 0 && span.s < sc.days;
   const { left, width } = barBox(span, sc);
   const later = !row.started && !!p.startDate && p.startDate > sc.today;
   const pct = row.total ? Math.round((row.done / row.total) * 100) : 0;
-  const text = later ? `Starts ${fmtShort(p.startDate!)}` : `${pct}%`;
+  const text = later ? tx("Starts {0}", [fmtShort(p.startDate!, tx.language)]) : `${pct}%`;
   const inside = width >= textWidth(text) + 16;
   const target = p.targetDate ? dayDiff(sc.from, p.targetDate) + 0.5 : null;
   const showTarget = target !== null && target >= 0 && target < sc.days;
@@ -459,7 +463,7 @@ function ProjectLane({ row, sc }: { row: ProjectRow; sc: Scale }) {
         </span>
       )}
       {showTarget && (
-        <span title={`Target date · ${fmtDay(p.targetDate!)}`} className="absolute flex" style={{ left: sc.X(target!) - 5.5, top: 10 }}>
+        <span title={tx("Target date · {0}", [fmtDay(p.targetDate!, tx.language)])} className="absolute flex" style={{ left: sc.X(target!) - 5.5, top: 10 }}>
           <Diamond color={color} hollow />
         </span>
       )}
@@ -482,6 +486,7 @@ function TaskLane({ row, state, sc, layers, dragText, linkTarget, onGrab, onLink
   /** Set when dependencies can be drawn from the bar. */
   onLink: ((e: ReactPointerEvent, side: LinkSide) => void) | null;
 }) {
+  const tx = useTranslation();
   const { task: t, color, span, sessions } = row;
   const look = barLook(t, sessions[sessions.length - 1], color);
   const clampX = (d: number) => sc.X(Math.max(0, Math.min(sc.days, d)));
@@ -513,7 +518,7 @@ function TaskLane({ row, state, sc, layers, dragText, linkTarget, onGrab, onLink
             {inside && <span className="truncate">{text}</span>}
             {onGrab && (["start", "end"] as const).map((part) => (
               <span key={part} onPointerDown={(e) => onGrab(e, part)}
-                title={part === "start" ? "Drag to change when it starts" : "Drag to change when it's due"}
+                title={part === "start" ? tx("Drag to change when it starts") : tx("Drag to change when it's due")}
                 className={cx("absolute inset-y-0 flex w-2 cursor-ew-resize items-center justify-center", part === "start" ? "left-0" : "right-0")}>
                 <span className="h-2.5 w-0.5 rounded-full bg-current opacity-0 group-hover/bar:opacity-50" />
               </span>
@@ -522,7 +527,7 @@ function TaskLane({ row, state, sc, layers, dragText, linkTarget, onGrab, onLink
         )}
         {links.map((z) => (
           <span key={z.side} onPointerDown={(e) => onLink!(e, z.side)}
-            title={z.side === "end" ? "Drag to a task that waits for this one" : "Drag to a task this one waits for"}
+            title={z.side === "end" ? tx("Drag to a task that waits for this one") : tx("Drag to a task this one waits for")}
             className={cx("group/dot pointer-events-auto absolute flex cursor-crosshair items-center", z.side === "end" ? "justify-end" : "justify-start")}
             style={{ top: BAR_TOP, height: BAR_H, left: z.left, width: z.width }}>
             <span className="flex w-3.5 justify-center">
@@ -531,7 +536,7 @@ function TaskLane({ row, state, sc, layers, dragText, linkTarget, onGrab, onLink
           </span>
         ))}
         {flag && (
-          <span title={`${overdue ? "Overdue, was due" : "Due"} ${fmtDay(t.dueDate ?? addDaysStr(sc.from, Math.ceil(due!) - 1))}${timeOf(t.dueDate) ? `, ${timeOf(t.dueDate)}` : ""}`}
+          <span title={`${overdue ? tx("Overdue, was due") : tx("Due")} ${fmtDay(t.dueDate ?? addDaysStr(sc.from, Math.ceil(due!) - 1), tx.language)}${timeOf(t.dueDate) ? `, ${timeOf(t.dueDate)}` : ""}`}
             className={cx("pointer-events-auto absolute flex", !isOpenTask(t) ? "text-dim" : overdue ? "text-danger" : "text-mut")} style={{ left: flagX, top: BAR_MID - 6 }}>
             <Icon name="flag" size={11} strokeWidth={2.4} />
           </span>
@@ -552,7 +557,7 @@ function TaskLane({ row, state, sc, layers, dragText, linkTarget, onGrab, onLink
         if (sp.e < 0 || sp.s > sc.days) return null;
         const l = clampX(sp.s);
         return (
-          <span key={x.id} title={sessionTitle(x)} className="absolute flex h-[9px] items-center" style={{ top: LANE_TOP - 3, left: l, width: Math.max(6, clampX(sp.e) - l) }}>
+          <span key={x.id} title={sessionTitle(x, tx)} className="absolute flex h-[9px] items-center" style={{ top: LANE_TOP - 3, left: l, width: Math.max(6, clampX(sp.e) - l) }}>
             <span className="h-[3px] w-full rounded-full" style={{ background: sessionColor(x, color) }} />
           </span>
         );
@@ -568,6 +573,7 @@ const hourStep = (dayW: number) => [1, 2, 3, 4, 6, 12].find((h) => (h * dayW) / 
 
 /** Only the days in view (`lo` to `hi`) are drawn; `left` is where the view starts, so a day's name stays in sight. */
 function DayHeader({ sc, lo, hi, left }: { sc: Scale; lo: number; hi: number; left: number }) {
+  const tx = useTranslation();
   const out: ReactNode[] = [];
   const pill = (day: string, d: Date, i: number) => {
     const isToday = day === sc.today;
@@ -586,7 +592,7 @@ function DayHeader({ sc, lo, hi, left }: { sc: Scale; lo: number; hi: number; le
     const cw = sc.X(i + 1) - x0;
     if (sc.dayW >= HOURS_FROM) {
       // The day's name on top, held at the left of the view while its hours scroll by; the hours below.
-      const name = format(d, cw >= 260 ? "EEEE, d MMMM" : "EEE d MMM");
+      const name = tx.date(d, cw >= 260 ? "EEEE, d MMMM" : "EEE d MMM");
       const nameX = Math.max(x0, Math.min(left, x0 + cw - textWidth(name) - 16));
       out.push(
         <span key={`n${i}`} className={cx("absolute top-[5px] flex items-center gap-1.5 whitespace-nowrap pl-1.5 text-[11px]", day === sc.today ? "text-fg2" : "text-mut")} style={{ left: nameX }}>
@@ -609,7 +615,7 @@ function DayHeader({ sc, lo, hi, left }: { sc: Scale; lo: number; hi: number; le
       if (d.getDate() === 1 || (i === lo && d.getDate() < 22)) {
         // The first month is shortened when the next one starts too soon for its full name (days are narrow on a phone).
         const room = (getDaysInMonth(d) - d.getDate() + 1) * sc.dayW;
-        const name = format(d, room < textWidth(format(d, "MMMM")) + 12 ? "MMM" : "MMMM");
+        const name = tx.date(d, room < textWidth(tx.date(d, "MMMM")) + 12 ? "MMM" : "MMMM");
         out.push(<span key={`m${i}`} className="absolute top-[5px] whitespace-nowrap pl-1.5 text-[11px] text-mut" style={{ left: i === lo ? Math.max(x0, left) : x0 }}>{name}</span>);
       }
       const thisWeek = dayDiff(day, sc.today) >= 0 && dayDiff(day, sc.today) < 7;
@@ -624,13 +630,13 @@ function DayHeader({ sc, lo, hi, left }: { sc: Scale; lo: number; hi: number; le
     if (d.getDate() === 1 || (i === lo && d.getDate() < 25)) {
       out.push(
         <span key={`m${i}`} className="absolute top-[5px] whitespace-nowrap pl-1.5 text-[11px] text-mut" style={{ left: i === lo ? Math.max(x0, left) : x0 }}>
-          {format(d, "MMMM")}
+          {tx.date(d, "MMMM")}
         </span>,
       );
     }
     out.push(
       <span key={`d${i}`} className="absolute top-[22px] flex h-[18px] items-center justify-center gap-1" style={{ left: x0, width: cw }}>
-        {sc.dayW >= 40 && <span className={cx("text-[11px]", i % 7 >= 5 ? "text-dim" : "text-mut2")}>{format(d, "EEE")}</span>}
+        {sc.dayW >= 40 && <span className={cx("text-[11px]", i % 7 >= 5 ? "text-dim" : "text-mut2")}>{tx.date(d, "EEE")}</span>}
         {pill(day, d, i)}
       </span>,
     );
@@ -647,12 +653,12 @@ function addFor(r: Row, day: string): QuickAddDefaults | null {
   return r.kind === "cap" ? { plannedDate: day } : null;
 }
 
-function rangeLabel(from: string, days: number, short = false) {
-  if (days <= 1) return format(parseLocal(from), short ? "EEE d MMM" : "EEEE, d MMMM yyyy");
-  if (short) return `${fmtShort(from)} to ${fmtShort(addDaysStr(from, days - 1))}`;
+function rangeLabel(from: string, days: number, short = false, tx: Translator = createTranslator("en")) {
+  if (days <= 1) return tx.date(parseLocal(from), short ? "EEE d MMM" : "EEEE, d MMMM yyyy");
+  if (short) return tx("{0} to {1}", [fmtShort(from, tx.language), fmtShort(addDaysStr(from, days - 1), tx.language)]);
   const a = parseLocal(from);
   const b = parseLocal(addDaysStr(from, days - 1));
-  return `${format(a, a.getFullYear() === b.getFullYear() ? "d MMM" : "d MMM yyyy")} to ${format(b, "d MMM yyyy")}`;
+  return tx("{0} to {1}", [tx.date(a, a.getFullYear() === b.getFullYear() ? "d MMM" : "d MMM yyyy"), tx.date(b, "d MMM yyyy")]);
 }
 
 export function Timeline(props: {
@@ -677,6 +683,7 @@ export function Timeline(props: {
   ctx: TaskContext;
   initialKey: string | null;
 }) {
+  const tx = useTranslation();
   const { from, areas, projects, sessions, states, loads, dayMinutes, ctx } = props;
   const { run } = useAction();
   const [tasks, patchTask] = useOptimistic(props.tasks, (state, p: { id: number; patch: DatePatch }) =>
@@ -724,7 +731,7 @@ export function Timeline(props: {
   const viewW = Math.max(1, width - tree);
   // Never so narrow that the days don't fill the view.
   const floorW = Math.max(MIN_DAY_W, viewW / days);
-  const presetW = (z: TimelineZoom) => Math.max(ZOOM[z].minDay, viewW / ZOOM[z].days);
+  const presetW = (z: TimelineZoom) => Math.max(ZOOM(tx)[z].minDay, viewW / ZOOM(tx)[z].days);
   const dayW = Math.min(MAX_DAY_W, Math.max(floorW, zoom ? presetW(zoom) : custom));
   const X = (d: number) => Math.round(d * dayW);
   const sc: Scale = { from, days, dayW, gridW: X(days), X, now, nowPos: dayPos(from, now), today: dateOnly(now) };
@@ -885,7 +892,7 @@ export function Timeline(props: {
     sessionsOf.set(x.taskId, [...(sessionsOf.get(x.taskId) ?? []), x]);
   }
   const spans = taskSpans(tasks, sessionsOf, edges, from);
-  const built = buildRows({ areas, projects, tasks, sessionsOf, spans, sc, expanded, collapsed });
+  const built = buildRows({ areas, projects, tasks, sessionsOf, spans, sc, expanded, collapsed }, tx);
   // The rows keep their order while a bar is dragged; only the dragged bar moves.
   const rows = drag
     ? built.rows.map((r) => (r.kind === "task" && r.task.id === drag.taskId ? { ...r, span: draggedSpan(r.span, drag.part, drag.days) } : r))
@@ -957,7 +964,7 @@ export function Timeline(props: {
       run(() => {
         patchTask({ id: t.id, patch });
         return updateTaskAction(t.id, patch);
-      }, dragMessage(t, patch, part));
+      }, dragMessage(t, patch, part, tx));
     };
     const onUp = (ev: PointerEvent) => finish(ev);
     const onCancel = () => finish(null);
@@ -978,7 +985,7 @@ export function Timeline(props: {
       const x = ev.clientX - box.left - tree;
       const y = ev.clientY - box.top;
       const hit = targets.find((r) => y >= r.y && y < r.y + r.h)?.task;
-      const problem = !hit ? null : side === "end" ? linkProblem(source, hit, edges) : linkProblem(hit, source, edges);
+      const problem = !hit ? null : side === "end" ? linkProblem(source, hit, edges, tx) : linkProblem(hit, source, edges, tx);
       return { taskId: source.id, side, x, y, target: hit?.id ?? null, problem };
     };
     holdCursor("crosshair");
@@ -1016,7 +1023,7 @@ export function Timeline(props: {
     run(() => {
       editEdges({ remove: edge.id });
       return deleteEdgeAction(edge.id);
-    }, `${toKey} no longer waits for ${fromKey}`);
+    }, tx("{0} no longer waits for {1}", [toKey, fromKey]));
   };
 
   // The dependency being drawn: from the dot it started at to the task it would end on, or to the pointer.
@@ -1037,29 +1044,28 @@ export function Timeline(props: {
 
   // A zoom button, from the wheel's zoom too: it keeps the day in the middle of the view there.
   const pickZoom = (z: TimelineZoom) => zoomTo(z);
-  const zoomOptions = TIMELINE_ZOOMS.map((z) => ({ value: z, label: ZOOM[z].label }));
+  const zoomOptions = TIMELINE_ZOOMS.map((z) => ({ value: z, label: ZOOM(tx)[z].label }));
   // After the wheel zoomed, no button is pressed.
   const zoomValue = (zoom ?? "") as TimelineZoom;
 
   return (
     <div className="flex min-w-0 flex-1">
-      <section aria-label="Timeline" className="flex min-w-0 flex-1 flex-col">
+      <section aria-label={tx("Timeline")} className="flex min-w-0 flex-1 flex-col">
         {/* On a phone the range is shorter, the buttons go to the right, and the zoom moves to the bar below. */}
         <div className="flex h-[52px] shrink-0 items-center gap-2.5 border-b border-line pl-5 pr-4">
           <Icon name="timeline" className="text-mut" />
-          <h1 className="text-[14px] font-semibold text-strong">Timeline</h1>
-          <span className="text-mut2 max-md:hidden">{rangeLabel(firstShown, shownDays)}</span>
-          <span className="min-w-0 truncate text-mut2 md:hidden">{rangeLabel(firstShown, shownDays, true)}</span>
+          <h1 className="text-[14px] font-semibold text-strong">{tx("Timeline")}</h1>
+          <span className="text-mut2 max-md:hidden">{rangeLabel(firstShown, shownDays, undefined, tx)}</span>
+          <span className="min-w-0 truncate text-mut2 md:hidden">{rangeLabel(firstShown, shownDays, true, tx)}</span>
           <div className="ml-1.5 flex items-center gap-0.5 max-md:ml-auto">
-            <button type="button" onClick={() => scrollBy(-0.8)} aria-label="Earlier" title="Earlier" className={NAV}>
+            <button type="button" onClick={() => scrollBy(-0.8)} aria-label={tx("Earlier")} title={tx("Earlier")} className={NAV}>
               <Icon name="chevronLeft" size={14} strokeWidth={2} />
             </button>
-            <button type="button" onClick={() => scrollBy(0.8)} aria-label="Later" title="Later" className={NAV}>
+            <button type="button" onClick={() => scrollBy(0.8)} aria-label={tx("Later")} title={tx("Later")} className={NAV}>
               <Icon name="chevronRight" size={14} strokeWidth={2} />
             </button>
             <button type="button" onClick={toToday} className="ml-0.5 inline-flex h-[26px] items-center rounded-md border border-line2 px-2 text-[12.5px] text-fg3 hover:bg-hover">
-              Today
-            </button>
+              {tx("Today")}</button>
           </div>
           <span className="flex-1 max-md:hidden" />
           <div className="contents max-md:hidden">
@@ -1072,8 +1078,8 @@ export function Timeline(props: {
           <div className="mr-1.5 shrink-0 md:hidden">
             <Segmented value={zoomValue} onChange={pickZoom} options={zoomOptions} />
           </div>
-          <span className="mr-1 text-mut2">Show</span>
-          {LAYERS.map((l) => (
+          <span className="mr-1 text-mut2">{tx("Show")}</span>
+          {LAYERS(tx).map((l) => (
             <button key={l.id} type="button" aria-pressed={layers[l.id]} onClick={() => setLayers((v) => ({ ...v, [l.id]: !v[l.id] }))}
               className={cx("flex h-[26px] items-center gap-1.5 rounded-full border px-2.5 hover:bg-hover max-md:shrink-0", layers[l.id] ? "border-ctl text-fg2" : "border-line text-dim")}>
               <span className={cx("h-1.5 w-1.5 rounded-full", layers[l.id] ? "bg-mut" : "bg-ctl")} />
@@ -1081,7 +1087,7 @@ export function Timeline(props: {
             </button>
           ))}
           <span className="flex-1" />
-          <span className="text-mut2 max-md:hidden">Grouped by area</span>
+          <span className="text-mut2 max-md:hidden">{tx("Grouped by area")}</span>
         </div>
 
         {/* On a phone it scrolls both ways by touch, with the names and the days held in place. It stays hidden there
@@ -1093,15 +1099,14 @@ export function Timeline(props: {
             <div className="sticky top-0 z-20 flex h-11 border-b border-line bg-panel">
               <div data-names className="sticky left-0 z-10 flex shrink-0 items-center border-r border-line bg-panel pl-5 pr-4 text-[11.5px] text-mut2 max-md:pl-3 max-md:pr-2 max-md:leading-4"
                 style={{ width: tree }}>
-                Areas, projects and tasks
-              </div>
+                {tx("Areas, projects and tasks")}</div>
               {/* A click on a day adds a task planned for it. The day a row's lane points at is lit here too. */}
-              <div data-days title="Scroll here to zoom" className="relative shrink-0 overflow-hidden" style={{ width: sc.gridW }}>
+              <div data-days title={tx("Scroll here to zoom")} className="relative shrink-0 overflow-hidden" style={{ width: sc.gridW }}>
                 {Array.from({ length: hi - lo }, (_, k) => {
                   const i = lo + k;
                   const day = addDaysStr(from, i);
                   return (
-                    <span key={day} title={`New task on ${fmtDay(day)}`} {...addOnClick(() => ({ plannedDate: day }))}
+                    <span key={day} title={tx("New task on {0}", [fmtDay(day, tx.language)])} {...addOnClick(() => ({ plannedDate: day }))}
                       className={cx("absolute inset-y-0 hover:bg-hover", spot?.i === i && "bg-hover")} style={{ left: X(i), width: X(i + 1) - X(i) }} />
                   );
                 })}
@@ -1141,8 +1146,8 @@ export function Timeline(props: {
                       {/* A phone's narrow column shows just the names: a task's key is in its details, a project's progress in its bar. */}
                       {r.kind === "cap" && (
                         <>
-                          <span className="text-[12.5px] text-fg2">Your time</span>
-                          <span className="truncate text-[11.5px] text-mut2 max-md:hidden">hours planned per day</span>
+                          <span className="text-[12.5px] text-fg2">{tx("Your time")}</span>
+                          <span className="truncate text-[11.5px] text-mut2 max-md:hidden">{tx("hours planned per day")}</span>
                         </>
                       )}
                       {r.kind === "area" && (
@@ -1160,7 +1165,7 @@ export function Timeline(props: {
                           <Icon name={r.open ? "chevronDown" : "chevronRight"} size={11} strokeWidth={2.6} className={cx("shrink-0 text-dim", !r.total && "invisible")} />
                           <ProgressRing pct={r.total ? (r.done / r.total) * 100 : 0} color={r.color} />
                           <span className="min-w-0 flex-1 truncate text-fg">{r.project.name}</span>
-                          <span className="shrink-0 text-[11.5px] text-mut2 max-md:hidden">{r.total ? `${r.done} of ${r.total}` : "No tasks"}</span>
+                          <span className="shrink-0 text-[11.5px] text-mut2 max-md:hidden">{r.total ? tx("{0} of {1}", [r.done, r.total]) : tx("No tasks")}</span>
                         </button>
                       )}
                       {r.kind === "task" && (
@@ -1185,7 +1190,7 @@ export function Timeline(props: {
                       {r.kind === "proj" && <ProjectLane row={r} sc={sc} />}
                       {r.kind === "task" && (
                         <TaskLane row={r} state={states[r.task.id]} sc={sc} layers={layers}
-                          dragText={drag?.taskId === r.task.id ? dragLabel(r.span, drag.part, from) : null}
+                          dragText={drag?.taskId === r.task.id ? dragLabel(r.span, drag.part, from, tx) : null}
                           linkTarget={!!link && link.target === r.task.id && !link.problem}
                           onGrab={!phone && isOpenTask(r.task) ? (e, part) => grabBar(e, r, part) : null}
                           onLink={!phone && isOpenTask(r.task) && layers.deps ? (e, side) => grabLink(e, r, side) : null} />
@@ -1211,7 +1216,7 @@ export function Timeline(props: {
                       {/* A wider, invisible copy to click: it offers to remove the dependency. */}
                       <path d={p.d} fill="none" stroke="transparent" strokeWidth="9" className="cursor-pointer" style={{ pointerEvents: "stroke" }}
                         onClick={(e) => setDepMenu({ edge: p.edge, from: p.from, to: p.to, anchor: { x: e.clientX, y: e.clientY } })}>
-                        <title>{`${p.to} waits for ${p.from}`}</title>
+                        <title>{tx("{0} waits for {1}", [p.to, p.from])}</title>
                       </path>
                     </g>
                   ))}
@@ -1239,8 +1244,8 @@ export function Timeline(props: {
       {selected && <TaskDetail key={`${selected.id}-${selected.updatedAt}`} task={selected} ctx={ctx} onClose={() => setSel(null)} />}
       {depMenu && (
         <Popover anchor={depMenu.anchor} onClose={() => setDepMenu(null)} width={236}>
-          <PopoverLabel>{depMenu.to} waits for {depMenu.from}</PopoverLabel>
-          <PopoverItem icon={<Icon name="x" size={13} />} onClick={() => unlink(depMenu.edge, depMenu.from, depMenu.to)}>Remove dependency</PopoverItem>
+          <PopoverLabel>{depMenu.to} {" "}{tx("waits for")}{" "}{depMenu.from}</PopoverLabel>
+          <PopoverItem icon={<Icon name="x" size={13} />} onClick={() => unlink(depMenu.edge, depMenu.from, depMenu.to)}>{tx("Remove dependency")}</PopoverItem>
         </Popover>
       )}
     </div>

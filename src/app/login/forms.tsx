@@ -1,4 +1,5 @@
 "use client";
+import { useTranslation } from "@/components/language";
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition, type FormEvent, type ReactNode } from "react";
@@ -36,24 +37,26 @@ function Field({ label, children, hint }: { label: string; children: ReactNode; 
 }
 
 function Message({ note }: { note: Note }) {
+  const tx = useTranslation();
   if (!note) return null;
   return (
     <p role={note.error ? "alert" : "status"}
       className={cx("rounded-md border px-3 py-2 text-[12.5px] leading-relaxed", note.error ? "border-line-strong text-fg" : "border-line2 text-fg3")}>
-      {note.text}
+      {tx.generated(note.text)}
     </p>
   );
 }
 
 /** Runs an action and shows its error or message; a successful sign-in step redirects and returns nothing. */
 function useRun(initial: Note = null) {
+  const tx = useTranslation();
   const [note, setNote] = useState<Note>(initial);
   const [pending, start] = useTransition();
   const run = (fn: () => Promise<Result>, after?: (r: NonNullable<Result>) => void) =>
     start(async () => {
       const r = await fn();
       if (!r) return;
-      if (!r.ok) setNote({ text: r.error ?? "Something went wrong.", error: true });
+      if (!r.ok) setNote({ text: r.error ?? tx("Something went wrong."), error: true });
       else {
         if (r.message) setNote({ text: r.message, error: false });
         after?.(r);
@@ -88,18 +91,19 @@ export function LoginForm({ initialError, confirmed, create, next, google }: {
   /** Whether Google sign-in is switched on in Supabase (googleSignIn() in auth-flow.ts). */
   google?: boolean;
 }) {
+  const tx = useTranslation();
   const [mode, setMode] = useState<Mode>(create ? "signup" : "signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const { note, setNote, pending, run } = useRun(initialError ? { text: initialError, error: true }
-    : confirmed ? { text: "Your email is confirmed. Sign in to continue.", error: false } : null);
+    : confirmed ? { text: tx("Your email is confirmed. Sign in to continue."), error: false } : null);
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
     if (mode === "signin") return run(() => signInAction(email, password, next));
     if (mode === "reset") return run(() => sendResetAction(email));
-    if (password !== confirm) return setNote({ text: "The two passwords don't match.", error: true });
+    if (password !== confirm) return setNote({ text: tx("The two passwords don't match."), error: true });
     run(() => signUpAction(email, password, next));
   };
   const switchTo = (m: Mode) => {
@@ -108,7 +112,7 @@ export function LoginForm({ initialError, confirmed, create, next, google }: {
     setPassword("");
     setConfirm("");
   };
-  const title = mode === "signin" ? "Sign in" : mode === "signup" ? "Create your account" : "Reset your password";
+  const title = mode === "signin" ? tx("Sign in") : mode === "signup" ? tx("Create your account") : tx("Reset your password");
   // Google's page opens in this tab, or in the browser from the desktop app, which says so and waits here.
   const withGoogle = () => run(async () => {
     const r = await signInWithGoogleAction(next);
@@ -121,47 +125,44 @@ export function LoginForm({ initialError, confirmed, create, next, google }: {
       {google && mode !== "reset" && (
         <>
           <Button type="button" disabled={pending} onClick={withGoogle} className="h-9 justify-center gap-2 text-[13px]">
-            <GoogleMark />Continue with Google
-          </Button>
+            <GoogleMark />{tx("Continue with Google")}</Button>
           <div className="flex items-center gap-3 text-[12px] text-mut2" aria-hidden>
-            <span className="h-px flex-1 bg-line2" />or with your email<span className="h-px flex-1 bg-line2" />
+            <span className="h-px flex-1 bg-line2" />{tx("or with your email")}<span className="h-px flex-1 bg-line2" />
           </div>
         </>
       )}
-      <Field label="Email">
+      <Field label={tx("Email")}>
         <input type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} className={field}
-          placeholder="you@example.com" maxLength={254} />
+          placeholder={tx("you@example.com")} maxLength={254} />
       </Field>
       {mode !== "reset" && (
-        <Field label="Password" hint={mode === "signup" ? "At least 12 characters. A passphrase of a few words works well." : undefined}>
+        <Field label={tx("Password")} hint={mode === "signup" ? tx("At least 12 characters. A passphrase of a few words works well.") : undefined}>
           <input type="password" required autoComplete={mode === "signin" ? "current-password" : "new-password"} value={password}
             onChange={(e) => setPassword(e.target.value)} className={field} maxLength={72} minLength={mode === "signup" ? 12 : undefined} />
         </Field>
       )}
       {mode === "signup" && (
-        <Field label="Password again">
+        <Field label={tx("Password again")}>
           <input type="password" required autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} className={field} maxLength={72} />
         </Field>
       )}
       {mode === "signup" && (
         <p className="text-[12px] leading-relaxed text-mut2">
-          Confirm your email to start planning and connect MCP. Two-factor sign-in can be set up later in Settings;
-          it is needed before starting sessions on your computers.
-        </p>
+          {tx("Confirm your email to start planning and connect MCP. Two-factor sign-in can be set up later in Settings; it is needed before starting sessions on your computers.")}</p>
       )}
       <Message note={note} />
       <Button type="submit" variant="primary" disabled={pending} className="h-9 justify-center text-[13px]">
-        {mode === "signin" ? "Sign in" : mode === "signup" ? "Create account" : "Email me a link"}
+        {mode === "signin" ? tx("Sign in") : mode === "signup" ? tx("Create account") : tx("Email me a link")}
       </Button>
       <div className="flex flex-col items-center gap-2 border-t border-line pt-4 text-[12.5px] text-mut2">
         {mode === "signin" && (
           <>
-            <button type="button" onClick={() => switchTo("reset")} className="text-mut hover:text-fg2">Forgot your password?</button>
-            <span>New to PacedMind? <button type="button" onClick={() => switchTo("signup")} className="font-medium text-fg2 hover:text-strong">Create an account</button></span>
+            <button type="button" onClick={() => switchTo("reset")} className="text-mut hover:text-fg2">{tx("Forgot your password?")}</button>
+            <span>{tx("New to PacedMind?")}{" "}<button type="button" onClick={() => switchTo("signup")} className="font-medium text-fg2 hover:text-strong">{tx("Create an account")}</button></span>
           </>
         )}
         {mode !== "signin" && (
-          <button type="button" onClick={() => switchTo("signin")} className="font-medium text-fg2 hover:text-strong">Back to sign in</button>
+          <button type="button" onClick={() => switchTo("signin")} className="font-medium text-fg2 hover:text-strong">{tx("Back to sign in")}</button>
         )}
       </div>
     </Card>
@@ -171,6 +172,7 @@ export function LoginForm({ initialError, confirmed, create, next, google }: {
 /* ---------- the code from the authenticator ---------- */
 
 export function VerifyForm({ factors, backupCodes, next }: { factors: { id: string; name: string }[]; backupCodes: boolean; next: string | null }) {
+  const tx = useTranslation();
   const [factorId, setFactorId] = useState(factors[0]?.id ?? "");
   const [code, setCode] = useState("");
   const [useBackup, setUseBackup] = useState(false);
@@ -182,27 +184,27 @@ export function VerifyForm({ factors, backupCodes, next }: { factors: { id: stri
   };
 
   return (
-    <Card title="Two-factor code" onSubmit={submit}>
+    <Card title={tx("Two-factor code")} onSubmit={submit}>
       {factors.length > 1 && !useBackup && (
-        <Field label="Authenticator">
-          <Picker label="Authenticator" values={[factorId]} options={factors.map((f) => ({ value: f.id, label: f.name }))}
+        <Field label={tx("Authenticator")}>
+          <Picker label={tx("Authenticator")} values={[factorId]} options={factors.map((f) => ({ value: f.id, label: f.name }))}
             onChange={([id]) => setFactorId(id)} className="h-9" />
         </Field>
       )}
-      <Field label={useBackup ? "Backup code" : "Code from your authenticator app"}>
+      <Field label={useBackup ? tx("Backup code") : tx("Code from your authenticator app")}>
         <input autoFocus required value={code} onChange={(e) => setCode(useBackup ? e.target.value : e.target.value.replace(/\D/g, "").slice(0, 6))}
           inputMode={useBackup ? "text" : "numeric"} autoComplete="one-time-code" className={useBackup ? field : codeField}
           placeholder={useBackup ? "xxxx-xxxx-xxxx-xxxx" : "000000"} maxLength={useBackup ? 40 : 6} />
       </Field>
       <Message note={note} />
-      <Button type="submit" variant="primary" disabled={pending} className="h-9 justify-center text-[13px]">Continue</Button>
+      <Button type="submit" variant="primary" disabled={pending} className="h-9 justify-center text-[13px]">{tx("Continue")}</Button>
       <div className="flex flex-col items-center gap-2 border-t border-line pt-4 text-[12.5px] text-mut2">
         {backupCodes && (
           <button type="button" onClick={() => { setUseBackup(!useBackup); setCode(""); }} className="text-mut hover:text-fg2">
-            {useBackup ? "Use the authenticator app" : "Use a backup code"}
+            {useBackup ? tx("Use the authenticator app") : tx("Use a backup code")}
           </button>
         )}
-        <button type="button" onClick={() => run(() => signOutAction().then(() => undefined))} className="text-mut hover:text-fg2">Sign out</button>
+        <button type="button" onClick={() => run(() => signOutAction().then(() => undefined))} className="text-mut hover:text-fg2">{tx("Sign out")}</button>
       </div>
     </Card>
   );
@@ -211,6 +213,7 @@ export function VerifyForm({ factors, backupCodes, next }: { factors: { id: stri
 /* ---------- setting up an authenticator ---------- */
 
 export function SetupForm({ first, email, next }: { first: boolean; email: string; next?: string | null }) {
+  const tx = useTranslation();
   const router = useRouter();
   const [enrollment, setEnrollment] = useState<Enrollment | null>(null);
   const [code, setCode] = useState("");
@@ -227,12 +230,12 @@ export function SetupForm({ first, email, next }: { first: boolean; email: strin
     startEnrollAction().then((r) => {
       if (!live) return;
       if (r.ok && r.enrollment) setEnrollment(r.enrollment);
-      else setNote({ text: r.error ?? "Couldn't start setting up the app.", error: true });
+      else setNote({ text: r.error ?? tx("Couldn't start setting up the app."), error: true });
     });
     return () => {
       live = false;
     };
-  }, [first, setNote]);
+  }, [first, setNote, tx]);
 
   if (!first && !enrollment) {
     const begin = (e: FormEvent) => {
@@ -243,13 +246,13 @@ export function SetupForm({ first, email, next }: { first: boolean; email: strin
       });
     };
     return (
-      <Card title="Add another authenticator" onSubmit={begin}>
-        <Field label="Code from an authenticator you already have">
+      <Card title={tx("Add another authenticator")} onSubmit={begin}>
+        <Field label={tx("Code from an authenticator you already have")}>
           <input autoFocus required value={current} onChange={(e) => setCurrent(e.target.value.replace(/\D/g, "").slice(0, 6))} inputMode="numeric"
             autoComplete="one-time-code" className={codeField} placeholder="000000" maxLength={6} />
         </Field>
         <Message note={note} />
-        <Button type="submit" variant="primary" disabled={pending || current.length !== 6} className="h-9 justify-center text-[13px]">Continue</Button>
+        <Button type="submit" variant="primary" disabled={pending || current.length !== 6} className="h-9 justify-center text-[13px]">{tx("Continue")}</Button>
       </Card>
     );
   }
@@ -257,15 +260,13 @@ export function SetupForm({ first, email, next }: { first: boolean; email: strin
   if (done) {
     return (
       <div className="flex flex-col gap-4 rounded-xl border border-line bg-panel p-6">
-        <h1 className="text-[15px] font-semibold text-strong">Two-factor sign-in is on</h1>
+        <h1 className="text-[15px] font-semibold text-strong">{tx("Two-factor sign-in is on")}</h1>
         <p className="text-[12.5px] leading-relaxed text-fg3">
-          If you lose this phone you lose access to your account, so add a second authenticator now: another phone, a tablet or a password
-          manager that makes codes. You can also do it later in Settings.
-        </p>
-        {first && <p className="text-[12.5px] leading-relaxed text-fg3">To activate computer access, sign out and sign in again with your code. Reconnect any MCP connection you want to use for computer access.</p>}
+          {tx("If you lose this phone you lose access to your account, so add a second authenticator now: another phone, a tablet or a password manager that makes codes. You can also do it later in Settings.")}</p>
+        {first && <p className="text-[12.5px] leading-relaxed text-fg3">{tx("To activate computer access, sign out and sign in again with your code. Reconnect any MCP connection you want to use for computer access.")}</p>}
         <div className="flex gap-2">
-          <Button type="button" onClick={() => router.push("/login/setup?add=1")} className="h-9 flex-1 justify-center">Add a second one</Button>
-          <Button type="button" variant="primary" onClick={() => router.push(next ?? "/today")} className="h-9 flex-1 justify-center">Continue</Button>
+          <Button type="button" onClick={() => router.push("/login/setup?add=1")} className="h-9 flex-1 justify-center">{tx("Add a second one")}</Button>
+          <Button type="button" variant="primary" onClick={() => router.push(next ?? "/today")} className="h-9 flex-1 justify-center">{tx("Continue")}</Button>
         </div>
       </div>
     );
@@ -278,29 +279,28 @@ export function SetupForm({ first, email, next }: { first: boolean; email: strin
   };
 
   return (
-    <Card title={first ? "Set up two-factor sign-in" : "Add another authenticator"} onSubmit={submit}>
+    <Card title={first ? tx("Set up two-factor sign-in") : tx("Add another authenticator")} onSubmit={submit}>
       <ol className="flex list-decimal flex-col gap-2 pl-4 text-[12.5px] leading-relaxed text-fg3">
-        <li>Open an authenticator app: Google Authenticator, Microsoft Authenticator, 1Password, Bitwarden or similar.</li>
-        <li>Scan this code, or type the key by hand.</li>
-        <li>Enter the 6-digit code the app shows.</li>
+        <li>{tx("Open an authenticator app: Google Authenticator, Microsoft Authenticator, 1Password, Bitwarden or similar.")}</li>
+        <li>{tx("Scan this code, or type the key by hand.")}</li>
+        <li>{tx("Enter the 6-digit code the app shows.")}</li>
       </ol>
       <div className="flex flex-col items-center gap-3">
         <div className="flex h-[184px] w-[184px] items-center justify-center rounded-lg bg-white p-2">
           {enrollment
             ? /* eslint-disable-next-line @next/next/no-img-element -- a data: URI SVG made by Supabase */
-              <img src={enrollment.qr} alt={`QR code for PacedMind (${email})`} width={168} height={168} />
-            : <span className="text-[12px] text-neutral-500">Preparing…</span>}
+              <img src={enrollment.qr} alt={tx("QR code for PacedMind ({0})", [email])} width={168} height={168} />
+            : <span className="text-[12px] text-neutral-500">{tx("Preparing…")}</span>}
         </div>
         {enrollment && (
           // A phone can't scan its own screen: this hands the key to the authenticator app on it.
           <a href={enrollment.uri}
             className="hidden h-9 w-full items-center justify-center rounded-md border border-line2 text-[12.5px] text-fg2 pointer-coarse:flex">
-            Add to an authenticator app on this device
-          </a>
+            {tx("Add to an authenticator app on this device")}</a>
         )}
         {enrollment && (
           <button type="button" onClick={() => setShowSecret(!showSecret)} className="text-[12px] text-mut hover:text-fg2">
-            {showSecret ? "Hide the key" : "Can't scan it? Show the key"}
+            {showSecret ? tx("Hide the key") : tx("Can't scan it? Show the key")}
           </button>
         )}
         {enrollment && showSecret && (
@@ -310,21 +310,21 @@ export function SetupForm({ first, email, next }: { first: boolean; email: strin
             </code>
             <Button type="button" className="h-9 shrink-0" onClick={() => navigator.clipboard.writeText(enrollment.secret).then(
               () => setCopied(true),
-              () => setNote({ text: "Couldn't copy the key. Type it into the app by hand.", error: true }),
-            )}>{copied ? "Copied" : "Copy"}</Button>
+              () => setNote({ text: tx("Couldn't copy the key. Type it into the app by hand."), error: true }),
+            )}>{copied ? tx("Copied") : tx("Copy")}</Button>
           </div>
         )}
       </div>
-      <Field label="Code from the app">
+      <Field label={tx("Code from the app")}>
         <input required value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))} inputMode="numeric"
           autoComplete="one-time-code" className={codeField} placeholder="000000" maxLength={6} />
       </Field>
       <Message note={note} />
-      <Button type="submit" variant="primary" disabled={pending || !enrollment} className="h-9 justify-center text-[13px]">Turn on</Button>
+      <Button type="submit" variant="primary" disabled={pending || !enrollment} className="h-9 justify-center text-[13px]">{tx("Turn on")}</Button>
       {first && (
         <div className="flex justify-between border-t border-line pt-4">
-          <button type="button" disabled={pending} onClick={() => router.push(next ?? "/today")} className="text-[12.5px] text-fg2 hover:text-strong">Set up later</button>
-          <button type="button" onClick={() => run(() => signOutAction().then(() => undefined))} className="text-[12.5px] text-mut hover:text-fg2">Sign out</button>
+          <button type="button" disabled={pending} onClick={() => router.push(next ?? "/today")} className="text-[12.5px] text-fg2 hover:text-strong">{tx("Set up later")}</button>
+          <button type="button" onClick={() => run(() => signOutAction().then(() => undefined))} className="text-[12.5px] text-mut hover:text-fg2">{tx("Sign out")}</button>
         </div>
       )}
     </Card>
@@ -334,25 +334,26 @@ export function SetupForm({ first, email, next }: { first: boolean; email: strin
 /* ---------- a new password after an email link ---------- */
 
 export function NewPasswordForm() {
+  const tx = useTranslation();
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const { note, setNote, pending, run } = useRun();
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    if (password !== confirm) return setNote({ text: "The two passwords don't match.", error: true });
+    if (password !== confirm) return setNote({ text: tx("The two passwords don't match."), error: true });
     run(() => setNewPasswordAction(password));
   };
   return (
-    <Card title="Choose a new password" onSubmit={submit}>
-      <Field label="New password" hint="At least 12 characters. Other devices are signed out when it changes.">
+    <Card title={tx("Choose a new password")} onSubmit={submit}>
+      <Field label={tx("New password")} hint={tx("At least 12 characters. Other devices are signed out when it changes.")}>
         <input type="password" required autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} className={field}
           minLength={12} maxLength={72} autoFocus />
       </Field>
-      <Field label="New password again">
+      <Field label={tx("New password again")}>
         <input type="password" required autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} className={field} maxLength={72} />
       </Field>
       <Message note={note} />
-      <Button type="submit" variant="primary" disabled={pending} className="h-9 justify-center text-[13px]">Save password</Button>
+      <Button type="submit" variant="primary" disabled={pending} className="h-9 justify-center text-[13px]">{tx("Save password")}</Button>
     </Card>
   );
 }

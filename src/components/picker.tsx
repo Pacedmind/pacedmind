@@ -1,4 +1,5 @@
 "use client";
+import { useTranslation } from "@/components/language";
 
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
@@ -11,11 +12,13 @@ export type PickerOption = { value: string; label: string; detail?: string };
  * Searchable single or multiple choice, with a themed popup and keyboard navigation. The trigger looks like a field;
  * `trigger` replaces its look (a chip, say) and `content` what it shows.
  */
-export function Picker({ label, values: savedValues, options, onChange, multiple = false, deferred = false, custom, max = Infinity, placeholder = "Choose…", className, trigger: triggerClass, content, title }: {
+export function Picker({ label, values: savedValues, options, onChange, multiple = false, deferred = false, custom, max = Infinity, placeholder, className, trigger: triggerClass, content, title }: {
   label: string; values: string[]; options: PickerOption[]; onChange: (values: string[]) => void;
   multiple?: boolean; deferred?: boolean; custom?: (text: string) => string | null; max?: number; placeholder?: string; className?: string;
   trigger?: string; content?: ReactNode; title?: string;
 }) {
+  const tx = useTranslation();
+  placeholder ??= tx("Choose…");
   const id = useId();
   const trigger = useRef<HTMLButtonElement>(null);
   const popup = useRef<HTMLDivElement>(null);
@@ -29,7 +32,7 @@ export function Picker({ label, values: savedValues, options, onChange, multiple
   const filtered = options.filter((o) => `${o.label} ${o.detail ?? ""}`.toLowerCase().includes(query.toLowerCase()));
   const extra = custom?.(query.trim());
   const choices = extra && !options.some((o) => o.value === extra || o.label.toLowerCase() === extra.toLowerCase())
-    ? [...filtered, { value: extra, label: extra, detail: "Add custom value" }] : filtered;
+    ? [...filtered, { value: extra, label: extra, detail: tx("Add custom value") }] : filtered;
   const index = Math.min(active, Math.max(0, choices.length - 1));
   const selected = values.map((v) => options.find((o) => o.value === v)?.label ?? v);
   const close = useCallback((focus = false) => {
@@ -87,9 +90,9 @@ export function Picker({ label, values: savedValues, options, onChange, multiple
         if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); setActive(Math.max(0, Math.min(choices.length - 1, index + (e.key === "ArrowDown" ? 1 : -1)))); }
         if (e.key === "Enter" && e.target === search.current) { e.preventDefault(); if (choices[index]) choose(choices[index].value); }
       }}>
-      <input ref={search} role="combobox" aria-label={`Search ${label.toLowerCase()}`} aria-expanded aria-controls={id} aria-autocomplete="list"
+      <input ref={search} role="combobox" aria-label={tx("Search {0}", [label.toLowerCase()])} aria-expanded aria-controls={id} aria-autocomplete="list"
         aria-activedescendant={choices.length ? `${id}-${index}` : undefined} value={query}
-        onChange={(e) => { setQuery(e.target.value); setActive(0); }} placeholder={custom ? "Search or enter a value…" : "Search…"}
+        onChange={(e) => { setQuery(e.target.value); setActive(0); }} placeholder={custom ? tx("Search or enter a value…") : tx("Search…")}
         className="m-1 rounded border border-line2 bg-input px-2 py-1.5 text-[12px] text-fg outline-none focus:border-line-strong" />
       <div id={id} role="listbox" aria-label={label} aria-multiselectable={multiple || undefined} className="min-h-0 overflow-auto">
         {choices.map((o, i) => {
@@ -102,11 +105,11 @@ export function Picker({ label, values: savedValues, options, onChange, multiple
             <span className="min-w-0 flex-1 break-words">{o.label}{o.detail && <span className="mt-0.5 block text-[11px] text-mut2">{o.detail}</span>}</span>
           </button>;
         })}
-        {!choices.length && <p className="p-3 text-[12px] text-mut2">No matches</p>}
+        {!choices.length && <p className="p-3 text-[12px] text-mut2">{tx("No matches")}</p>}
       </div>
       {multiple && <div className="flex items-center justify-between border-t border-line px-2 pt-1 text-[11px] text-mut2">
-        <span>{values.length} selected{max !== Infinity ? ` · Up to ${max}` : ""}</span>
-        <button type="button" onClick={() => close(true)} className="rounded px-2 py-1 text-fg2 hover:bg-hover">Done</button>
+        <span>{values.length} {" "}{tx("selected")}{max !== Infinity ? tx(" · Up to {0}", [max]) : ""}</span>
+        <button type="button" onClick={() => close(true)} className="rounded px-2 py-1 text-fg2 hover:bg-hover">{tx("Done")}</button>
       </div>}
     </div>, document.body)}
   </div>;

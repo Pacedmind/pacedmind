@@ -1,4 +1,6 @@
 "use client";
+import { useTranslation } from "@/components/language";
+import { createTranslator, type Translator } from "@/lib/i18n";
 
 import { useEffect, useState } from "react";
 import { pushKeyAction, removePushSubscriptionAction, savePushSubscriptionAction } from "@/app/actions";
@@ -19,12 +21,12 @@ export interface PushDevice {
 type Here = "checking" | "unsupported" | "install" | "blocked" | "off" | "on";
 
 /** A browser's own words for itself, short: "Chrome on Android", "Safari on iPhone". */
-function labelOf(ua: string): string {
+function labelOf(ua: string, tx: Translator = createTranslator("en")): string {
   const os = /iPhone/.test(ua) ? "iPhone" : /iPad/.test(ua) ? "iPad" : /Android/.test(ua) ? "Android" : /Mac OS X/.test(ua) ? "Mac"
     : /Windows/.test(ua) ? "Windows" : /Linux/.test(ua) ? "Linux" : "";
   const browser = /Edg\//.test(ua) ? "Edge" : /Firefox\//.test(ua) ? "Firefox" : /(Chrome|CriOS)\//.test(ua) ? "Chrome"
-    : /Safari\//.test(ua) ? "Safari" : "Browser";
-  return os ? `${browser} on ${os}` : browser;
+    : /Safari\//.test(ua) ? "Safari" : tx("Browser");
+  return os ? tx("{0} on {1}", [browser, os]) : browser;
 }
 
 /** The public key as the Push API takes it. */
@@ -41,6 +43,7 @@ const supported = () => typeof window !== "undefined" && "serviceWorker" in navi
 const needsInstall = () => /iPhone|iPad/.test(navigator.userAgent) && !window.matchMedia("(display-mode: standalone)").matches;
 
 export function PushSettings({ devices, web }: { devices: PushDevice[]; web: boolean }) {
+  const tx = useTranslation();
   const { run, pending } = useAction();
   const [here, setHere] = useState<Here>("checking");
   const [endpoint, setEndpoint] = useState<string | null>(null);
@@ -64,7 +67,7 @@ export function PushSettings({ devices, web }: { devices: PushDevice[]; web: boo
     if (!key.ok || !key.publicKey) return key;
     if ((await Notification.requestPermission()) !== "granted") {
       setHere("blocked");
-      return { ok: false, error: "The browser didn't allow notifications. Allow them for this site in its settings." };
+      return { ok: false, error: tx("The browser didn't allow notifications. Allow them for this site in its settings.") };
     }
     const reg = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
     await navigator.serviceWorker.ready;
@@ -81,7 +84,7 @@ export function PushSettings({ devices, web }: { devices: PushDevice[]; web: boo
     sub ??= await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(key.publicKey) });
     const json = sub.toJSON();
     const r = await savePushSubscriptionAction({
-      endpoint: sub.endpoint, p256dh: json.keys?.p256dh ?? "", auth: json.keys?.auth ?? "", label: labelOf(navigator.userAgent),
+      endpoint: sub.endpoint, p256dh: json.keys?.p256dh ?? "", auth: json.keys?.auth ?? "", label: labelOf(navigator.userAgent, tx),
     });
     if (r.ok) {
       setEndpoint(sub.endpoint);
@@ -100,31 +103,31 @@ export function PushSettings({ devices, web }: { devices: PushDevice[]; web: boo
   });
 
   const status: Record<Here, string> = {
-    checking: "Checking…",
-    unsupported: web ? "This browser can't show notifications from websites." : "This window shows its own notifications.",
-    install: "Add PacedMind to your Home Screen first (Share → Add to Home Screen), then open it from there and turn this on.",
-    blocked: "This browser blocks notifications from PacedMind. Allow them for this site in its settings, then turn this on.",
-    off: "Off in this browser.",
-    on: "On in this browser.",
+    checking: tx("Checking…"),
+    unsupported: web ? tx("This browser can't show notifications from websites.") : tx("This window shows its own notifications."),
+    install: tx("Add PacedMind to your Home Screen first (Share → Add to Home Screen), then open it from there and turn this on."),
+    blocked: tx("This browser blocks notifications from PacedMind. Allow them for this site in its settings, then turn this on."),
+    off: tx("Off in this browser."),
+    on: tx("On in this browser."),
   };
 
   return (
     <>
       <div className="flex items-center gap-3 border-b border-line px-3.5 py-2.5 last:border-b-0">
-        <span className="w-[120px] shrink-0 text-[12.5px] text-mut2">This browser</span>
+        <span className="w-[120px] shrink-0 text-[12.5px] text-mut2">{tx("This browser")}</span>
         <span className="min-w-0 flex-1 text-[12.5px] leading-snug text-fg3">{status[here]}</span>
         {here === "off" || here === "blocked" ? (
-          <Button size="sm" disabled={pending} onClick={turnOn}>Turn on</Button>
+          <Button size="sm" disabled={pending} onClick={turnOn}>{tx("Turn on")}</Button>
         ) : here === "on" && endpoint ? (
-          <Button size="sm" disabled={pending} onClick={() => turnOff(endpoint)}>Turn off</Button>
+          <Button size="sm" disabled={pending} onClick={() => turnOff(endpoint)}>{tx("Turn off")}</Button>
         ) : null}
       </div>
       {devices.map((d) => (
         <div key={d.endpoint} className="flex items-center gap-3 border-b border-line px-3.5 py-2.5 last:border-b-0">
-          <span className="w-[120px] shrink-0 text-[12.5px] text-mut2">{d.endpoint === endpoint ? "This one" : "Also on"}</span>
-          <span className="min-w-0 flex-1 truncate text-[12.5px] text-fg3" title={`Since ${d.createdAt.slice(0, 10)}`}>{d.label || "A browser"}</span>
+          <span className="w-[120px] shrink-0 text-[12.5px] text-mut2">{d.endpoint === endpoint ? tx("This one") : tx("Also on")}</span>
+          <span className="min-w-0 flex-1 truncate text-[12.5px] text-fg3" title={tx("Since {0}", [d.createdAt.slice(0, 10)])}>{d.label || tx("A browser")}</span>
           {d.endpoint !== endpoint && (
-            <Button size="sm" variant="ghost" disabled={pending} onClick={() => turnOff(d.endpoint)}>Turn off</Button>
+            <Button size="sm" variant="ghost" disabled={pending} onClick={() => turnOff(d.endpoint)}>{tx("Turn off")}</Button>
           )}
         </div>
       ))}

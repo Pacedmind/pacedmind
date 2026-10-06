@@ -1,4 +1,5 @@
 "use client";
+import { useTranslation } from "@/components/language";
 
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
@@ -29,6 +30,7 @@ export function useOpenBilling() {
  * through, or Cloud that has ended and is read-only. Settings → Plan has the rest.
  */
 export function BillingBanner({ plan, desktop, nativeCompanion = false }: { plan: Plan; desktop: boolean; nativeCompanion?: boolean }) {
+  const tx = useTranslation();
   const { open, pending } = useOpenBilling();
   const router = useRouter();
   const days = daysLeft(plan.trialEndsAt);
@@ -38,23 +40,22 @@ export function BillingBanner({ plan, desktop, nativeCompanion = false }: { plan
   if (nativeCompanion) {
     return plan.state === "lapsed" ? (
       <div role="status" className="border-b border-line bg-panel px-3.5 py-2 text-[12.5px] text-fg2">
-        PacedMind Cloud is read-only. You can still see and delete your data.
-      </div>
+        {tx("PacedMind Cloud is read-only. You can still see and delete your data.")}</div>
     ) : null;
   }
   if (plan.state === "trial" && days <= 3) {
-    text = <span suppressHydrationWarning>Your free trial of PacedMind Cloud ends {days === 0 ? "today" : days === 1 ? "tomorrow" : `in ${days} days`}. After that it{"'"}s read-only until you subscribe.</span>;
-    actions = <Button size="sm" variant="primary" onClick={() => router.push("/settings/plan")}>Subscribe</Button>;
+    text = <span suppressHydrationWarning>{tx("Your free trial of PacedMind Cloud ends")}{" "}{days === 0 ? tx("today") : days === 1 ? tx("tomorrow") : tx("in {0} days", [days])}{tx(". After that it")}{"'"}{tx("s read-only until you subscribe.")}</span>;
+    actions = <Button size="sm" variant="primary" onClick={() => router.push("/settings/plan")}>{tx("Subscribe")}</Button>;
   } else if (plan.state === "past_due") {
-    text = "The last payment for PacedMind Cloud didn't go through. Cloud keeps working while the card is tried again.";
-    actions = <Button size="sm" disabled={pending} onClick={() => open(() => manageBillingAction())}>Update payment</Button>;
+    text = tx("The last payment for PacedMind Cloud didn't go through. Cloud keeps working while the card is tried again.");
+    actions = <Button size="sm" disabled={pending} onClick={() => open(() => manageBillingAction())}>{tx("Update payment")}</Button>;
   } else if (plan.state === "lapsed") {
     text = desktop
-      ? "PacedMind Cloud is read-only: you can see and delete what's in it, but not change it. Subscribe, or move it to this computer."
-      : "PacedMind Cloud is read-only: you can see and delete what's in it, but not change it.";
+      ? tx("PacedMind Cloud is read-only: you can see and delete what's in it, but not change it. Subscribe, or move it to this computer.")
+      : tx("PacedMind Cloud is read-only: you can see and delete what's in it, but not change it.");
     actions = <>
-      {desktop && <Button size="sm" onClick={() => router.push("/settings/data")}>Move to this computer</Button>}
-      <Button size="sm" variant="primary" onClick={() => router.push("/settings/plan")}>Subscribe</Button>
+      {desktop && <Button size="sm" onClick={() => router.push("/settings/data")}>{tx("Move to this computer")}</Button>}
+      <Button size="sm" variant="primary" onClick={() => router.push("/settings/plan")}>{tx("Subscribe")}</Button>
     </>;
   } else {
     return null;

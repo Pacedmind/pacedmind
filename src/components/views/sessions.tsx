@@ -1,9 +1,11 @@
 "use client";
+import { useTranslation } from "@/components/language";
+import { createTranslator, type Translator } from "@/lib/i18n";
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Fragment, useEffect, useState, type ReactNode } from "react";
-import { format } from "date-fns";
+
 import { attachSessionAction, closeSessionAction, finishSessionAction, markSessionDoneAction, reopenSessionAction, requestChangesAction } from "@/app/actions";
 import { useExecution } from "@/components/execution-context";
 import { Popover, PopoverItem, anchorOf, type Anchor } from "@/components/popover";
@@ -121,27 +123,27 @@ const dayBefore = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate
 const ms = (stamp: string) => parseLocal(stamp).getTime();
 
 /** "12:22", "yesterday 12:22" or "Mon 21 Sep" (short, for list rows). */
-function clock(stamp: string, now: number): string {
+function clock(stamp: string, now: number, tx: Translator = createTranslator("en")): string {
   const d = parseLocal(stamp);
   const today = new Date(now);
-  if (sameDay(d, today)) return format(d, "HH:mm");
-  if (sameDay(d, dayBefore(today))) return `yesterday ${format(d, "HH:mm")}`;
-  return format(d, "EEE d MMM");
+  if (sameDay(d, today)) return tx.date(d, "HH:mm");
+  if (sameDay(d, dayBefore(today))) return tx("yesterday {0}", [tx.date(d, "HH:mm")]);
+  return tx.date(d, "EEE d MMM");
 }
 
 /** "12:22" today, otherwise with the day: "Mon 21 Sep, 12:22". */
-function clockLong(stamp: string, now: number): string {
+function clockLong(stamp: string, now: number, tx: Translator = createTranslator("en")): string {
   const d = parseLocal(stamp);
-  return sameDay(d, new Date(now)) ? format(d, "HH:mm") : format(d, "EEE d MMM, HH:mm");
+  return sameDay(d, new Date(now)) ? tx.date(d, "HH:mm") : tx.date(d, "EEE d MMM, HH:mm");
 }
 
-function duration(span: number): string {
+function duration(span: number, tx: Translator = createTranslator("en")): string {
   const m = Math.max(0, Math.round(span / 60_000));
-  if (m < 1) return "under a minute";
+  if (m < 1) return tx("under a minute");
   if (m < 60) return `${m} min`;
   const h = Math.floor(m / 60);
-  if (h < 24) return m % 60 ? `${h} h ${m % 60} min` : `${h} h`;
-  return `${Math.floor(h / 24)} d ${h % 24} h`;
+  if (h < 24) return m % 60 ? tx("{0} h {1} min", [h, m % 60]) : tx("{0} h", [h]);
+  return tx("{0} d {1} h", [Math.floor(h / 24), h % 24]);
 }
 
 /** A session on a device whose agent hasn't checked in: waiting in its terminal, or for you to send it in the app. */
@@ -152,89 +154,89 @@ const waitsFor = (s: SessionItem) => (isActive(s) ? attentionOf(s.events) : null
 const askingTrust = (s: SessionItem) => !!s.asksTrust && isActive(s) && s.surface === "terminal" && !checkedIn(s.events);
 
 /** "a terminal on mikolaj_pc", "the Claude app on mikolaj_pc" or "Claude Code on the web". */
-function place(s: SessionItem): string {
-  if (s.surface === "cloud") return CLOUD_LABEL[s.agent];
-  const on = s.device ? ` on ${s.device}` : "";
-  return s.surface === "desktop" ? `the ${APP_LABEL[s.agent]}${on}` : `a terminal${on}`;
+function place(s: SessionItem, tx: Translator = createTranslator("en")): string {
+  if (s.surface === "cloud") return tx(CLOUD_LABEL[s.agent]);
+  const on = s.device ? tx(" on {0}", [s.device]) : "";
+  return s.surface === "desktop" ? tx("the {0}{1}", [tx(APP_LABEL[s.agent]), on]) : tx("a terminal{0}", [on]);
 }
 
 /** "Terminal on mikolaj_pc", "Claude app on mikolaj_pc" or "Claude Code on the web". */
-function placeTitle(s: SessionItem): string {
-  if (s.surface === "cloud") return CLOUD_LABEL[s.agent];
-  return `${s.surface === "desktop" ? APP_LABEL[s.agent] : "Terminal"}${s.device ? ` on ${s.device}` : ""}`;
+function placeTitle(s: SessionItem, tx: Translator = createTranslator("en")): string {
+  if (s.surface === "cloud") return tx(CLOUD_LABEL[s.agent]);
+  return `${s.surface === "desktop" ? tx(APP_LABEL[s.agent]) : tx("Terminal")}${s.device ? tx(" on {0}", [s.device]) : ""}`;
 }
 
-function meta(s: SessionItem, now: number): string {
+function meta(s: SessionItem, now: number, tx: Translator = createTranslator("en")): string {
   switch (s.status) {
     case "finished": {
       const outcome = s.reports[0]?.outcome;
-      return `${outcome === "blocked" ? "stuck" : outcome === "partial" ? "partly done" : "finished"} ${clock(s.finishedAt ?? s.startedAt, now)}`;
+      return `${outcome === "blocked" ? tx("stuck") : outcome === "partial" ? tx("partly done") : tx("finished")} ${clock(s.finishedAt ?? s.startedAt, now, tx)}`;
     }
     case "starting":
     case "running": {
       const waits = waitsFor(s);
-      if (waits) return attentionWords(waits.kind).toLowerCase();
-      if (s.status === "starting") return s.surface === "desktop" ? "send the first message" : "starting · waiting for check-in";
-      if (askingTrust(s) || unheard(s, now)) return s.surface === "desktop" ? `waiting in the ${APP_LABEL[s.agent]}` : "waiting in its terminal";
+      if (waits) return tx(attentionWords(waits.kind)).toLowerCase();
+      if (s.status === "starting") return s.surface === "desktop" ? tx("send the first message") : tx("starting · waiting for check-in");
+      if (askingTrust(s) || unheard(s, now)) return s.surface === "desktop" ? tx("waiting in the {0}", [tx(APP_LABEL[s.agent])]) : tx("waiting in its terminal");
       const asked = s.reports[0]?.changes ? s.reports[0].changesAt : null;
-      if (asked) return `${isAnswers(s.reports[0].changes ?? "") ? "answers" : "changes"} since ${clock(asked, now)}`;
-      return `${s.surface === "cloud" ? "in the cloud " : ""}since ${clock(s.startedAt, now)}`;
+      if (asked) return tx("{0} since {1}", [isAnswers(s.reports[0].changes ?? "") ? tx("answers") : tx("changes"), clock(asked, now, tx)]);
+      return tx("{0}since {1}", [s.surface === "cloud" ? tx("in the cloud ") : "", clock(s.startedAt, now, tx)]);
     }
     case "done":
-      return `done ${clock(s.endAt ?? s.startedAt, now)}`;
+      return tx("done {0}", [clock(s.endAt ?? s.startedAt, now, tx)]);
     case "closed":
-      return "closed before finishing";
+      return tx("closed before finishing");
     default:
-      return "couldn't start";
+      return tx("couldn't start");
   }
 }
 
-function headline(s: SessionItem, now: number): string {
-  const who = AGENT_LABEL[s.agent];
+function headline(s: SessionItem, now: number, tx: Translator = createTranslator("en")): string {
+  const who = tx(AGENT_LABEL[s.agent]);
   const waits = waitsFor(s);
   if (waits) return waits.text;
   if (s.status === "starting" && s.surface === "desktop") return desktopStartText(s.agent);
   if (askingTrust(s)) return TRUST_WAITING;
   if (unheard(s, now)) {
     return s.surface === "desktop"
-      ? `Opened in the ${APP_LABEL[s.agent]}. Send the first message there to start.`
-      : `${who} hasn't checked in yet. It may be waiting for you in its terminal.`;
+      ? tx("Opened in the {0}. Send the first message there to start.", [tx(APP_LABEL[s.agent])])
+      : tx("{0} hasn't checked in yet. It may be waiting for you in its terminal.", [who]);
   }
   switch (s.status) {
     case "starting":
-      return s.surface === "cloud" ? `Sending to ${CLOUD_LABEL[s.agent]} since ${clockLong(s.startedAt, now)}` : `Starting ${who} since ${clockLong(s.startedAt, now)}`;
+      return s.surface === "cloud" ? tx("Sending to {0} since {1}", [tx(CLOUD_LABEL[s.agent]), clockLong(s.startedAt, now, tx)]) : tx("Starting {0} since {1}", [who, clockLong(s.startedAt, now, tx)]);
     case "running": {
       const asked = s.reports[0]?.changes ? s.reports[0].changesAt : null;
-      if (asked) return `${who} is working ${isAnswers(s.reports[0].changes ?? "") ? "with your answers" : "on your changes"} since ${clockLong(asked, now)}`;
-      return s.surface === "terminal" ? `Running in ${who} since ${clockLong(s.startedAt, now)}` : `Running in ${place(s)} since ${clockLong(s.startedAt, now)}`;
+      if (asked) return tx("{0} is working {1} since {2}", [who, isAnswers(s.reports[0].changes ?? "") ? tx("with your answers") : tx("on your changes"), clockLong(asked, now, tx)]);
+      return s.surface === "terminal" ? tx("Running in {0} since {1}", [who, clockLong(s.startedAt, now, tx)]) : tx("Running in {0} since {1}", [place(s, tx), clockLong(s.startedAt, now, tx)]);
     }
     case "finished": {
-      const at = clockLong(s.finishedAt ?? s.startedAt, now);
+      const at = clockLong(s.finishedAt ?? s.startedAt, now, tx);
       const outcome = s.reports[0]?.outcome;
-      if (outcome === "blocked") return `${who} got stuck at ${at} · needs you`;
-      if (outcome === "partial") return `${who} handed back part of it at ${at} · waiting for you`;
-      return `${who} finished at ${at} · waiting for you`;
+      if (outcome === "blocked") return tx("{0} got stuck at {1} · needs you", [who, at]);
+      if (outcome === "partial") return tx("{0} handed back part of it at {1} · waiting for you", [who, at]);
+      return tx("{0} finished at {1} · waiting for you", [who, at]);
     }
     case "done":
-      return s.finishedAt ? `Done · ${who} finished at ${clockLong(s.finishedAt, now)}` : "Done";
+      return s.finishedAt ? tx("Done · {0} finished at {1}", [who, clockLong(s.finishedAt, now, tx)]) : tx("Done");
     case "closed":
-      return "Closed before the agent finished";
+      return tx("Closed before the agent finished");
     default:
-      return `Couldn't start: ${s.note ?? "unknown error"}`;
+      return tx("Couldn't start: {0}", [s.note ?? tx("unknown error")]);
   }
 }
 
 /** How long the agent worked: until now while it runs, else until it finished or its terminal closed. */
-function workedFor(s: SessionItem, now: number): string | null {
+function workedFor(s: SessionItem, now: number, tx: Translator = createTranslator("en")): string | null {
   if (s.status === "failed") return null;
   const end = isActive(s) ? now : s.finishedAt ?? s.endedAt ?? s.endAt;
   if (end === null) return null;
-  return duration((typeof end === "number" ? end : ms(end)) - ms(s.startedAt));
+  return duration((typeof end === "number" ? end : ms(end)) - ms(s.startedAt), tx);
 }
 
-function eventText(e: SessionEvent, agent: AgentId): string {
-  if (e.kind === "finished") return `${agentShort(agent)} marked it finished`;
-  return eventLine(e);
+function eventText(e: SessionEvent, agent: AgentId, tx: Translator = createTranslator("en")): string {
+  if (e.kind === "finished") return tx("{0} marked it finished", [agentShort(agent)]);
+  return eventLine(e, tx.language);
 }
 
 /** Current time, starting from the server's clock (no hydration mismatch) and ticking every 30 s. */
@@ -257,6 +259,7 @@ export function SessionsView({ groups, others, initialId, startable, attachable,
   attachable: AttachableTask[];
   now: string;
 }) {
+  const tx = useTranslation();
   const now = useNow(serverNow);
   const router = useRouter();
   const params = useSearchParams();
@@ -284,17 +287,17 @@ export function SessionsView({ groups, others, initialId, startable, attachable,
 
   return (
     <div className="flex min-w-0 flex-1">
-      <section aria-label="Sessions" className="@container flex min-w-0 flex-1 flex-col">
+      <section aria-label={tx("Sessions")} className="@container flex min-w-0 flex-1 flex-col">
         <div className="flex h-[52px] shrink-0 items-center gap-2.5 border-b border-line pl-5 pr-4">
           <Icon name="terminal" className="shrink-0 text-mut" />
-          <h1 className="text-[14px] font-semibold text-strong">Sessions</h1>
+          <h1 className="text-[14px] font-semibold text-strong">{tx("Sessions")}</h1>
           <span className="min-w-0 truncate text-mut2">
-            {others.length ? "Claude Code and Codex sessions on your computers" : "Claude Code and Codex sessions started from PacedMind"}
+            {others.length ? tx("Claude Code and Codex sessions on your computers") : tx("Claude Code and Codex sessions started from PacedMind")}
           </span>
           <span className="flex-1" />
           {startable.length > 0 && (
             <Menu align="right" width={340}
-              trigger={<Button disabled={pending}><Icon name="plus" size={13} />Start session</Button>}
+              trigger={<Button disabled={pending}><Icon name="plus" size={13} />{tx("Start session")}</Button>}
               items={startable.map((t) => ({
                 value: t.id,
                 label: <><span className="mr-2 font-mono text-[11px] text-mut2">{t.key}</span>{t.title}</>,
@@ -308,7 +311,7 @@ export function SessionsView({ groups, others, initialId, startable, attachable,
           <Asked tasks={[...startable, ...all.flatMap((s) => (s.task ? [s.task] : []))]} />
           {groups.map((g) => (
             <div key={g.id}>
-              <GroupHeader name={g.name} count={g.items.length} collapsed={!!collapsed[g.id]}
+              <GroupHeader name={tx(g.name)} count={g.items.length} collapsed={!!collapsed[g.id]}
                 onToggle={() => setCollapsed((c) => ({ ...c, [g.id]: !c[g.id] }))} />
               {!collapsed[g.id] && g.items.map((s) => (
                 <Row key={s.id} s={s} now={now} selected={s.id === sel} onSelect={() => select(s.id)} />
@@ -319,7 +322,7 @@ export function SessionsView({ groups, others, initialId, startable, attachable,
             const key = `other:${g.id}`;
             return (
               <div key={key}>
-                <GroupHeader name={`Not from PacedMind, on ${g.here ? `this computer (${g.computer})` : g.computer}${g.online ? "" : " · offline"}`}
+                <GroupHeader name={tx("Not from PacedMind, on {0}{1}", [g.here ? tx("this computer ({0})", [g.computer]) : g.computer, g.online ? "" : tx(" · offline")])}
                   count={g.sessions.length} collapsed={!!collapsed[key]} onToggle={() => setCollapsed((c) => ({ ...c, [key]: !c[key] }))} />
                 {!collapsed[key] && g.sessions.map((s) => (
                   <OtherRow key={`${s.harness}:${s.ref}`} s={s} now={now} computer={g.here ? "here" : g.id} tasks={attachable}
@@ -330,11 +333,9 @@ export function SessionsView({ groups, others, initialId, startable, attachable,
           })}
           {!all.length && !others.length && (
             <div className="flex flex-col items-center gap-3 px-8 py-24 text-center">
-              <div className="text-[14px] text-fg2">No sessions yet</div>
+              <div className="text-[14px] text-fg2">{tx("No sessions yet")}</div>
               <div className="max-w-sm text-[12.5px] leading-relaxed text-mut2">
-                Sessions appear here when you start one from a task. Open a task and choose Start with Claude Code or Codex,
-                or ask an agent in a chat to start one.
-              </div>
+                {tx("Sessions appear here when you start one from a task. Open a task and choose Start with Claude Code or Codex, or ask an agent in a chat to start one.")}</div>
             </div>
           )}
         </div>
@@ -364,6 +365,7 @@ function GroupHeader({ name, count, collapsed, onToggle }: { name: string; count
  * refused, expired or failed in the last ten minutes. One that started shows as a session instead.
  */
 function Asked({ tasks }: { tasks: { id: number; key: string; title: string }[] }) {
+  const tx = useTranslation();
   const { requests, computers } = useLaunchState();
   const now = useClock();
   const [, setClosed] = useState(0);
@@ -373,7 +375,7 @@ function Asked({ tasks }: { tasks: { id: number; key: string; title: string }[] 
     <div>
       <div className="flex h-[34px] items-center gap-2 border-b border-line bg-raised pl-5 pr-4 text-[12.5px] font-medium text-fg2">
         <span className="w-3" />
-        <span>Sent to your computers</span>
+        <span>{tx("Sent to your computers")}</span>
         <span className="font-normal text-mut2">{rows.length}</span>
       </div>
       {rows.map((r) => {
@@ -383,7 +385,7 @@ function Asked({ tasks }: { tasks: { id: number; key: string; title: string }[] 
           <div key={r.id} className="flex min-h-[42px] items-center gap-3 border-b border-hover px-5 py-1.5 @max-md:flex-wrap @max-md:gap-x-2 @max-md:gap-y-1 @max-md:py-2">
             <span className="w-3.5 shrink-0 @max-md:hidden" />
             <span className="w-[50px] shrink-0 font-mono text-[11.5px] text-mut2 @max-md:w-auto">{r.taskKey ?? "—"}</span>
-            <span className="min-w-0 flex-1 truncate text-fg3">{task?.title ?? "Deleted task"}</span>
+            <span className="min-w-0 flex-1 truncate text-fg3">{task?.title ?? tx("Deleted task")}</span>
             <span className="flex min-w-0 max-w-full @max-md:basis-full">
               <RequestChip request={r} now={now} computer={computers.find((d) => d.id === r.deviceId)} link={false}
                 onClose={() => { dismissRequest(r.id); setClosed((n) => n + 1); }} />
@@ -402,10 +404,10 @@ const OTHER_DOT: Record<OtherSessionState, { fill: string; ring: string }> = {
 };
 
 /** When a session PacedMind didn't start last did something, and what it's doing. */
-function otherMeta(s: OtherItem, now: number): string {
-  if (s.state === "working") return "Working now";
-  const at = clock(toDateTimeStr(new Date(s.activeAt)), now);
-  return s.state === "waiting" ? `Waiting for you · ${at}` : `Idle since ${at}`;
+function otherMeta(s: OtherItem, now: number, tx: Translator = createTranslator("en")): string {
+  if (s.state === "working") return tx("Working now");
+  const at = clock(toDateTimeStr(new Date(s.activeAt)), now, tx);
+  return s.state === "waiting" ? tx("Waiting for you · {0}", [at]) : tx("Idle since {0}", [at]);
 }
 
 /**
@@ -420,6 +422,7 @@ function AttachPicker({ s, computer, tasks, anchor, onClose, onAttached }: {
   onClose: () => void;
   onAttached: (sessionId: string) => void;
 }) {
+  const tx = useTranslation();
   const [query, setQuery] = useState("");
   const { run, pending } = useAction();
   const q = query.trim().toLowerCase();
@@ -442,12 +445,12 @@ function AttachPicker({ s, computer, tasks, anchor, onClose, onAttached }: {
   return (
     <Popover anchor={anchor} onClose={onClose} width={360}>
       <div className="flex flex-col gap-1">
-        <div className="px-2 pb-0.5 pt-1.5 text-[12px] font-medium text-fg3">Attach to a task</div>
-        <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Search tasks" placeholder="Search tasks"
+        <div className="px-2 pb-0.5 pt-1.5 text-[12px] font-medium text-fg3">{tx("Attach to a task")}</div>
+        <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} aria-label={tx("Search tasks")} placeholder={tx("Search tasks")}
           className="mx-1 h-[30px] rounded-md border border-line2 bg-input px-2.5 text-[12.5px] text-fg2 outline-none placeholder:text-dim focus:border-ctl" />
         {!q && (
-          <PopoverItem icon={<Icon name="plus" size={13} />} onClick={() => attach(null)} hint={s.project ?? "Inbox"}>
-            New task: {s.title || "Untitled session"}
+          <PopoverItem icon={<Icon name="plus" size={13} />} onClick={() => attach(null)} hint={s.project ?? tx("Inbox")}>
+            {tx("New task:")}{s.title || tx("Untitled session")}
           </PopoverItem>
         )}
         {list.map((t) => (
@@ -455,8 +458,8 @@ function AttachPicker({ s, computer, tasks, anchor, onClose, onAttached }: {
             <span className="mr-2 font-mono text-[11px] text-mut2">{t.key}</span>{t.title}
           </PopoverItem>
         ))}
-        {!list.length && q && <p className="px-2 py-1.5 text-[12px] text-mut2">No open tasks match.</p>}
-        {live && <p className="px-2 pb-1 pt-0.5 text-[11.5px] leading-[1.45] text-mut2">It&apos;s still going, so tasks with a running session aren&apos;t offered.</p>}
+        {!list.length && q && <p className="px-2 py-1.5 text-[12px] text-mut2">{tx("No open tasks match.")}</p>}
+        {live && <p className="px-2 pb-1 pt-0.5 text-[11.5px] leading-[1.45] text-mut2">{tx("It's still going, so tasks with a running session aren't offered.")}</p>}
       </div>
     </Popover>
   );
@@ -473,29 +476,30 @@ function OtherRow({ s, now, computer, tasks, onAttached }: {
   tasks: AttachableTask[];
   onAttached: (sessionId: string) => void;
 }) {
+  const tx = useTranslation();
   const d = OTHER_DOT[s.state];
-  const where = `${HARNESS_LABEL[s.harness]}${s.project ? ` · ${s.project}` : ""} · ${s.place}`;
+  const where = `${tx(HARNESS_LABEL[s.harness])}${s.project ? ` · ${s.project}` : ""} · ${s.place}`;
   const [anchor, setAnchor] = useState<Anchor | null>(null);
   return (
-    <div title={`${s.title || "Untitled session"}\n${where}`} className="group flex h-[42px] w-full items-center gap-3 border-b border-hover px-5">
+    <div title={`${s.title || tx("Untitled session")}\n${where}`} className="group flex h-[42px] w-full items-center gap-3 border-b border-hover px-5">
       <span className="flex w-3.5 shrink-0 justify-center">
         <span className="inline-block h-[7px] w-[7px] shrink-0 rounded-full border" style={{ background: d.fill, borderColor: d.ring }} />
       </span>
       <span className="w-[50px] shrink-0 @max-md:hidden" />
-      <span className={cx("min-w-0 flex-1 truncate", s.state === "idle" ? "text-mut2" : "text-fg")}>{s.title || "Untitled session"}</span>
+      <span className={cx("min-w-0 flex-1 truncate", s.state === "idle" ? "text-mut2" : "text-fg")}>{s.title || tx("Untitled session")}</span>
       <span className="hidden w-[110px] shrink-0 truncate text-[12px] text-mut2 @xl:block">{s.project ?? s.place}</span>
       <span className="hidden w-[110px] shrink-0 items-center gap-1.5 truncate text-[12px] text-mut2 @2xl:flex">
-        <AgentIcon agent={harnessAgent(s.harness)} size={12} className="text-mut" />{HARNESS_LABEL[s.harness]}
+        <AgentIcon agent={harnessAgent(s.harness)} size={12} className="text-mut" />{tx(HARNESS_LABEL[s.harness])}
       </span>
       <span className="flex w-9 shrink-0 justify-center @max-md:w-auto">
-        <button type="button" aria-label="Attach to a task" title="Attach to a task" onClick={(e) => setAnchor(anchorOf(e.currentTarget))}
+        <button type="button" aria-label={tx("Attach to a task")} title={tx("Attach to a task")} onClick={(e) => setAnchor(anchorOf(e.currentTarget))}
           className={cx("flex h-6 w-6 items-center justify-center rounded-md text-mut2 hover:bg-hover hover:text-fg2 focus-visible:opacity-100 pointer-coarse:opacity-100",
             anchor ? "opacity-100" : "opacity-0 group-hover:opacity-100")}>
           <Icon name="link" size={13} />
         </button>
       </span>
       <span className={cx("w-[150px] shrink-0 truncate text-right text-[12px] @max-md:w-[108px]", s.state === "waiting" ? "text-fg2" : "text-mut2")}>
-        {otherMeta(s, now)}
+        {otherMeta(s, now, tx)}
       </span>
       {anchor && <AttachPicker s={s} computer={computer} tasks={tasks} anchor={anchor} onClose={() => setAnchor(null)} onAttached={onAttached} />}
     </div>
@@ -509,6 +513,7 @@ function StateDot({ status, waits }: { status: SessionStatus; waits?: boolean })
 }
 
 function Row({ s, now, selected, onSelect }: { s: SessionItem; now: number; selected: boolean; onSelect: () => void }) {
+  const tx = useTranslation();
   const live = s.status === "finished" || isActive(s);
   const waits = !!waitsFor(s);
   const images = (s.reports[0]?.images.length ?? 0) + s.pending.length;
@@ -517,17 +522,17 @@ function Row({ s, now, selected, onSelect }: { s: SessionItem; now: number; sele
       className={cx("flex h-[42px] w-full items-center gap-3 border-b border-hover px-5 text-left", selected ? "bg-sel" : "hover:bg-hover")}>
       <span className="flex w-3.5 shrink-0 justify-center"><StateDot status={s.status} waits={waits} /></span>
       <span className="w-[50px] shrink-0 font-mono text-[11.5px] text-mut2 @max-md:hidden">{s.task?.key ?? "—"}</span>
-      <span className={cx("min-w-0 flex-1 truncate", live ? "text-fg" : "text-mut2")}>{s.task?.title ?? "Deleted task"}</span>
-      <span className="hidden w-[110px] shrink-0 truncate text-[12px] text-mut2 @xl:block">{s.project?.name ?? "No project"}</span>
-      <span title={`${AGENT_LABEL[s.agent]} in ${place(s)}`} className="hidden w-[110px] shrink-0 items-center gap-1.5 text-[12px] text-mut2 @2xl:flex">
-        <AgentIcon agent={s.agent} size={12} className="text-mut" />{AGENT_LABEL[s.agent]}
+      <span className={cx("min-w-0 flex-1 truncate", live ? "text-fg" : "text-mut2")}>{s.task?.title ?? tx("Deleted task")}</span>
+      <span className="hidden w-[110px] shrink-0 truncate text-[12px] text-mut2 @xl:block">{s.project?.name ?? tx("No project")}</span>
+      <span title={tx("{0} in {1}", [tx(AGENT_LABEL[s.agent]), place(s, tx)])} className="hidden w-[110px] shrink-0 items-center gap-1.5 text-[12px] text-mut2 @2xl:flex">
+        <AgentIcon agent={s.agent} size={12} className="text-mut" />{tx(AGENT_LABEL[s.agent])}
         <SurfaceIcon surface={s.surface} size={11} className="text-dim" />
       </span>
-      <span title={images ? `${images} image${images === 1 ? "" : "s"}` : undefined} className="flex w-9 shrink-0 items-center gap-1 text-[11.5px] text-mut2 @max-md:w-auto">
+      <span title={images ? tx("{0} image{1}", [images, images === 1 ? "" : "s"]) : undefined} className="flex w-9 shrink-0 items-center gap-1 text-[11.5px] text-mut2 @max-md:w-auto">
         {images > 0 && <><Icon name="image" size={13} />{images}</>}
       </span>
       <span className={cx("w-[150px] shrink-0 truncate text-right text-[12px] @max-md:w-[108px]", s.status === "finished" || waits ? "text-fg2" : "text-mut2")}>
-        {meta(s, now)}
+        {meta(s, now, tx)}
       </span>
     </button>
   );
@@ -538,6 +543,7 @@ function Detail({ s, now, chosen, onClose, agentFor }: {
   /** Who runs a task, when the page knows (for starting the next one on a computer). */
   agentFor: (taskId: number) => AgentId | undefined;
 }) {
+  const tx = useTranslation();
   const { run, pending } = useAction();
   const active = isActive(s);
   const [viewing, setViewing] = useState(0);
@@ -553,53 +559,53 @@ function Detail({ s, now, chosen, onClose, agentFor }: {
   const { computers } = useLaunchState();
   const elsewhere = !!s.deviceId && computers.some((d) => d.id === s.deviceId);
   const { desktop } = useExecution();
-  const on = s.device ?? "its computer";
+  const on = s.device ?? tx("its computer");
   const ref = { id: s.id, taskId: s.task?.id ?? 0, agent: s.agent, surface: s.surface, cliSessionId: s.cliSessionId };
-  const worked = workedFor(s, now);
+  const worked = workedFor(s, now, tx);
   // What the agent plans to do, while it works (report_progress).
   const plan = active ? planOf(s.events) : null;
   const allToday = s.events.every((e) => sameDay(parseLocal(e.at), new Date(now)));
-  const started = `${clockLong(s.startedAt, now)} ${
-    s.origin === "outside" ? "outside PacedMind" : "from PacedMind"
+  const started = `${clockLong(s.startedAt, now, tx)} ${
+    s.origin === "outside" ? tx("outside PacedMind") : tx("from PacedMind")
   }`;
   const props: [string, ReactNode, boolean][] = [
-    ["Agent", <span key="a" className="flex items-center gap-1.5"><AgentIcon agent={s.agent} size={12} className="text-fg3" />{AGENT_LABEL[s.agent]}</span>, false],
-    ["Runs in", <span key="r" className="flex items-center gap-1.5"><SurfaceIcon surface={s.surface} size={12} className="text-mut" />{placeTitle(s)}</span>, false],
-    ["Folder", s.folder ?? "—", true],
-    ["Branch", s.branch ?? "—", true],
-    ["Started", started, false],
+    [tx("Agent"), <span key="a" className="flex items-center gap-1.5"><AgentIcon agent={s.agent} size={12} className="text-fg3" />{tx(AGENT_LABEL[s.agent])}</span>, false],
+    [tx("Runs in"), <span key="r" className="flex items-center gap-1.5"><SurfaceIcon surface={s.surface} size={12} className="text-mut" />{placeTitle(s, tx)}</span>, false],
+    [tx("Folder"), s.folder ?? "—", true],
+    [tx("Branch"), s.branch ?? "—", true],
+    [tx("Started"), started, false],
   ];
-  if (worked) props.push(["Duration", worked, false]);
+  if (worked) props.push([tx("Duration"), worked, false]);
   // What its agent used, as its usage metrics said (usage-metrics.ts).
   if (s.usage) {
     const tokens = sessionTokens(s.usage);
-    if (s.usage.activeSeconds) props.push(["Working", fmtSpan(s.usage.activeSeconds * 1000), false]);
-    if (tokenTotal(tokens)) props.push(["Tokens", tokensLine(tokens), false]);
-    if (s.usage.models[0]) props.push(["Model", s.usage.models.join(", "), true]);
+    if (s.usage.activeSeconds) props.push([tx("Working"), fmtSpan(s.usage.activeSeconds * 1000), false]);
+    if (tokenTotal(tokens)) props.push([tx("Tokens"), tokensLine(tokens, tx.language), false]);
+    if (s.usage.models[0]) props.push([tx("Model"), s.usage.models.join(", "), true]);
   }
   // What it runs in, as its MCP client said when it connected, and what the agent says it runs with (start_task).
   const client = s.events.findLast((e) => e.kind === "connected");
-  if (client) props.push(["Client", client.text.replace(/^Connected from /, ""), false]);
+  if (client) props.push([tx("Client"), client.text.replace(/^Connected from /, ""), false]);
   const env = s.events.findLast((e) => e.kind === "environment");
-  if (env) props.push(["Agent says", env.text.replace(/^.+? says it /, ""), false]);
+  if (env) props.push([tx("Agent says"), env.text.replace(/^.+? says it /, ""), false]);
   // MCP servers it should have tools from but hasn't, as Claude Code's own record of the session says (session-mcp.ts).
   const missing = mcpProblemsOf(s.events);
-  if (missing) props.push(["Not available", missing, false]);
-  props.push(["Session", s.id, true]);
-  if (s.cliSessionId) props.push([s.agent === "codex" ? "Codex session" : "Claude session", s.cliSessionId, true]);
+  if (missing) props.push([tx("Not available"), missing, false]);
+  props.push([tx("Session"), s.id, true]);
+  if (s.cliSessionId) props.push([s.agent === "codex" ? tx("Codex session") : tx("Claude session"), s.cliSessionId, true]);
 
   return (
-    <aside aria-label="Session details" className={cx("flex w-[420px] shrink-0 flex-col border-l border-line",
+    <aside aria-label={tx("Session details")} className={cx("flex w-[420px] shrink-0 flex-col border-l border-line",
       "max-md:fixed max-md:inset-0 max-md:z-30 max-md:w-auto max-md:border-l-0 max-md:bg-panel", !chosen && "max-md:hidden")}>
       <div className="flex h-[52px] shrink-0 items-center gap-2 border-b border-line pl-6 pr-4 text-[12.5px] text-mut max-md:pl-5 max-md:pr-3">
-        <span className="truncate">{s.project?.name ?? "No project"}</span>
+        <span className="truncate">{s.project?.name ?? tx("No project")}</span>
         <span className="text-faint">›</span>
         <span className="font-mono text-[11.5px] text-mut2">{s.task?.key}</span>
         <span className="flex-1" />
         {s.href && (
-          <Link href={s.href} className="inline-flex h-7 shrink-0 items-center rounded-md px-2.5 text-fg3 hover:bg-hover">Open task</Link>
+          <Link href={s.href} className="inline-flex h-7 shrink-0 items-center rounded-md px-2.5 text-fg3 hover:bg-hover">{tx("Open task")}</Link>
         )}
-        <button type="button" aria-label="Back to sessions" onClick={onClose}
+        <button type="button" aria-label={tx("Back to sessions")} onClick={onClose}
           className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-mut hover:bg-hover hover:text-fg2 md:hidden">
           <Icon name="x" size={15} />
         </button>
@@ -607,18 +613,18 @@ function Detail({ s, now, chosen, onClose, agentFor }: {
 
       <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-6 py-[22px]">
         <div className="flex flex-col gap-2.5">
-          <h2 className="text-[20px] font-semibold leading-snug tracking-[-0.01em] text-strong">{s.task?.title ?? "Deleted task"}</h2>
+          <h2 className="text-[20px] font-semibold leading-snug tracking-[-0.01em] text-strong">{s.task?.title ?? tx("Deleted task")}</h2>
           <div className="flex items-center gap-2 text-[12.5px] text-fg2">
             <StateDot status={s.status} waits={!!waitsFor(s)} />
-            <span className="min-w-0 flex-1">{headline(s, now)}</span>
+            <span className="min-w-0 flex-1">{headline(s, now, tx)}</span>
             {s.reports.length > 1 && (
               <span className="flex shrink-0 items-center gap-0.5 text-[11.5px] text-mut2">
-                <button type="button" aria-label="Older report" disabled={viewing >= s.reports.length - 1} onClick={() => setViewing((v) => v + 1)}
+                <button type="button" aria-label={tx("Older report")} disabled={viewing >= s.reports.length - 1} onClick={() => setViewing((v) => v + 1)}
                   className="flex h-5 w-5 items-center justify-center rounded hover:bg-hover disabled:opacity-30">
                   <Icon name="chevronLeft" size={12} strokeWidth={2.2} />
                 </button>
-                <span className="tabular-nums">Report {s.reports.length - viewing} of {s.reports.length}</span>
-                <button type="button" aria-label="Newer report" disabled={viewing === 0} onClick={() => setViewing((v) => v - 1)}
+                <span className="tabular-nums">{tx("Report")}{" "}{s.reports.length - viewing} {" "}{tx("of")}{" "}{s.reports.length}</span>
+                <button type="button" aria-label={tx("Newer report")} disabled={viewing === 0} onClick={() => setViewing((v) => v - 1)}
                   className="flex h-5 w-5 items-center justify-center rounded hover:bg-hover disabled:opacity-30">
                   <Icon name="chevronRight" size={12} strokeWidth={2.2} />
                 </button>
@@ -636,7 +642,7 @@ function Detail({ s, now, chosen, onClose, agentFor }: {
 
         {s.pending.length > 0 && (
           <div className="flex flex-col gap-1.5">
-            <div className="text-[12px] font-medium text-fg3">Images so far</div>
+            <div className="text-[12px] font-medium text-fg3">{tx("Images so far")}</div>
             <Gallery images={s.pending} />
           </div>
         )}
@@ -652,15 +658,15 @@ function Detail({ s, now, chosen, onClose, agentFor }: {
         </dl>
 
         <div className="flex flex-col gap-2 border-t border-line pt-4">
-          <div className="text-[12.5px] text-fg2">What PacedMind heard</div>
+          <div className="text-[12.5px] text-fg2">{tx("What PacedMind heard")}</div>
           {s.events.length ? s.events.map((e) => (
             <div key={e.id} className="flex items-baseline gap-3 text-[12.5px]">
               <span className={cx("shrink-0 font-mono text-[11px] text-dim", allToday ? "w-[38px]" : "w-[92px]")}>
-                {format(parseLocal(e.at), allToday ? "HH:mm" : "d MMM HH:mm")}
+                {tx.date(parseLocal(e.at), allToday ? "HH:mm" : "d MMM HH:mm")}
               </span>
-              <span className="text-mut">{eventText(e, s.agent)}</span>
+              <span className="text-mut">{eventText(e, s.agent, tx)}</span>
             </div>
-          )) : <p className="text-[12.5px] text-mut2">Nothing yet.</p>}
+          )) : <p className="text-[12.5px] text-mut2">{tx("Nothing yet.")}</p>}
         </div>
       </div>
 
@@ -690,65 +696,61 @@ function Detail({ s, now, chosen, onClose, agentFor }: {
           {!active && s.status !== "failed" && s.surface === "terminal" && (
             <Button disabled={pending} onClick={() => run(() => resumeSessionOrAsk(ref))} className="min-w-0 max-w-full">
               <Icon name="terminal" size={13} strokeWidth={2} className="shrink-0" />
-              <span className="truncate">{elsewhere ? `Resume on ${on}` : "Resume in terminal"}</span>
+              <span className="truncate">{elsewhere ? tx("Resume on {0}", [on]) : tx("Resume in terminal")}</span>
             </Button>
           )}
           {/* Its terminal is gone (or its agent lost PacedMind and you closed it): the conversation goes on in a new one. */}
           {active && s.surface === "terminal" && desktop && !elsewhere && (
-            <Button disabled={pending} title="When its terminal is gone: the conversation goes on in a new one"
-              onClick={() => confirm(REOPEN_CONFIRM) && run(() => reopenSessionAction(s.id))} className="min-w-0 max-w-full">
-              <Icon name="terminal" size={13} strokeWidth={2} className="shrink-0" /><span className="truncate">Reopen in terminal</span>
+            <Button disabled={pending} title={tx("When its terminal is gone: the conversation goes on in a new one")}
+              onClick={() => confirm(tx(REOPEN_CONFIRM)) && run(() => reopenSessionAction(s.id))} className="min-w-0 max-w-full">
+              <Icon name="terminal" size={13} strokeWidth={2} className="shrink-0" /><span className="truncate">{tx("Reopen in terminal")}</span>
             </Button>
           )}
           {s.surface === "terminal" && s.agent === "claude" && s.cliSessionId && s.status !== "failed" && (
-            <Button disabled={pending} title="Moves this Claude Code conversation into the Claude app" onClick={() => run(() => resumeSessionOrAsk(ref, "desktop"))}
+            <Button disabled={pending} title={tx("Moves this Claude Code conversation into the Claude app")} onClick={() => run(() => resumeSessionOrAsk(ref, "desktop"))}
               className="min-w-0 max-w-full">
               <Icon name="appWindow" size={13} strokeWidth={2} className="shrink-0" />
-              <span className="truncate">{elsewhere ? `Continue in ${APP_LABEL.claude} on ${on}` : `Continue in ${APP_LABEL.claude}`}</span>
+              <span className="truncate">{elsewhere ? tx("Continue in {0} on {1}", [tx(APP_LABEL.claude), on]) : tx("Continue in {0}", [tx(APP_LABEL.claude)])}</span>
             </Button>
           )}
           {/* Showing an app's window only helps at that computer. */}
           {s.surface === "desktop" && s.status !== "failed" && !elsewhere && (
             <Button disabled={pending} onClick={() => run(() => resumeSessionOrAsk(ref))}>
-              <Icon name="appWindow" size={13} strokeWidth={2} />Open the {APP_LABEL[s.agent]}
+              <Icon name="appWindow" size={13} strokeWidth={2} />{tx("Open the")}{" "}{tx(APP_LABEL[s.agent])}
             </Button>
           )}
           {s.surface === "cloud" && s.url && (
             <a href={s.url} target="_blank" rel="noreferrer"
               className="inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-md border border-ctl px-2.5 text-[12.5px] text-fg2 hover:bg-hover">
-              <Icon name="cloud" size={13} strokeWidth={2} />{s.url.includes("/tasks/") ? "Open the task" : `Open ${CLOUD_LABEL[s.agent]}`}
+              <Icon name="cloud" size={13} strokeWidth={2} />{s.url.includes("/tasks/") ? tx("Open the task") : tx("Open {0}", [tx(CLOUD_LABEL[s.agent])])}
             </a>
           )}
           {/* The desktop app pulls it in here; the web app asks the computer that sent it. */}
           {s.surface === "cloud" && s.agent === "claude" && s.status !== "failed" && (
-            <Button disabled={pending} title="Pulls the cloud session and its branch into a terminal (claude --teleport)" onClick={() => run(() => resumeSessionOrAsk(ref))}>
-              <Icon name="terminal" size={13} strokeWidth={2} />Pull into terminal
-            </Button>
+            <Button disabled={pending} title={tx("Pulls the cloud session and its branch into a terminal (claude --teleport)")} onClick={() => run(() => resumeSessionOrAsk(ref))}>
+              <Icon name="terminal" size={13} strokeWidth={2} />{tx("Pull into terminal")}</Button>
           )}
           {active && s.surface !== "terminal" && (
-            <Button disabled={pending} title="The session can't always tell PacedMind itself. The task waits for your check."
+            <Button disabled={pending} title={tx("The session can't always tell PacedMind itself. The task waits for your check.")}
               onClick={() => run(() => finishSessionAction(s.id))}>
-              <Icon name="check" size={13} strokeWidth={2.2} />Mark finished
-            </Button>
+              <Icon name="check" size={13} strokeWidth={2.2} />{tx("Mark finished")}</Button>
           )}
           {questions.length > 0 && (canAsk || s.changesVia) && (
             <Button disabled={pending} onClick={() => setAnswering(true)}>
-              <Icon name="help" size={13} strokeWidth={2} />{questions.length === 1 ? "Answer its question" : "Answer its questions"}
+              <Icon name="help" size={13} strokeWidth={2} />{questions.length === 1 ? tx("Answer its question") : tx("Answer its questions")}
             </Button>
           )}
           {(canAsk || s.changesVia) && (
             <Button disabled={pending} onClick={() => (canAsk ? setAsking(true) : askForChangesOn(ref, s.changesVia!))}>
-              <Icon name="pen" size={13} strokeWidth={2} />Request changes
-            </Button>
+              <Icon name="pen" size={13} strokeWidth={2} />{tx("Request changes")}</Button>
           )}
           {active && (
-            <Button disabled={pending} onClick={() => confirm(`Close this session in PacedMind? ${s.surface === "terminal" ? "The terminal stays open." : "It keeps running where it is."}`) && run(() => closeSessionAction(s.id))}>
-              Close session
-            </Button>
+            <Button disabled={pending} onClick={() => confirm(tx("Close this session in PacedMind? {0}", [s.surface === "terminal" ? tx("The terminal stays open.") : tx("It keeps running where it is.")])) && run(() => closeSessionAction(s.id))}>
+              {tx("Close session")}</Button>
           )}
           <span className="flex-1" />
           {s.status === "finished" && (
-            <Button variant="primary" disabled={pending} onClick={() => run(() => markSessionDoneAction(s.id))}>Mark done</Button>
+            <Button variant="primary" disabled={pending} onClick={() => run(() => markSessionDoneAction(s.id))}>{tx("Mark done")}</Button>
           )}
         </div>
         {/* A request to resume this session or send it back, and what became of it. */}
@@ -757,13 +759,13 @@ function Detail({ s, now, chosen, onClose, agentFor }: {
           <div className="flex flex-col gap-2">
             <div className="flex items-center gap-2 text-[12px] text-mut2">
               <span className="min-w-0 flex-1 truncate">
-                Waits for it:{" "}
+                {tx("Waits for it:")}{" "}
                 <Link href={s.next.href} className="text-fg3 hover:text-strong">
                   <span className="font-mono text-[11px]">{s.next.key}</span> {s.next.title}
                 </Link>
               </span>
               {s.next.canStart && (
-                <Button size="sm" disabled={pending} onClick={() => run(() => startSessionOrAsk(s.next!.id, agentFor(s.next!.id)))}>Start session</Button>
+                <Button size="sm" disabled={pending} onClick={() => run(() => startSessionOrAsk(s.next!.id, agentFor(s.next!.id)))}>{tx("Start session")}</Button>
               )}
             </div>
             <RequestStatus match={(r) => r.kind === "start" && r.taskId === s.next!.id} />

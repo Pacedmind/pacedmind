@@ -1,4 +1,5 @@
 "use client";
+import { useTranslation } from "@/components/language";
 
 import Link from "next/link";
 import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
@@ -26,25 +27,27 @@ export function ViewHeader({ icon, title, subtitle, phoneSubtitleOnly, children 
 }
 
 export function PeriodNav({ unit, prev, next, today }: { unit: "month" | "week"; prev: string; next: string; today: string }) {
+  const tx = useTranslation();
   const arrow = "flex h-[26px] w-[26px] items-center justify-center rounded-md text-mut hover:bg-hover";
   return (
     <div className="ml-1.5 flex shrink-0 items-center gap-0.5 max-sm:ml-0">
-      <Link href={prev} aria-label={`Previous ${unit}`} title={`Previous ${unit}`} className={arrow}>
+      <Link href={prev} aria-label={tx("Previous {0}", [unit])} title={tx("Previous {0}", [unit])} className={arrow}>
         <Icon name="chevronLeft" size={14} strokeWidth={2} />
       </Link>
-      <Link href={next} aria-label={`Next ${unit}`} title={`Next ${unit}`} className={arrow}>
+      <Link href={next} aria-label={tx("Next {0}", [unit])} title={tx("Next {0}", [unit])} className={arrow}>
         <Icon name="chevronRight" size={14} strokeWidth={2} />
       </Link>
-      <Link href={today} className="flex h-[26px] items-center rounded-md border border-line2 px-[9px] text-[12.5px] text-fg3 hover:bg-hover">Today</Link>
+      <Link href={today} className="flex h-[26px] items-center rounded-md border border-line2 px-[9px] text-[12.5px] text-fg3 hover:bg-hover">{tx("Today")}</Link>
     </div>
   );
 }
 
 /** Looks like Segmented, but each option is a link to the other calendar view. */
 export function ViewSwitch({ value, month, week }: { value: "month" | "week"; month: string; week: string }) {
-  const options = [{ value: "month", label: "Month", href: month }, { value: "week", label: "Week", href: week }] as const;
+  const tx = useTranslation();
+  const options = [{ value: "month", label: tx("Month"), href: month }, { value: "week", label: tx("Week"), href: week }] as const;
   return (
-    <nav aria-label="Calendar view" className="flex h-7 shrink-0 items-center gap-0.5 rounded-[7px] border border-line bg-input p-0.5">
+    <nav aria-label={tx("Calendar view")} className="flex h-7 shrink-0 items-center gap-0.5 rounded-[7px] border border-line bg-input p-0.5">
       {options.map((o) => (
         <Link key={o.value} href={o.href} aria-current={o.value === value ? "page" : undefined}
           className={cx("flex h-[22px] items-center rounded-[5px] px-2.5 text-[12px] max-sm:px-2", o.value === value ? "bg-sel text-strong" : "text-mut hover:text-fg2")}>
@@ -120,8 +123,9 @@ export function useAddOnClick() {
  * keyboard. A phone has no hover, so there a tap on the day does the same.
  */
 export function AddButton({ label, shown, onAdd, className }: { label: string; shown?: boolean; onAdd: () => void; className?: string }) {
+  const tx = useTranslation();
   return (
-    <button type="button" aria-label={`New task on ${label}`} title={`New task on ${label}`} onClick={onAdd}
+    <button type="button" aria-label={tx("New task on {0}", [label])} title={tx("New task on {0}", [label])} onClick={onAdd}
       className={cx("flex h-5 w-5 shrink-0 items-center justify-center rounded text-mut2 hover:bg-hover hover:text-fg2 focus-visible:opacity-100",
         shown ? "opacity-100" : "opacity-0 group-hover/day:opacity-100", className)}>
       <Icon name="plus" size={12} strokeWidth={2.2} />

@@ -1,4 +1,5 @@
 "use client";
+import { useTranslation } from "@/components/language";
 
 import { clsx } from "clsx";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useTransition, type ReactNode } from "react";
@@ -160,6 +161,7 @@ export function toast(text: string, kind: Toast["kind"] = "info") {
 }
 
 export function Toaster() {
+  const tx = useTranslation();
   const [items, setItems] = useState<Toast[]>([]);
   useEffect(() => {
     let n = 0;
@@ -180,7 +182,7 @@ export function Toaster() {
           className={cx("pointer-events-auto flex max-w-sm items-center gap-2.5 rounded-lg border bg-raised px-3.5 py-2.5 text-[12.5px] shadow-[var(--shadow-popover)]",
             t.kind === "error" ? "border-danger-line text-danger" : "border-line2 text-fg2")}>
           <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: t.kind === "error" ? "var(--color-danger)" : "var(--color-accent)" }} />
-          {t.text}
+          {tx.generated(t.text)}
         </div>
       ))}
     </div>
@@ -189,18 +191,19 @@ export function Toaster() {
 
 /** Runs a server action in a transition and shows its message or error as a toast. */
 export function useAction() {
+  const tx = useTranslation();
   const [pending, start] = useTransition();
   const run = useCallback(<R extends { ok?: boolean; error?: string; message?: string } | void>(fn: () => Promise<R>, success?: string) => {
     start(async () => {
       try {
         const r = await fn();
-        if (r && r.ok === false) toast(r.error ?? "Something went wrong", "error");
+        if (r && r.ok === false) toast(r.error ?? tx("Something went wrong"), "error");
         else if (r && r.message) toast(r.message);
         else if (success) toast(success);
       } catch (e) {
-        toast(failedMessage(e instanceof Error ? e.message : "Something went wrong"), "error");
+        toast(failedMessage(e instanceof Error ? e.message : tx("Something went wrong")), "error");
       }
     });
-  }, []);
+  }, [tx]);
   return { pending, run };
 }

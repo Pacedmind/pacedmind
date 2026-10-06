@@ -1,4 +1,5 @@
 "use client";
+import { useTranslation } from "@/components/language";
 
 import { useEffect, type ReactNode } from "react";
 import { createPortal } from "react-dom";
@@ -13,6 +14,7 @@ export function ConfirmDialog({ title, children, confirmLabel, danger, onConfirm
   onConfirm: () => void;
   onCancel: () => void;
 }) {
+  const tx = useTranslation();
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onCancel();
@@ -27,7 +29,7 @@ export function ConfirmDialog({ title, children, confirmLabel, danger, onConfirm
         <h2 className="text-[15px] font-semibold text-strong">{title}</h2>
         <div className="text-[13px] leading-relaxed text-mut">{children}</div>
         <div className="mt-2 flex justify-end gap-2">
-          <Button variant="ghost" onClick={onCancel}>Cancel</Button>
+          <Button variant="ghost" onClick={onCancel}>{tx("Cancel")}</Button>
           <Button onClick={onConfirm} autoFocus
             className={danger ? "border-danger-line bg-danger-bg text-danger-fg hover:bg-danger-hover" : "border-transparent bg-accent-strong text-white hover:brightness-110"}>
             {confirmLabel}

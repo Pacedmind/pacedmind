@@ -1,4 +1,6 @@
 "use client";
+import { useTranslation } from "@/components/language";
+import { createTranslator, type Translator } from "@/lib/i18n";
 
 import Link from "next/link";
 import { useEffect, useState, useSyncExternalStore } from "react";
@@ -131,28 +133,28 @@ export function latestRequest(requests: LaunchRequestView[], match: (r: LaunchRe
 const clock = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
 /** What a request's chip says, by its kind and what became of it. */
-export function requestText(r: LaunchRequestView, now: number, computer?: Device): { text: string; title: string } {
-  const on = r.deviceName ?? "your computer";
-  const asked = `Asked ${clock(r.createdAt)}`;
+export function requestText(r: LaunchRequestView, now: number, computer?: Device, tx: Translator = createTranslator("en")): { text: string; title: string } {
+  const on = r.deviceName ?? tx("your computer");
+  const asked = tx("Asked {0}", [clock(r.createdAt)]);
   switch (statusAt(r, now)) {
     case "pending": {
-      const what = r.kind === "resume" ? " to resume it" : r.kind === "changes" ? " to take your changes" : "";
-      const away = computer && !deviceOnline(computer, now) ? " (offline)" : "";
-      return { text: `Waiting for ${on}${what}…${away}`, title: `${asked}. It waits there until ${clock(r.expiresAt)}.` };
+      const what = r.kind === "resume" ? tx(" to resume it") : r.kind === "changes" ? tx(" to take your changes") : "";
+      const away = computer && !deviceOnline(computer, now) ? tx(" (offline)") : "";
+      return { text: tx("Waiting for {0}{1}…{2}", [on, what, away]), title: tx("{0}. It waits there until {1}.", [asked, clock(r.expiresAt)]) };
     }
     case "launched":
       return {
-        text: r.kind === "resume" ? `Resumed on ${on}` : r.kind === "changes" ? `Changes sent to ${on}` : `Started on ${on}`,
-        title: `${asked}, done ${clock(r.decidedAt ?? r.createdAt)}.`,
+        text: r.kind === "resume" ? tx("Resumed on {0}", [on]) : r.kind === "changes" ? tx("Changes sent to {0}", [on]) : tx("Started on {0}", [on]),
+        title: tx("{0}, done {1}.", [asked, clock(r.decidedAt ?? r.createdAt)]),
       };
     case "denied":
-      return { text: `Refused by ${on}`, title: r.note ?? "Refused on the computer" };
+      return { text: tx("Refused by {0}", [on]), title: r.note ? tx.generated(r.note) : tx("Refused on the computer") };
     case "expired":
-      return { text: `Expired: ${on} didn't answer`, title: `${asked}. A request waits 10 minutes.` };
+      return { text: tx("Expired: {0} didn't answer", [on]), title: tx("{0}. A request waits 10 minutes.", [asked]) };
     case "canceled":
-      return { text: `Canceled: ${on} was signed out`, title: asked };
+      return { text: tx("Canceled: {0} was signed out", [on]), title: asked };
     default:
-      return { text: `Failed: ${r.note ?? "unknown error"}`, title: asked };
+      return { text: tx("Failed: {0}", [r.note ?? tx("unknown error")]), title: asked };
   }
 }
 
@@ -203,8 +205,9 @@ export function RequestChip({ request: r, now, computer, link = true, className,
   className?: string;
   onClose?: () => void;
 }) {
+  const tx = useTranslation();
   const status = statusAt(r, now);
-  const { text, title } = requestText(r, now, computer);
+  const { text, title } = requestText(r, now, computer, tx);
   return (
     // role=status: a screen reader hears it change from waiting to what the computer did.
     <div role="status" title={title}
@@ -217,16 +220,14 @@ export function RequestChip({ request: r, now, computer, link = true, className,
       {status === "expired" && r.kind === "start" && (
         <button type="button" onClick={() => tryAnotherComputer(r)}
           className="shrink-0 text-fg2 underline decoration-line-strong underline-offset-2 hover:text-strong">
-          Try another computer
-        </button>
+          {tx("Try another computer")}</button>
       )}
       {status === "launched" && link && r.sessionId && (
         <Link href={`/sessions?s=${r.sessionId}`} className="shrink-0 text-fg2 underline decoration-line-strong underline-offset-2 hover:text-strong">
-          Open session
-        </Link>
+          {tx("Open session")}</Link>
       )}
       {onClose && status !== "pending" && (
-        <button type="button" aria-label="Dismiss" onClick={onClose}
+        <button type="button" aria-label={tx("Dismiss")} onClick={onClose}
           className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-mut2 hover:bg-hover hover:text-fg2 pointer-coarse:h-7 pointer-coarse:w-7">
           <Icon name="x" size={11} strokeWidth={2.2} />
         </button>

@@ -1,3 +1,4 @@
+import { getTranslation } from "@/server/i18n";
 import { cookies, headers } from "next/headers";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -40,6 +41,7 @@ export const dynamic = "force-dynamic";
  * data once "Continue without an account" was chosen on the sign-in screen, and until then the screen itself.
  */
 export default async function AppLayout({ children }: LayoutProps<"/">) {
+  const tx = await getTranslation();
   await connection();
   const nativeCompanion = MODE === "web" && isNativeCompanion((await headers()).get("user-agent"));
   const state = await authState();
@@ -90,8 +92,8 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
     <div className="flex h-full flex-col">
       <AppHeader email={user?.email ?? null} />
       {state && !state.mfaEnabled && <div role="status" className="flex flex-wrap items-center justify-between gap-2 border-b border-line bg-panel px-4 py-2 text-[12px] text-fg3">
-        <span>Your planner and MCP are ready. Set up two-factor sign-in when you want to start sessions on your computers.</span>
-        <Link href="/login/setup?next=%2Fsettings%2Fsecurity" className="shrink-0 text-fg2 underline underline-offset-2">Set up 2FA</Link>
+        <span>{tx("Your planner and MCP are ready. Set up two-factor sign-in when you want to start sessions on your computers.")}</span>
+        <Link href="/login/setup?next=%2Fsettings%2Fsecurity" className="shrink-0 text-fg2 underline underline-offset-2">{tx("Set up 2FA")}</Link>
       </div>}
       {plan?.enforced && <BillingBanner plan={plan} desktop={MODE === "desktop"} nativeCompanion={nativeCompanion} />}
       <div className="flex min-h-0 flex-1 overflow-hidden">

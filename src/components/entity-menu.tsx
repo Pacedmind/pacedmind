@@ -1,11 +1,14 @@
 "use client";
+import { useTranslation } from "@/components/language";
+import { createTranslator, type Translator } from "@/lib/i18n";
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   deleteAreaAction, deleteProjectAction, mergeProjectsAction, setAreaPictureAction, updateAreaAction, updateProjectAction,
 } from "@/app/actions";
-import { AREA_ICON_CATEGORIES, areaIconLabel, findAreaIcons, type AreaIcon } from "@/lib/area-icons";
+import { areaIconLabelFor, findAreaIconsFor } from "@/lib/area-icon-localization";
+import { AREA_ICON_CATEGORIES,  type AreaIcon } from "@/lib/area-icons";
 import { AREA_PICTURE_MAX, AREA_PICTURE_PX } from "@/lib/area-picture";
 import { PALETTE, projectColor } from "@/lib/colors";
 import type { Area, Project, Usage } from "@/lib/types";
@@ -44,6 +47,7 @@ export function ColorSwatches({ value, onPick }: { value: string | null; onPick:
  * picks the first). Remove puts the area's dot back. The current icon is scrolled into view when the menu opens.
  */
 export function AreaIconPicker({ area, onPick }: { area: Pick<Area, "color" | "icon">; onPick: (icon: AreaIcon | null) => void }) {
+  const tx = useTranslation();
   const [query, setQuery] = useState("");
   const list = useRef<HTMLDivElement>(null);
   const current = useRef<HTMLButtonElement>(null);
@@ -51,11 +55,11 @@ export function AreaIconPicker({ area, onPick }: { area: Pick<Area, "color" | "i
   useEffect(() => {
     if (list.current && current.current) list.current.scrollTop = current.current.offsetTop - 64;
   }, []);
-  const found = query.trim() ? findAreaIcons(query) : null;
+  const found = query.trim() ? findAreaIconsFor(query, tx.language) : null;
   const grid = (icons: readonly AreaIcon[]) => (
     <div className="grid grid-cols-8 gap-0.5">
       {icons.map((icon) => (
-        <button key={icon} ref={area.icon === icon ? current : undefined} type="button" title={areaIconLabel(icon)} aria-label={areaIconLabel(icon)}
+        <button key={icon} ref={area.icon === icon ? current : undefined} type="button" title={areaIconLabelFor(icon, tx.language)} aria-label={areaIconLabelFor(icon, tx.language)}
           aria-pressed={area.icon === icon} onClick={() => onPick(icon)}
           className={cx("flex h-[26px] items-center justify-center rounded-[5px] border", area.icon === icon ? "border-strong" : "border-transparent hover:border-line-strong")}>
           <AreaIconSvg icon={icon} color={area.color} size={15} />
@@ -66,23 +70,22 @@ export function AreaIconPicker({ area, onPick }: { area: Pick<Area, "color" | "i
   return (
     <>
       <div className="flex items-center justify-between pr-1.5">
-        <PopoverLabel>Icon</PopoverLabel>
+        <PopoverLabel>{tx("Icon")}</PopoverLabel>
         {area.icon && (
-          <button type="button" title="Show the area's dot instead" onClick={() => onPick(null)} className="rounded px-1 pt-0.5 text-[11.5px] text-mut2 hover:text-fg2">
-            Remove
-          </button>
+          <button type="button" title={tx("Show the area's dot instead")} onClick={() => onPick(null)} className="rounded px-1 pt-0.5 text-[11.5px] text-mut2 hover:text-fg2">
+            {tx("Remove")}</button>
         )}
       </div>
       <div className="px-1.5 pb-1.5">
-        <input value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Search icons" placeholder="Search icons"
+        <input value={query} onChange={(e) => setQuery(e.target.value)} aria-label={tx("Search icons")} placeholder={tx("Search icons")}
           onKeyDown={(e) => { if (e.key === "Enter" && found?.length) { e.preventDefault(); onPick(found[0]); } }}
           className="mb-1 h-7 w-full rounded-md border border-line2 bg-input px-2 text-[12.5px] text-fg2 outline-none placeholder:text-dim focus:border-ctl" />
         <div ref={list} className="relative max-h-[204px] overflow-y-auto">
           {found
-            ? found.length ? grid(found) : <p className="px-1 py-2 text-[12px] text-mut2">No icons match.</p>
+            ? found.length ? grid(found) : <p className="px-1 py-2 text-[12px] text-mut2">{tx("No icons match.")}</p>
             : AREA_ICON_CATEGORIES.map((c) => (
               <div key={c.name}>
-                <div className="px-0.5 pb-0.5 pt-1.5 text-[11px] text-mut2">{c.name}</div>
+                <div className="px-0.5 pb-0.5 pt-1.5 text-[11px] text-mut2">{tx(c.name)}</div>
                 {grid(c.icons)}
               </div>
             ))}
@@ -97,14 +100,14 @@ export function AreaIconPicker({ area, onPick }: { area: Pick<Area, "color" | "i
  * with the whole image fitted in and the rest left clear. Any image the browser shows works, SVG too, and only the
  * PNG leaves the browser. A picture with too much detail for the size limit is tried smaller.
  */
-async function areaPictureFrom(file: File): Promise<string> {
-  if (!file.type.startsWith("image/")) throw new Error("Pick a picture: PNG, JPEG, WebP, GIF or SVG.");
-  if (file.size > 20_000_000) throw new Error("That file is over 20 MB. Pick a smaller picture.");
+async function areaPictureFrom(file: File, tx: Translator = createTranslator("en")): Promise<string> {
+  if (!file.type.startsWith("image/")) throw new Error(tx("Pick a picture: PNG, JPEG, WebP, GIF or SVG."));
+  if (file.size > 20_000_000) throw new Error(tx("That file is over 20 MB. Pick a smaller picture."));
   const url = URL.createObjectURL(file);
   try {
     const img = new Image();
     img.src = url;
-    await img.decode().catch(() => { throw new Error("That picture couldn't be read."); });
+    await img.decode().catch(() => { throw new Error(tx("That picture couldn't be read.")); });
     // An SVG without a size of its own reports none: draw it at the largest size.
     const [w, h] = img.naturalWidth && img.naturalHeight ? [img.naturalWidth, img.naturalHeight] : [AREA_PICTURE_PX, AREA_PICTURE_PX];
     // A small image, such as a favicon, keeps its size rather than turning blurry.
@@ -120,7 +123,7 @@ async function areaPictureFrom(file: File): Promise<string> {
       const png = canvas.toDataURL("image/png").slice("data:image/png;base64,".length);
       if (png.length <= AREA_PICTURE_MAX) return png;
     }
-    throw new Error("That picture has too much detail to keep small. Try a simpler logo.");
+    throw new Error(tx("That picture has too much detail to keep small. Try a simpler logo."));
   } finally {
     URL.revokeObjectURL(url);
   }
@@ -131,15 +134,16 @@ async function areaPictureFrom(file: File): Promise<string> {
  * browser makes it small (areaPictureFrom). Remove puts the area's dot back.
  */
 export function AreaPicturePicker({ area, onPick }: { area: Pick<Area, "id" | "picture">; onPick: (picture: string | null) => void }) {
+  const tx = useTranslation();
   const input = useRef<HTMLInputElement>(null);
   const [reading, setReading] = useState(false);
   const choose = async (file: File | undefined) => {
     if (!file) return;
     setReading(true);
     try {
-      onPick(await areaPictureFrom(file));
+      onPick(await areaPictureFrom(file, tx));
     } catch (e) {
-      toast(e instanceof Error ? e.message : "That picture couldn't be read.", "error");
+      toast(e instanceof Error ? e.message : tx("That picture couldn't be read."), "error");
     } finally {
       setReading(false);
       if (input.current) input.current.value = "";
@@ -148,17 +152,16 @@ export function AreaPicturePicker({ area, onPick }: { area: Pick<Area, "id" | "p
   return (
     <>
       <div className="flex items-center justify-between pr-1.5">
-        <PopoverLabel>Picture</PopoverLabel>
+        <PopoverLabel>{tx("Picture")}</PopoverLabel>
         {area.picture && (
-          <button type="button" title="Show the area's dot instead" onClick={() => onPick(null)} className="rounded px-1 pt-0.5 text-[11.5px] text-mut2 hover:text-fg2">
-            Remove
-          </button>
+          <button type="button" title={tx("Show the area's dot instead")} onClick={() => onPick(null)} className="rounded px-1 pt-0.5 text-[11.5px] text-mut2 hover:text-fg2">
+            {tx("Remove")}</button>
         )}
       </div>
       <PopoverItem icon={area.picture ? <AreaPicture area={area} size={14} /> : <Icon name="image" size={14} />} onClick={() => input.current?.click()}>
-        {reading ? "Reading the picture…" : area.picture ? "Replace the picture…" : "Use a picture, such as a logo…"}
+        {reading ? tx("Reading the picture…") : area.picture ? tx("Replace the picture…") : tx("Use a picture, such as a logo…")}
       </PopoverItem>
-      <input ref={input} type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" hidden aria-label="Picture file"
+      <input ref={input} type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" hidden aria-label={tx("Picture file")}
         onChange={(e) => choose(e.target.files?.[0])} />
     </>
   );
@@ -219,44 +222,45 @@ export function AreaMenu({ area, anchor, usage, desktop, onClose, onRename, onNe
   desktop: boolean;
   onMoveUp?: () => void; onMoveDown?: () => void;
 }) {
+  const tx = useTranslation();
   const { run } = useAction();
   const [confirm, setConfirm] = useState(false);
   const [workspace, setWorkspace] = useState(false);
   const u = usage.areas[area.id] ?? { projects: 0, tasks: 0, open: 0 };
   if (confirm) {
     return (
-      <ConfirmDialog title={`Delete ${area.name}?`} confirmLabel="Delete area" danger
+      <ConfirmDialog title={tx("Delete {0}?", [area.name])} confirmLabel={tx("Delete area")} danger
         onCancel={onClose} onConfirm={() => { run(() => deleteAreaAction(area.id)); onClose(); }}>
-        {u.projects ? `${u.projects === 1 ? "Its project" : `Its ${u.projects} projects`} will be deleted too. ` : ""}
-        {u.tasks ? `${plural(u.tasks, "task stays", "tasks stay")} and ${u.tasks === 1 ? "moves" : "move"} to the Inbox.` : "It has no tasks."}
+        {u.projects ? tx("{0} will be deleted too. ", [u.projects === 1 ? tx("Its project") : tx("Its {0} projects", [u.projects])]) : ""}
+        {u.tasks ? tx("{0} and {1} to the Inbox.", [plural(u.tasks, tx("task stays"), tx("tasks stay")), tx(u.tasks === 1 ? "moves" : "move")]) : tx("It has no tasks.")}
       </ConfirmDialog>
     );
   }
   return (
     <Popover anchor={anchor} onClose={onClose} width={MENU_WIDTH}>
       <PopoverLabel>{area.name} <span className="font-mono">{area.key}</span></PopoverLabel>
-      <PopoverItem icon={<Icon name="pen" size={14} />} onClick={() => { onClose(); onRename(); }}>Rename</PopoverItem>
-      <PopoverItem icon={<Icon name="plus" size={14} />} onClick={() => { onClose(); onNewProject(); }}>New project</PopoverItem>
-      <PopoverLink icon={<Icon name="layers" size={14} />} href={`/area/${area.id}`} onClick={onClose}>Open tasks</PopoverLink>
+      <PopoverItem icon={<Icon name="pen" size={14} />} onClick={() => { onClose(); onRename(); }}>{tx("Rename")}</PopoverItem>
+      <PopoverItem icon={<Icon name="plus" size={14} />} onClick={() => { onClose(); onNewProject(); }}>{tx("New project")}</PopoverItem>
+      <PopoverLink icon={<Icon name="layers" size={14} />} href={`/area/${area.id}`} onClick={onClose}>{tx("Open tasks")}</PopoverLink>
       {desktop && <>
         <PopoverItem icon={<Icon name="folder" size={14} />} onClick={() => setWorkspace((v) => !v)}
-          hint={<Icon name={workspace ? "chevronDown" : "chevronRight"} size={12} />}>Workspace…</PopoverItem>
+          hint={<Icon name={workspace ? "chevronDown" : "chevronRight"} size={12} />}>{tx("Workspace…")}</PopoverItem>
         {workspace && <div className="px-3 py-2"><AreaWorkspace key={area.folder ?? ""} area={area} onSaved={onClose} /></div>}
       </>}
       {(onMoveUp || onMoveDown) && <>
         <PopoverSeparator />
-        {onMoveUp && <PopoverItem icon={<Icon name="arrowRight" size={14} className="-rotate-90" />} onClick={() => { onClose(); onMoveUp(); }}>Move up</PopoverItem>}
-        {onMoveDown && <PopoverItem icon={<Icon name="arrowRight" size={14} className="rotate-90" />} onClick={() => { onClose(); onMoveDown(); }}>Move down</PopoverItem>}
+        {onMoveUp && <PopoverItem icon={<Icon name="arrowRight" size={14} className="-rotate-90" />} onClick={() => { onClose(); onMoveUp(); }}>{tx("Move up")}</PopoverItem>}
+        {onMoveDown && <PopoverItem icon={<Icon name="arrowRight" size={14} className="rotate-90" />} onClick={() => { onClose(); onMoveDown(); }}>{tx("Move down")}</PopoverItem>}
       </>}
       <PopoverSeparator />
-      <PopoverLabel>Color</PopoverLabel>
+      <PopoverLabel>{tx("Color")}</PopoverLabel>
       <ColorSwatches value={area.color} onPick={(c) => run(() => updateAreaAction(area.id, { color: c }))} />
       <PopoverSeparator />
       <AreaIconPicker area={area} onPick={(icon) => run(() => updateAreaAction(area.id, { icon }))} />
       <PopoverSeparator />
       <AreaPicturePicker area={area} onPick={(picture) => run(() => setAreaPictureAction(area.id, picture))} />
       <PopoverSeparator />
-      <PopoverItem icon={<Icon name="trash" size={14} />} danger onClick={() => setConfirm(true)}>Delete area…</PopoverItem>
+      <PopoverItem icon={<Icon name="trash" size={14} />} danger onClick={() => setConfirm(true)}>{tx("Delete area…")}</PopoverItem>
     </Popover>
   );
 }
@@ -275,12 +279,13 @@ function MergeTargets({ targets, areas, onPick }: { targets: Project[]; areas: A
 function MergeConfirm({ from, into, usage, onClose, onMerged }: {
   from: Project[]; into: Project; usage: Usage; onClose: () => void; onMerged?: () => void;
 }) {
+  const tx = useTranslation();
   const { run } = useAction();
   const router = useRouter();
   const tasks = from.reduce((n, p) => n + (usage.projects[p.id]?.tasks ?? 0), 0);
   const one = from.length === 1;
   return (
-    <ConfirmDialog title={`Merge ${one ? from[0].name : plural(from.length, "project", "projects")} into ${into.name}?`} confirmLabel="Merge projects"
+    <ConfirmDialog title={tx("Merge {0} into {1}?", [one ? from[0].name : tx.count(from.length, "project"), into.name])} confirmLabel={tx("Merge projects")}
       onCancel={onClose}
       onConfirm={() => {
         run(async () => {
@@ -292,8 +297,8 @@ function MergeConfirm({ from, into, usage, onClose, onMerged }: {
         onClose();
       }}>
       {one ? "" : `${names(from)}. `}
-      {tasks ? `${plural(tasks, "task moves", "tasks move")} to ${into.name}, after its own, and ${tasks === 1 ? "keeps its key" : "keep their keys"}. ` : ""}
-      {one ? `${from[0].name} is then deleted.` : "They're then deleted."} If {into.name} has no folder on this computer, it gets {one ? "its" : "theirs"}.
+      {tasks ? tx("{0} to {1}, after its own, and {2}. ", [plural(tasks, tx("task moves"), tx("tasks move")), into.name, tasks === 1 ? tx("keeps its key") : tx("keep their keys")]) : ""}
+      {one ? tx("{0} is then deleted.", [from[0].name]) : tx("They're then deleted.")} {" "}{tx("If")}{" "}{into.name} {" "}{tx("has no folder on this computer, it gets")}{" "}{one ? "its" : "theirs"}.
     </ConfirmDialog>
   );
 }
@@ -301,6 +306,7 @@ function MergeConfirm({ from, into, usage, onClose, onMerged }: {
 export function ProjectMenu({ project, projects, areas, anchor, usage, onClose, onRename }: {
   project: Project; projects: Project[]; areas: Area[]; anchor: Anchor; usage: Usage; onClose: () => void; onRename: () => void;
 }) {
+  const tx = useTranslation();
   const { run } = useAction();
   const [confirm, setConfirm] = useState(false);
   const [moving, setMoving] = useState(false);
@@ -311,11 +317,10 @@ export function ProjectMenu({ project, projects, areas, anchor, usage, onClose, 
   if (into) return <MergeConfirm from={[project]} into={into} usage={usage} onClose={onClose} />;
   if (confirm) {
     return (
-      <ConfirmDialog title={`Delete ${project.name}?`} confirmLabel="Delete project" danger
+      <ConfirmDialog title={tx("Delete {0}?", [project.name])} confirmLabel={tx("Delete project")} danger
         onCancel={onClose} onConfirm={() => { run(() => deleteProjectAction(project.id)); onClose(); }}>
-        {u.tasks ? `${plural(u.tasks, "task stays", "tasks stay")} in ${area?.name ?? "the area"} without a project. ` : "It has no tasks. "}
-        Its folder and agent settings are removed.
-      </ConfirmDialog>
+        {u.tasks ? tx("{0} in {1} without a project. ", [plural(u.tasks, tx("task stays"), tx("tasks stay")), area?.name ?? tx("the area")]) : tx("It has no tasks. ")}
+        {tx("Its folder and agent settings are removed.")}</ConfirmDialog>
     );
   }
   const others = areas.filter((a) => a.id !== project.areaId);
@@ -323,26 +328,25 @@ export function ProjectMenu({ project, projects, areas, anchor, usage, onClose, 
   return (
     <Popover anchor={anchor} onClose={onClose} width={MENU_WIDTH}>
       <PopoverLabel>{project.name}</PopoverLabel>
-      <PopoverItem icon={<Icon name="pen" size={14} />} onClick={() => { onClose(); onRename(); }}>Rename</PopoverItem>
-      <PopoverLink icon={<Icon name="layers" size={14} />} href={`/project/${project.id}`} onClick={onClose}>Open tasks</PopoverLink>
-      <PopoverLink icon={<Icon name="roadmap" size={14} />} href={`/roadmap?p=${project.id}`} onClick={onClose}>Open roadmap</PopoverLink>
+      <PopoverItem icon={<Icon name="pen" size={14} />} onClick={() => { onClose(); onRename(); }}>{tx("Rename")}</PopoverItem>
+      <PopoverLink icon={<Icon name="layers" size={14} />} href={`/project/${project.id}`} onClick={onClose}>{tx("Open tasks")}</PopoverLink>
+      <PopoverLink icon={<Icon name="roadmap" size={14} />} href={`/roadmap?p=${project.id}`} onClick={onClose}>{tx("Open roadmap")}</PopoverLink>
       <PopoverSeparator />
-      <PopoverLabel>Color</PopoverLabel>
+      <PopoverLabel>{tx("Color")}</PopoverLabel>
       <ColorSwatches value={project.color} onPick={(c) => run(() => updateProjectAction(project.id, { color: c }))} />
       <PopoverItem icon={<span className="h-3 w-3 rounded-full border border-dashed" style={{ borderColor: projectColor({ ...project, color: null }, areas) }} />}
         hint={project.color === null && <Icon name="check" size={13} />}
         onClick={() => project.color !== null && run(() => updateProjectAction(project.id, { color: null }))}>
-        Same as {area?.name ?? "its area"}
+        {tx("Same as")}{area?.name ?? tx("its area")}
       </PopoverItem>
       {others.length > 0 && (
         <>
           <PopoverSeparator />
           <PopoverItem icon={<Icon name="arrowRight" size={14} />} hint={<Icon name={moving ? "chevronDown" : "chevronRight"} size={12} />} onClick={() => setMoving((m) => !m)}>
-            Move to area
-          </PopoverItem>
+            {tx("Move to area")}</PopoverItem>
           {moving && others.map((a) => (
             <PopoverItem key={a.id} icon={<AreaMark area={a} dot={8} />}
-              onClick={() => { run(() => updateProjectAction(project.id, { areaId: a.id }), `Moved ${project.name} to ${a.name}`); onClose(); }}>
+              onClick={() => { run(() => updateProjectAction(project.id, { areaId: a.id }), tx("Moved {0} to {1}", [project.name, a.name])); onClose(); }}>
               <span className="pl-1">{a.name}</span>
             </PopoverItem>
           ))}
@@ -352,13 +356,12 @@ export function ProjectMenu({ project, projects, areas, anchor, usage, onClose, 
         <>
           {others.length === 0 && <PopoverSeparator />}
           <PopoverItem icon={<Icon name="link" size={14} />} hint={<Icon name={merging ? "chevronDown" : "chevronRight"} size={12} />} onClick={() => setMerging((m) => !m)}>
-            Merge into…
-          </PopoverItem>
+            {tx("Merge into…")}</PopoverItem>
           {merging && <MergeTargets targets={targets} areas={areas} onPick={setInto} />}
         </>
       )}
       <PopoverSeparator />
-      <PopoverItem icon={<Icon name="trash" size={14} />} danger onClick={() => setConfirm(true)}>Delete project…</PopoverItem>
+      <PopoverItem icon={<Icon name="trash" size={14} />} danger onClick={() => setConfirm(true)}>{tx("Delete project…")}</PopoverItem>
     </Popover>
   );
 }
@@ -383,21 +386,22 @@ const names = (xs: { name: string }[]) => xs.map((x) => x.name).join(", ");
 export function AreasMenu({ areas, anchor, usage, onClose, onDeleted }: {
   areas: Area[]; anchor: Anchor; usage: Usage; onClose: () => void; onDeleted: () => void;
 }) {
+  const tx = useTranslation();
   const each = useEach(areas);
   const [confirm, setConfirm] = useState(false);
-  const count = plural(areas.length, "area", "areas");
+  const count = tx.count(areas.length, "area");
   if (confirm) {
     const projects = areas.reduce((n, a) => n + (usage.areas[a.id]?.projects ?? 0), 0);
     const tasks = areas.reduce((n, a) => n + (usage.areas[a.id]?.tasks ?? 0), 0);
     return (
-      <ConfirmDialog title={`Delete ${count}?`} confirmLabel="Delete areas" danger onCancel={onClose}
+      <ConfirmDialog title={tx("Delete {0}?", [count])} confirmLabel={tx("Delete areas")} danger onCancel={onClose}
         onConfirm={() => {
-          each((a) => deleteAreaAction(a.id), tasks ? `Deleted ${count}. Their tasks moved to the Inbox.` : `Deleted ${count}`);
+          each((a) => deleteAreaAction(a.id), tasks ? tx("Deleted {0}. Their tasks moved to the Inbox.", [count]) : tx("Deleted {0}", [count]));
           onDeleted();
           onClose();
         }}>
-        {names(areas)}. {projects ? `${plural(projects, "project", "projects")} in them will be deleted too. ` : ""}
-        {tasks ? `${plural(tasks, "task stays", "tasks stay")} and ${tasks === 1 ? "moves" : "move"} to the Inbox.` : "They have no tasks."}
+        {names(areas)}. {projects ? tx("{0} in them will be deleted too. ", [tx.count(projects, "project")]) : ""}
+        {tasks ? tx("{0} and {1} to the Inbox.", [plural(tasks, tx("task stays"), tx("tasks stay")), tx(tasks === 1 ? "moves" : "move")]) : tx("They have no tasks.")}
       </ConfirmDialog>
     );
   }
@@ -406,10 +410,10 @@ export function AreasMenu({ areas, anchor, usage, onClose, onDeleted }: {
     <Popover anchor={anchor} onClose={onClose} width={MENU_WIDTH}>
       <PopoverLabel>{count}</PopoverLabel>
       <PopoverSeparator />
-      <PopoverLabel>Color</PopoverLabel>
-      <ColorSwatches value={shared} onPick={(c) => each((a) => updateAreaAction(a.id, { color: c }), `Recolored ${count}`)} />
+      <PopoverLabel>{tx("Color")}</PopoverLabel>
+      <ColorSwatches value={shared} onPick={(c) => each((a) => updateAreaAction(a.id, { color: c }), tx("Recolored {0}", [count]))} />
       <PopoverSeparator />
-      <PopoverItem icon={<Icon name="trash" size={14} />} danger onClick={() => setConfirm(true)}>Delete {count}…</PopoverItem>
+      <PopoverItem icon={<Icon name="trash" size={14} />} danger onClick={() => setConfirm(true)}>{tx("Delete")}{" "}{count}…</PopoverItem>
     </Popover>
   );
 }
@@ -418,25 +422,25 @@ export function AreasMenu({ areas, anchor, usage, onClose, onDeleted }: {
 export function ProjectsMenu({ projects, areas, anchor, usage, onClose, onDeleted }: {
   projects: Project[]; areas: Area[]; anchor: Anchor; usage: Usage; onClose: () => void; onDeleted: () => void;
 }) {
+  const tx = useTranslation();
   const each = useEach(projects);
   const [confirm, setConfirm] = useState(false);
   const [moving, setMoving] = useState(false);
   const [merging, setMerging] = useState(false);
   const [into, setInto] = useState<Project | null>(null);
-  const count = plural(projects.length, "project", "projects");
+  const count = tx.count(projects.length, "project");
   if (into) return <MergeConfirm from={projects.filter((p) => p.id !== into.id)} into={into} usage={usage} onClose={onClose} onMerged={onDeleted} />;
   if (confirm) {
     const tasks = projects.reduce((n, p) => n + (usage.projects[p.id]?.tasks ?? 0), 0);
     return (
-      <ConfirmDialog title={`Delete ${count}?`} confirmLabel="Delete projects" danger onCancel={onClose}
+      <ConfirmDialog title={tx("Delete {0}?", [count])} confirmLabel={tx("Delete projects")} danger onCancel={onClose}
         onConfirm={() => {
-          each((p) => deleteProjectAction(p.id), tasks ? `Deleted ${count}. Their tasks stay in their areas.` : `Deleted ${count}`);
+          each((p) => deleteProjectAction(p.id), tasks ? tx("Deleted {0}. Their tasks stay in their areas.", [count]) : tx("Deleted {0}", [count]));
           onDeleted();
           onClose();
         }}>
-        {names(projects)}. {tasks ? `${plural(tasks, "task stays", "tasks stay")} in ${tasks === 1 ? "its area" : "their areas"} without a project. ` : "They have no tasks. "}
-        Their folders and agent settings are removed.
-      </ConfirmDialog>
+        {names(projects)}. {tasks ? tx("{0} in {1} without a project. ", [plural(tasks, tx("task stays"), tx("tasks stay")), tasks === 1 ? tx("its area") : tx("their areas")]) : tx("They have no tasks. ")}
+        {tx("Their folders and agent settings are removed.")}</ConfirmDialog>
     );
   }
   const shared = projects.every((p) => p.color === projects[0].color) ? projects[0].color : null;
@@ -446,23 +450,21 @@ export function ProjectsMenu({ projects, areas, anchor, usage, onClose, onDelete
     <Popover anchor={anchor} onClose={onClose} width={MENU_WIDTH}>
       <PopoverLabel>{count}</PopoverLabel>
       <PopoverSeparator />
-      <PopoverLabel>Color</PopoverLabel>
-      <ColorSwatches value={shared} onPick={(c) => each((p) => updateProjectAction(p.id, { color: c }), `Recolored ${count}`)} />
+      <PopoverLabel>{tx("Color")}</PopoverLabel>
+      <ColorSwatches value={shared} onPick={(c) => each((p) => updateProjectAction(p.id, { color: c }), tx("Recolored {0}", [count]))} />
       <PopoverItem icon={<span className="h-3 w-3 rounded-full border border-dashed border-mut" />}
         hint={projects.every((p) => p.color === null) && <Icon name="check" size={13} />}
-        onClick={() => each((p) => (p.color === null ? Promise.resolve({ ok: true }) : updateProjectAction(p.id, { color: null })), `${count} use their area's color`)}>
-        Same as their areas
-      </PopoverItem>
+        onClick={() => each((p) => (p.color === null ? Promise.resolve({ ok: true }) : updateProjectAction(p.id, { color: null })), tx("{0} use their area's color", [count]))}>
+        {tx("Same as their areas")}</PopoverItem>
       {targets.length > 0 && (
         <>
           <PopoverSeparator />
           <PopoverItem icon={<Icon name="arrowRight" size={14} />} hint={<Icon name={moving ? "chevronDown" : "chevronRight"} size={12} />} onClick={() => setMoving((m) => !m)}>
-            Move to area
-          </PopoverItem>
+            {tx("Move to area")}</PopoverItem>
           {moving && targets.map((a) => (
             <PopoverItem key={a.id} icon={<AreaMark area={a} dot={8} />}
               onClick={() => {
-                each((p) => (p.areaId === a.id ? Promise.resolve({ ok: true }) : updateProjectAction(p.id, { areaId: a.id })), `Moved ${count} to ${a.name}`);
+                each((p) => (p.areaId === a.id ? Promise.resolve({ ok: true }) : updateProjectAction(p.id, { areaId: a.id })), tx("Moved {0} to {1}", [count, a.name]));
                 onClose();
               }}>
               <span className="pl-1">{a.name}</span>
@@ -472,11 +474,10 @@ export function ProjectsMenu({ projects, areas, anchor, usage, onClose, onDelete
       )}
       {targets.length === 0 && <PopoverSeparator />}
       <PopoverItem icon={<Icon name="link" size={14} />} hint={<Icon name={merging ? "chevronDown" : "chevronRight"} size={12} />} onClick={() => setMerging((m) => !m)}>
-        Merge into…
-      </PopoverItem>
+        {tx("Merge into…")}</PopoverItem>
       {merging && <MergeTargets targets={projects} areas={areas} onPick={setInto} />}
       <PopoverSeparator />
-      <PopoverItem icon={<Icon name="trash" size={14} />} danger onClick={() => setConfirm(true)}>Delete {count}…</PopoverItem>
+      <PopoverItem icon={<Icon name="trash" size={14} />} danger onClick={() => setConfirm(true)}>{tx("Delete")}{" "}{count}…</PopoverItem>
     </Popover>
   );
 }

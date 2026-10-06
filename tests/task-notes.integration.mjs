@@ -142,6 +142,24 @@ try {
     if (details.url.includes("/floating/task/")) actionId = Object.entries(details.requestHeaders).find(([name]) => name.toLowerCase() === "next-action")?.[1] ?? actionId;
     callback({ requestHeaders: details.requestHeaders });
   });
+  // Verify server rendering before renderer interaction, with the real protected server and isolated data.
+  for (const language of ["pl", "en"]) {
+    for (const [route, polishLabel, englishLabel] of [
+      ["/today", "Dzisiaj", "Today"], ["/inbox", "Skrzynka", "Inbox"], ["/upcoming", "Nadchodzące", "Upcoming"],
+      ["/calendar", "Kalendarz", "Calendar"], ["/calendar/week", "Kalendarz", "Calendar"],
+      ["/timeline", "Oś czasu", "Timeline"], ["/roadmap", "Plan projektów", "Roadmap"], ["/projects", "Projekty", "Projects"],
+      ["/sessions", "Sesje", "Sessions"], ["/settings/appearance", "Język", "Language"], ["/settings/planning", "Planowanie", "Planning"],
+      ["/settings/computers", "Komputery", "Computers"], ["/login", "Zaloguj się", "Sign in"],
+    ]) {
+      const response = await fetch(origin + route, { headers: { ...headers, Cookie: `pm_language=${language}` } });
+      assert.equal(response.status, 200, route);
+      const html = await response.text();
+      assert.match(html, new RegExp(`<html[^>]*lang="${language}"`), route);
+      assert.ok(html.includes(language === "pl" ? polishLabel : englishLabel), route + " locale " + language);
+      if (route === "/inbox") assert.ok(html.includes("Prepare the release checklist"), "User titles must not be translated");
+    }
+  }
+  console.log("PASS: Polish and English protected server rendering, planner/settings/sign-in routes and unchanged user content");
   await session.defaultSession.cookies.set({ url: origin, name: "pm_ui", value: key, httpOnly: true, sameSite: "strict" });
   await planner.loadURL(`${origin}/inbox`);
   await until(() => planner.webContents.executeJavaScript("document.querySelectorAll('button[aria-label=\"Float task\"]').length === 2"), "two float buttons");
@@ -449,6 +467,33 @@ try {
     "completing one task must not refresh the other 45");
   console.log(`PASS: 46 real notes, zero renderer state polls, only the changed task refreshed, completion ${elapsed} ms (local fixture)`);
   many.keepScope(null);
+  await until(() => BrowserWindow.getAllWindows().length === 1, "performance notes closed");
+  await planner.loadURL(origin + "/settings/appearance");
+  await until(async () => (await body(planner)).includes("Language"), "appearance controls");
+  const changeLanguage = (language) => planner.webContents.executeJavaScript(`(() => {
+    const select = document.querySelector('select[aria-label="Language"], select[aria-label="Język"]');
+    if (!select) return false;
+    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(select, ${JSON.stringify(language)});
+    select.dispatchEvent(new Event('change', { bubbles: true })); return true;
+  })()`);
+  const localeTask = db.prepare("SELECT id, created_at FROM tasks WHERE title = 'Performance note 2'").get();
+  const localeNotes = createTaskWindows({ BrowserWindow: TestWindow, screen, origin, preload: path.join(root, "desktop/preload.cjs"), theme: () => ({ name: theme, background: "#f5f5f6" }), showMain() {} });
+  assert.equal(localeNotes.show(localeTask.id, "local", localeTask.created_at, String(display.id)).status, "opened");
+  const localeNote = BrowserWindow.getAllWindows().find(w => w !== planner);
+  await until(async () => (await body(localeNote)).includes("Always on top"), "English note");
+  const beforeLanguage = db.prepare("SELECT id, title, status, description FROM tasks ORDER BY id").all();
+  assert.equal(await changeLanguage("pl"), true);
+  await until(async () => (await body(planner)).includes("Język") && (await body(localeNote)).includes("Zawsze na wierzchu"), "Polish planner and live note");
+  assert.equal(await planner.webContents.executeJavaScript("document.documentElement.lang"), "pl");
+  assert.ok((await body(localeNote)).includes("Performance note 2"), "Preserve the task title");
+  assert.equal(localeNote.isAlwaysOnTop(), true);
+  await screenshot(planner, "appearance-polish.png");
+  await screenshot(localeNote, "task-note-polish.png");
+  assert.equal(await changeLanguage("en"), true);
+  await until(async () => (await body(planner)).includes("Language") && (await body(localeNote)).includes("Always on top"), "English round trip");
+  assert.deepEqual(db.prepare("SELECT id, title, status, description FROM tasks ORDER BY id").all(), beforeLanguage, "Language switching cannot mutate planner data");
+  localeNotes.keepScope(null);
+  console.log("PASS: real Polski/English selector, live floating-note translation, unchanged data and preserved topmost behavior");
   clearInterval(notePoll);
   console.log(`Artifacts: ${path.join(root, "dist")}`);
   console.log(`Fixture: ${temp}`);
