@@ -198,6 +198,8 @@ try {
   assert.equal(preferred.get("local"), chosen);
   assert.match(JSON.stringify(await call("list_task_note_displays", {})), /opened/);
   agentWindow.close();
+  // Closing a native window can finish after the bridge exchange, especially on macOS.
+  await until(() => agentWindow.isDestroyed(), "close agent note");
   assert.equal((await exchange()).requests.length, 0);
   assert.equal(BrowserWindow.getAllWindows().length, 1);
   // The saved choice avoids another monitor question; replaced tasks and expiry fail closed.
