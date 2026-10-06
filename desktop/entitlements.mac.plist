@@ -2,7 +2,7 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
   What the signed macOS app may do under the hardened runtime (scripts/build-desktop.mjs). Only JIT,
-  which V8 needs in the app and in its server (the same binary running as Node). No camera, microphone
+  which V8 needs in the app. Its server runs the bundled Helper binary as Node. No camera, microphone
   or location: PacedMind uses none of them. Electron's helper apps keep @electron/osx-sign's defaults.
 -->
 <plist version="1.0">

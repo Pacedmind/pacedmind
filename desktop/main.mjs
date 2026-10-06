@@ -8,6 +8,7 @@ import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
 import { createTaskWindows } from "./task-windows.mjs";
+import { nodeExecutable } from "./node-executable.mjs";
 
 const PORT = 4319;
 const ORIGIN = `http://127.0.0.1:${PORT}`;
@@ -281,7 +282,7 @@ async function startServer() {
   const dataKeyValue = dataKey();
   if (!dataKeyValue) fs.writeSync(log, "The OS keychain isn't available: secrets on disk are not encrypted.\n");
 
-  const child = spawn(process.execPath, [path.join(SERVER_DIR, "server.js")], {
+  const child = spawn(nodeExecutable(), [path.join(SERVER_DIR, "server.js")], {
     cwd: SERVER_DIR,
     env: {
       ...process.env,

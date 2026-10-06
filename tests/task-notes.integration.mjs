@@ -1,5 +1,5 @@
 import { app, BrowserWindow, ipcMain, session } from "electron";
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { randomBytes, createHash } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import assert from "node:assert/strict";
@@ -7,6 +7,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createTaskWindows } from "../desktop/task-windows.mjs";
+import { nodeExecutable } from "../desktop/node-executable.mjs";
 
 const root = path.resolve(import.meta.dirname, "..");
 fs.mkdirSync(path.join(root, "dist"), { recursive: true });
@@ -25,7 +26,7 @@ app.commandLine.appendSwitch("force-device-scale-factor", "1");
 app.on("window-all-closed", () => {});
 const origin = "http://127.0.0.1:4361";
 const serverLog = fs.openSync(path.join(temp, "server.log"), "a");
-const child = spawn(process.execPath, [path.join(root, "node_modules/next/dist/bin/next"), "start", "-p", "4361", "-H", "127.0.0.1"], {
+const child = spawn(nodeExecutable(), [path.join(root, "node_modules/next/dist/bin/next"), "start", "-p", "4361", "-H", "127.0.0.1"], {
   cwd: root, windowsHide: true, stdio: ["pipe", serverLog, serverLog],
   env: { ...process.env, ELECTRON_RUN_AS_NODE: "1", ORGANIZER_MODE: "desktop", ORGANIZER_DATA_KEY: "", ORGANIZER_DB: path.join(dirs.data, "organizer.db"), ORGANIZER_SEED: "empty", ORGANIZER_UI_SECRET: key,
     ORGANIZER_EXIT_WITH_PARENT: "1", USERPROFILE: dirs.home, HOME: dirs.home, APPDATA: dirs.appdata, CLAUDE_CONFIG_DIR: dirs.claude, CODEX_HOME: dirs.codex, NODE_ENV: "production" },
@@ -69,6 +70,12 @@ app.whenReady().then(async () => {
 let db;
 try {
   await until(async () => fetch(`${origin}/api/state`, { headers }).then((r) => r.ok, () => false), "server");
+  if (process.platform === "darwin") {
+    const applications = execFileSync("/usr/bin/lsappinfo", ["list"], { encoding: "utf8" }).split(/(?=^\s*\d+\) )/m);
+    const serverApp = applications.find((entry) => entry.includes(`pid = ${child.pid} `));
+    assert.ok(!serverApp?.includes('type="Foreground"'), "The server must not add a foreground Dock icon");
+    await app.dock.show();
+  }
   await rpc("initialize", { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "note-check", version: "1" } });
   await call("create_task", { title: "Prepare the release checklist", agent: "codex", subtasks: ["Review the changes", "Check the installer"] });
   await call("create_task", { title: "Write the daily project update", agent: "human", repeat: "day", planned_date: "2026-10-04" });
@@ -112,6 +119,12 @@ try {
   assert.equal(first.isVisible(), true);
   assert.equal(second.isVisible(), true);
   assert.equal(second.isAlwaysOnTop(), true);
+  if (process.platform === "darwin") {
+    assert.equal(first.isVisibleOnAllWorkspaces(), true);
+    assert.equal(second.isVisibleOnAllWorkspaces(), true);
+    assert.equal(app.dock.isVisible(), true, "Task notes must not hide the planner's Dock icon");
+    console.log("PASS: background server has no Dock icon; Mac notes cover Spaces and preserve the app icon");
+  }
   console.log("PASS: real renderer buttons, independent topmost windows, duplicate prevention, main window hidden");
   await sleep(4300);
   await call("start_task", { task: tasks[0].key, agent: "codex" });
