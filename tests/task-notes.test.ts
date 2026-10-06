@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { chooseNoteDisplay, noteDisplaysOf, type NoteDisplays } from "../src/lib/task-notes";
+import { floatingTaskData } from "../src/lib/floating-task";
+import type { Area, Project, Task } from "../src/lib/types";
 
 const snapshot = (count: number, saved: string | null = null): NoteDisplays => ({
   displays: Array.from({ length: count }, (_, i) => ({
@@ -34,4 +36,18 @@ test("untrusted display reports are validated before agents or the desktop bridg
   assert.equal(noteDisplaysOf({ displays: [], defaultDisplay: null, updatedAt: "yesterday" }), null);
   assert.equal(noteDisplaysOf({ ...snapshot(1), displays: [{ ...snapshot(1).displays[0], id: "../../bad" }] }), null);
   assert.equal(noteDisplaysOf({ ...snapshot(1), displays: [{ ...snapshot(1).displays[0], width: -1 }] }), null);
+});
+
+test("project task notes inherit their project's area for workspace grouping", () => {
+  const task = { id: 1, key: "WRK-1", projectId: "project", areaId: null, title: "Review", priority: 2, subtasks: [] } as unknown as Task;
+  const project = { id: "project", areaId: "work", name: "Release", color: null } as Project;
+  const areas = [{ id: "work", name: "Work", color: "#123456" }] as Area[];
+  const data = floatingTaskData("local", task, areas, project, null, [], null);
+  assert.equal(data.areaId, "work");
+  assert.equal(data.areaName, "Work");
+  assert.equal(data.projectName, "Release");
+  assert.equal(data.color, "#123456");
+  const loose = floatingTaskData("local", { ...task, projectId: null, areaId: "work" }, areas, null, null, [], null);
+  assert.equal(loose.areaId, "work");
+  assert.equal(loose.projectId, null);
 });

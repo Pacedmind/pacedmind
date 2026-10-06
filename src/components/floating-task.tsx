@@ -3,26 +3,17 @@
 import { useEffect } from "react";
 import { setFloatingTaskDone } from "@/app/floating/task/[id]/actions";
 import { attentionOf, attentionWords, planOf } from "@/lib/dates";
-import { AGENT_LABEL, STATUS_LABEL, isLiveSession, type Report, type Session, type SessionEvent, type Task } from "@/lib/types";
+import { AGENT_LABEL, PRIORITY_LABEL, STATUS_LABEL, isLiveSession } from "@/lib/types";
+import type { FloatingTaskData } from "@/lib/floating-task";
 import { AgentIcon, Icon, StatusIcon } from "./icons";
 import { DueChip } from "./task-row";
 import { LiveRefresh } from "./live-refresh";
 import { Button, IconButton, Toaster, cx, useAction } from "./ui";
+import { useNoteAppearance } from "./task-note-appearance";
 
-interface NoteData {
-  scope: string;
-  task: Pick<Task, "id" | "key" | "title" | "status" | "dueDate" | "createdAt">;
-  place: string;
-  color: string | null;
-  href: string;
-  subtasks: { done: number; total: number };
-  session: Session | null;
-  events: SessionEvent[];
-  report: Pick<Report, "outcome" | "summary"> | null;
-}
-
-export function FloatingTask({ data }: { data: NoteData | null }) {
+export function FloatingTask({ data, version }: { data: FloatingTaskData | null; version: string }) {
   const { run, pending } = useAction();
+  useNoteAppearance(data);
   const task = data?.task;
   const done = task?.status === "done";
   const closed = done || task?.status === "canceled";
@@ -40,7 +31,15 @@ export function FloatingTask({ data }: { data: NoteData | null }) {
   useEffect(() => { document.title = task ? `${task.key} · ${task.title} — PacedMind` : "Task note — PacedMind"; }, [task]);
 
   return (
-    <main aria-label="Floating task" className="flex h-full flex-col overflow-hidden border border-line2 bg-panel">
+    <main aria-label="Floating task" className="task-note-surface flex h-full flex-col overflow-hidden border border-line2 bg-panel">
+      {data && task && <div className="task-note-xs min-h-0 flex-1 items-center gap-2 px-2">
+        <span className="task-note-titlebar flex h-full w-3 shrink-0 items-center text-mut2" title="Drag to move"><Icon name="layers" size={12} /></span>
+        <button type="button" title={task.title} className={cx("min-w-0 flex-1 text-left text-[13px] leading-snug text-fg2", closed && "line-through text-mut")} onClick={() => window.pacedMindDesktop?.showFloatingTask?.(data.href)}><span className="line-clamp-2">{task.title}</span></button>
+        <div className="task-note-xs-controls flex shrink-0 flex-col">
+          <IconButton label="Open task details" onClick={() => window.pacedMindDesktop?.showFloatingTask?.(data.href)}><Icon name="external" size={12} /></IconButton>
+          <IconButton label="Close compact note" onClick={() => window.pacedMindDesktop?.closeTaskNote?.()}><Icon name="x" size={12} /></IconButton>
+        </div>
+      </div>}
       <header className="task-note-titlebar flex h-10 shrink-0 items-center gap-2 border-b border-line px-3 text-[11px] text-mut">
         <Icon name="layers" size={13} />
         <span title="Drag to move this note. It stays above other windows." className="flex-1 select-none">Always on top</span>
@@ -50,7 +49,7 @@ export function FloatingTask({ data }: { data: NoteData | null }) {
         <IconButton label="Close note" onClick={() => window.pacedMindDesktop?.closeTaskNote?.()}><Icon name="x" size={15} /></IconButton>
       </header>
       {data && task ? <>
-        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
+        <div className="task-note-content flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
           <div className="flex min-w-0 items-center gap-2 text-[11px] text-mut">
             {data.color && <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: data.color }} />}
             <span className="min-w-0 flex-1 truncate">{data.place}</span>
@@ -60,6 +59,7 @@ export function FloatingTask({ data }: { data: NoteData | null }) {
           <div className="flex flex-wrap items-center gap-2.5 text-[12px] text-fg3" aria-live="polite">
             <span className="inline-flex items-center gap-1.5"><StatusIcon status={task.status} />{STATUS_LABEL[task.status]}</span>
             <DueChip due={task.dueDate} done={closed} />
+            {task.priority !== 0 && <span className="text-mut">{PRIORITY_LABEL[task.priority]}</span>}
           </div>
           {session && <section aria-label="Agent progress" aria-live="polite" className="flex flex-col gap-2 rounded-lg border border-line2 bg-bg p-3 text-[12px]">
             <div className="flex flex-wrap items-center gap-1.5 text-fg2">
@@ -84,7 +84,7 @@ export function FloatingTask({ data }: { data: NoteData | null }) {
         </footer>
       </> : <div className="flex flex-1 items-center p-5 text-[13px] leading-relaxed text-mut" role="status">This task is no longer available. Reopen it in PacedMind.</div>}
       <Toaster />
-      <LiveRefresh refreshOnMount />
+      <LiveRefresh refreshOnMount taskNoteVersion={version} />
     </main>
   );
 }

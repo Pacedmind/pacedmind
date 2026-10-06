@@ -9,9 +9,16 @@ import { POLL_EVENT, publishLaunchState } from "./request-status";
  * Re-renders the page when data changed somewhere else, e.g. an agent reported progress over MCP. Each answer also
  * carries the account's requests to its computers, for the chips that show what became of them (request-status.tsx).
  */
-export function LiveRefresh({ every = 4000, refreshOnMount = false }: { every?: number; refreshOnMount?: boolean }) {
+export function LiveRefresh({ every = 4000, refreshOnMount = false, taskNoteVersion }: { every?: number; refreshOnMount?: boolean; taskNoteVersion?: string }) {
   const router = useRouter();
   useEffect(() => {
+    // Electron already polls once for all notes. A note must not poll the entire planner itself,
+    // or refresh because an unrelated task changed. Repeated versions also recover missed events.
+    if (taskNoteVersion && window.pacedMindDesktop?.onTaskNoteVersion) {
+      return window.pacedMindDesktop.onTaskNoteVersion((version) => {
+        if (version !== taskNoteVersion) router.refresh();
+      });
+    }
     let last: string | null = null;
     let busy = false;
     let again = false;
@@ -51,6 +58,6 @@ export function LiveRefresh({ every = 4000, refreshOnMount = false }: { every?: 
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener(POLL_EVENT, check);
     };
-  }, [router, every, refreshOnMount]);
+  }, [router, every, refreshOnMount, taskNoteVersion]);
   return null;
 }

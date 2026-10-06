@@ -1,7 +1,7 @@
 // PacedMind desktop app. Runs the built Next.js server (server/server.js) with Electron's own Node,
 // shows it in a window and keeps running in the tray (the menu bar on macOS), so agents can still
 // report back after the window is closed. Built and installed by scripts/build-desktop.mjs.
-import { app, BrowserWindow, Menu, Notification, Tray, dialog, ipcMain, nativeImage, nativeTheme, safeStorage, screen, session, shell } from "electron";
+import { app, BrowserWindow, Menu, Notification, Tray, dialog, ipcMain, nativeImage, nativeTheme, safeStorage, screen, session, shell, systemPreferences } from "electron";
 import { spawn } from "node:child_process";
 import { createHash, createHmac, randomBytes } from "node:crypto";
 import fs from "node:fs";
@@ -9,6 +9,8 @@ import http from "node:http";
 import path from "node:path";
 import { createTaskWindows } from "./task-windows.mjs";
 import { nodeExecutable } from "./node-executable.mjs";
+import { registerTaskNoteControls } from "./task-note-controls.mjs";
+import { createTaskNoteOpener } from "./task-note-opener.mjs";
 
 const PORT = 4319;
 const ORIGIN = `http://127.0.0.1:${PORT}`;
@@ -114,9 +116,9 @@ const loginArgs = WINDOWS ? { name: "Organizer", path: process.execPath, args: [
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-function getJson(pathname) {
+function getJson(pathname, timeout = 1500) {
   return new Promise((resolve) => {
-    const req = http.get(`${ORIGIN}${pathname}`, { timeout: 1500, headers: { [UI_HEADER]: UI_KEY } }, (res) => {
+    const req = http.get(`${ORIGIN}${pathname}`, { timeout, headers: { [UI_HEADER]: UI_KEY } }, (res) => {
       let body = "";
       res.setEncoding("utf8");
       res.on("data", (c) => (body += c));
@@ -193,48 +195,41 @@ const taskWindows = createTaskWindows({
   theme: () => ({ name: activeTheme, ...THEME_COLORS[activeTheme] }), showMain: showWindow,
   preferredDisplay: (scope) => readState().taskNoteDisplays?.[scope] ?? null,
   rememberDisplay: (scope, display) => writeState({ taskNoteDisplays: { ...readState().taskNoteDisplays, [scope]: display } }),
+  readLayout: (scope, display) => readState().taskNoteLayouts?.[scope]?.[display],
+  writeLayout: (scope, display, settings) => {
+    const layouts = readState().taskNoteLayouts ?? {};
+    writeState({ taskNoteLayouts: { ...layouts, [scope]: { ...layouts[scope], [display]: settings } } });
+  },
+  reduceMotion: () => systemPreferences.getAnimationSettings().prefersReducedMotion,
+  onChange: (state) => { if (win && !win.isDestroyed()) win.webContents.send("pacedmind:task-notes-changed", state); },
+});
+async function readTaskNoteScope() {
+  return (await getJson("/api/desktop/task-notes?scope=1", 10_000))?.scope;
+}
+registerTaskNoteControls({ ipcMain, taskWindows, planner: () => win, origin: ORIGIN,
+  readScope: readTaskNoteScope,
+  openNotes: async (event, scope) => {
+    const data = await getJson("/api/desktop/task-notes", 10_000);
+    if (data?.scope !== scope || !Array.isArray(data.tasks)) return { ok: false, error: "Couldn't load your tasks. Try again." };
+    if (!data.tasks.length) return { ok: true, message: "You have no open tasks to show." };
+    return showTaskNotes(event, data.tasks, scope);
+  },
 });
 
-let choosingNoteDisplay = false;
-ipcMain.handle("pacedmind:float-task", async (event, id, scope, createdAt) => {
-  if (!serverReady || !win || event.sender !== win.webContents || event.senderFrame !== win.webContents.mainFrame) return false;
-  if (!sameOrigin(event.senderFrame.url)) return false;
-  const state = await getJson("/api/state");
-  if (choosingNoteDisplay || state?.floatingScope !== scope) return false;
-  const snapshot = taskWindows.displays(scope);
-  let display = snapshot.displays.find((d) => d.id === snapshot.defaultDisplay)?.id;
-  let remember = false;
-  if (!display && snapshot.displays.length === 1 && !snapshot.defaultDisplay) display = snapshot.displays[0].id;
-  if (!display) {
-    choosingNoteDisplay = true;
-    try {
-      const answer = await dialog.showMessageBox(win, {
-        type: "question", title: "Task notes", message: "Which display should show this task note?",
-        detail: (snapshot.defaultDisplay ? "The remembered display is disconnected.\n\n" : "") + snapshot.displays.map((d, i) => `${i + 1}. ${d.label} · ${d.width} × ${d.height}${d.primary ? " (primary)" : ""} · position ${d.x}, ${d.y}`).join("\n"),
-        buttons: [...snapshot.displays.map((_, i) => `Display ${i + 1}`), "Cancel"],
-        cancelId: snapshot.displays.length, defaultId: Math.max(0, snapshot.displays.findIndex((d) => d.primary)),
-        checkboxLabel: "Always use this display for task notes on this computer", checkboxChecked: false,
-      });
-      if (answer.response === snapshot.displays.length) return { ok: true }; // Cancel is not an error.
-      display = snapshot.displays[answer.response]?.id;
-      remember = answer.checkboxChecked;
-    } finally { choosingNoteDisplay = false; }
-  }
-  if ((await getJson("/api/state"))?.floatingScope !== scope) return false;
-  const result = taskWindows.show(id, scope, createdAt, display, remember);
-  return { ok: result.status === "opened", error: result.note };
-});
+const showTaskNotes = createTaskNoteOpener({ ipcMain, taskWindows, planner: () => win, origin: ORIGIN,
+  readScope: readTaskNoteScope, ready: () => serverReady });
+ipcMain.handle("pacedmind:float-task", (event, id, scope, createdAt) => showTaskNotes(event, [{ id, createdAt }], scope));
 ipcMain.handle("pacedmind:close-task-note", (event) => taskWindows.close(event));
 ipcMain.handle("pacedmind:show-floating-task", (event, href) => taskWindows.showInPlanner(event, href));
 
-ipcMain.on("pacedmind:set-theme", (event, theme) => {
+ipcMain.on("pacedmind:set-theme", (event, theme, preference) => {
   if ((theme !== "dark" && theme !== "light") || !win || event.sender !== win.webContents || event.senderFrame !== win.webContents.mainFrame) return;
   try { if (new URL(event.senderFrame.url).origin !== ORIGIN) return; } catch { return; }
   activeTheme = theme;
   const colors = THEME_COLORS[theme];
-  nativeTheme.themeSource = theme;
+  nativeTheme.themeSource = preference === "system" ? "system" : theme;
   win.setBackgroundColor(colors.background);
-  taskWindows.setBackgroundColor(colors.background);
+  taskWindows.setTheme(theme, colors.background);
   if (process.platform === "win32") win.setTitleBarOverlay({ color: colors.background, symbolColor: colors.symbol, height: 40 });
   if (readState().theme !== theme) writeState({ theme });
 });
@@ -375,6 +370,7 @@ function createWindow() {
     },
   });
   win.setMenuBarVisibility(false);
+  taskWindows.bindPlanner(win);
   if (process.platform === "win32") win.setAppDetails({
     appId: APP_ID, appIconPath: shortcutIcon, appIconIndex: 0,
     relaunchCommand: `"${process.execPath}"`, relaunchDisplayName: "PacedMind",
@@ -563,10 +559,12 @@ async function syncTaskNotes(scope) {
   const exchange = async (receive) => {
     const response = await postJson("/api/desktop/task-notes", {
       scope, displays: taskWindows.displays(scope), results: [...noteResults.values()], receive,
+      notes: receive ? taskWindows.tasks(scope) : [],
     });
     if (!response) return null;
     for (const id of response.acknowledged ?? []) noteResults.delete(id);
     if (response.scope !== scope) { taskWindows.keepScope(response.scope); noteResults.clear(); return null; }
+    taskWindows.updateVersions(scope, response.versions);
     return response;
   };
   const response = await exchange(true);

@@ -1,25 +1,36 @@
 "use client";
 
 import { useEffect, useSyncExternalStore } from "react";
-import { THEME_STORAGE_KEY, type Theme } from "@/lib/theme";
+import { THEME_STORAGE_KEY, type Theme, type ThemePreference } from "@/lib/theme";
 import { Icon } from "./icons";
 import { Segmented } from "./ui";
 
 const EVENT = "pacedmind:theme";
 const getTheme = (): Theme => document.documentElement.dataset.theme === "light" ? "light" : "dark";
 const getServerTheme = (): Theme => "dark";
+const isNote = () => location.pathname.startsWith("/floating/task/");
+function preference(): ThemePreference {
+  try { const saved = localStorage.getItem(THEME_STORAGE_KEY); if (saved === "system" || saved === "light") return saved; } catch {}
+  return "dark";
+}
+const resolve = (value: ThemePreference): Theme => value === "system" ? matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light" : value;
 
 function subscribe(onChange: () => void) {
   const onStorage = (event: StorageEvent) => {
     if (event.key !== THEME_STORAGE_KEY) return;
-    document.documentElement.dataset.theme = event.newValue === "light" ? "light" : "dark";
+    if (isNote() && window.pacedMindDesktop?.onTaskNoteTheme) return;
+    document.documentElement.dataset.theme = resolve(preference());
     onChange();
   };
   window.addEventListener(EVENT, onChange);
   window.addEventListener("storage", onStorage);
+  const media = matchMedia("(prefers-color-scheme: dark)");
+  const onSystem = () => { if (preference() === "system" && !isNote()) { document.documentElement.dataset.theme = resolve("system"); onChange(); } };
+  media.addEventListener("change", onSystem);
   return () => {
     window.removeEventListener(EVENT, onChange);
     window.removeEventListener("storage", onStorage);
+    media.removeEventListener("change", onSystem);
   };
 }
 
@@ -27,15 +38,16 @@ function useTheme() {
   return useSyncExternalStore(subscribe, getTheme, getServerTheme);
 }
 
-function setTheme(theme: Theme) {
-  document.documentElement.dataset.theme = theme;
+function setTheme(theme: ThemePreference) {
+  document.documentElement.dataset.theme = resolve(theme);
   try { localStorage.setItem(THEME_STORAGE_KEY, theme); } catch { /* The current session still switches. */ }
   window.dispatchEvent(new Event(EVENT));
 }
 
 export function ThemeSync() {
   const theme = useTheme();
-  useEffect(() => { window.pacedMindDesktop?.setTheme(getTheme()); }, [theme]);
+  const selected = useSyncExternalStore(subscribe, preference, getServerTheme);
+  useEffect(() => { if (!isNote()) window.pacedMindDesktop?.setTheme(getTheme(), selected); }, [theme, selected]);
   return null;
 }
 
@@ -51,9 +63,10 @@ export function ThemeToggle() {
 }
 
 export function ThemeSelector() {
-  const theme = useTheme();
+  const theme = useSyncExternalStore(subscribe, preference, getServerTheme);
   return <Segmented value={theme} onChange={setTheme} options={[
     { value: "dark", label: <><Icon name="moon" size={13} />Dark</> },
     { value: "light", label: <><Icon name="sun" size={13} />Light</> },
+    { value: "system", label: <><Icon name="appWindow" size={13} />System</> },
   ]} />;
 }

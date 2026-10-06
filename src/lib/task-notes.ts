@@ -11,6 +11,7 @@ export const noteDisplaysSchema = z.object({
   defaultDisplay: displayIdSchema.nullable(), updatedAt: z.string().datetime({ offset: true }),
 });
 export type NoteDisplays = z.infer<typeof noteDisplaysSchema>;
+export type NoteDisplayPrompt = NoteDisplays & { requestId: string; count: number };
 export const noteDisplaysOf = (value: unknown): NoteDisplays | null => noteDisplaysSchema.safeParse(value).data ?? null;
 export const noteDisplaysFresh = (value: NoteDisplays | null) => !!value && Math.abs(Date.now() - Date.parse(value.updatedAt)) < 90_000;
 
