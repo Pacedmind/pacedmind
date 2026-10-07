@@ -11,7 +11,7 @@ The tools come from the PacedMind MCP server, `pacedmind` (in Claude Code: `mcp_
 
 1. Call `get_overview` to see the areas, the existing projects and the user's preferences (Projects and places, Agents and sessions, Writing tasks). If a matching project already exists, extend it rather than creating a duplicate. A `pacedmind.md` in the folder you work in names the project or area it belongs to.
 2. Call `create_project` in the right area, and propose a target date if the user hasn't given one. For code projects:
-   - set `folder` to the repository's absolute path, so agent sessions on this computer start in the right place. On another of the user's computers, `set_folder` with `computer` asks that one to use its copy (the user allows it there);
+   - set `folder` to the repository's absolute path, so agent sessions on this computer start in the right place. On another of the user's computers, or through PacedMind Cloud's server (where `folder` fails), `set_folder` with `computer` asks that one to use its copy (the user allows it there);
    - set `agent` to claude or codex, as the user's preferences say when they do.
 3. If the project has to wait for another one, set `starts_after`.
 
