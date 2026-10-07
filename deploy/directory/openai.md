@@ -6,7 +6,7 @@ One submission puts PacedMind in the plugin directory that ChatGPT and Codex sha
 
 | | |
 | --- | --- |
-| Package | `dist/plugins/pacedmind-openai-1.0.0.zip`, built by `npm run plugins` from `plugins/pacedmind` (Codex format: `.codex-plugin/plugin.json`, `.mcp.json`, `skills/`, `assets/`, `README.md`, `LICENSE`). The script checks every limit on the error page first. |
+| Package | `dist/plugins/pacedmind-openai-1.0.0.zip`, built by `npm run plugins` from `plugins/pacedmind` (Codex format: `.codex-plugin/plugin.json`, `.mcp.json`, `skills/`, `assets/`, `LICENSE`; the README is Claude's listing text and stays out). The script checks every limit on the error page first. |
 | Listing | In the ZIP's manifest (`interface`): name, subtitle, description, developer, category, capabilities, the four URLs, three starter prompts, brand colors, light and dark icons. No screenshots: OpenAI allows them only for plugins with a UI. |
 | Review | In the ZIP's manifest (`extensions.com.openai.review`): 5 positive and 3 negative cases ([review.md](review.md#3-test-cases)), `commerce: false`. Release notes and a Polish translation under `publication`. Country availability isn't set: choose it in the portal. |
 | MCP server | `https://app.pacedmind.com/api/mcp`: streamable HTTP, OAuth 2.1 with dynamic client registration and S256 PKCE (Supabase Auth), protected resource metadata at `/.well-known/oauth-protected-resource/api/mcp`. Every tool has `title`, `readOnlyHint`, `destructiveHint`, `openWorldHint` and `securitySchemes`. Checked live on 7 October 2026: an unauthenticated call answers 401 with `resource_metadata`; registering a client with ChatGPT's redirect URI and authorizing with S256 and `resource` leads to PacedMind's consent page. |
@@ -59,7 +59,7 @@ All of it is in the ZIP; this is for checking what the portal shows.
 | Icons | `assets/logo.png` (black tile) and `assets/logo-dark.png` (white tile), 512 px, as logo and composer icon |
 | Commerce | No |
 
-The long description is `interface.longDescription` in `plugins/pacedmind/.codex-plugin/plugin.json`. It names no prices, trials or other products, as the guidelines ask; "Requires a PacedMind Cloud account" is the only mention of the plan.
+The long description is `interface.longDescription` in `plugins/pacedmind/.codex-plugin/plugin.json`. It names no prices, trials or other products, as the guidelines ask; "Requires a PacedMind Cloud account" is the only mention of the plan. The portal flags a name or description that mentions another AI assistant, so the OpenAI listing says "coding agents" where the others name Claude Code and Codex.
 
 ## After publication
 

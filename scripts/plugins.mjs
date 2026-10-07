@@ -252,14 +252,14 @@ function zip(entries) {
 }
 
 // The Codex manifest, with the demo recording when it's given; .mcp.json in the Codex form (just the URL). The Claude
-// manifest stays out: the portal takes exactly one plugin root.
+// manifest stays out (the portal takes exactly one plugin root), and so does the README, which is Claude's listing text:
+// OpenAI flags a listing that names another assistant.
 const manifest = structuredClone(codex);
 if (demoUrl) manifest.extensions["com.openai"].review.demo_recording_url = demoUrl;
 const json = (value) => Buffer.from(JSON.stringify(value, null, 2) + "\n");
 const entries = [
   [".codex-plugin/plugin.json", json(manifest)],
   [".mcp.json", json({ mcpServers: { [serverName]: { url: server.url } } })],
-  ["README.md", Buffer.from(text(path.join(plugin, "README.md")))],
   ["LICENSE", Buffer.from(text(path.join(plugin, "LICENSE")))],
   ...files(path.join(plugin, "assets")).map((f) => [`assets/${f}`, fs.readFileSync(path.join(plugin, "assets", f))]),
   ...files(path.join(plugin, "skills")).map((f) => [`skills/${f}`, Buffer.from(text(path.join(plugin, "skills", f)))]),

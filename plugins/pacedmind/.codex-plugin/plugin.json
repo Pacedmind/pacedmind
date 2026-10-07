@@ -7,7 +7,7 @@
     "email": "mbednarczyk@preseed.tech",
     "url": "https://pacedmind.com"
   },
-  "homepage": "https://pacedmind.com/docs/mcp/claude-and-chatgpt",
+  "homepage": "https://pacedmind.com",
   "repository": "https://github.com/Pacedmind/pacedmind",
   "license": "AGPL-3.0-only",
   "keywords": ["planner", "tasks", "projects", "calendar", "productivity", "time-blocking", "agents"],
@@ -16,7 +16,7 @@
   "interface": {
     "displayName": "PacedMind",
     "shortDescription": "Plan your tasks and calendar",
-    "longDescription": "PacedMind is a personal planner for tasks, projects and your calendar, made for people who work with AI agents. Connect it to bring your plan into the conversation:\n\n- See what's on your plate: today's date, overdue work, what's due or planned today, today's events, and agent sessions waiting for your review.\n- Capture work as well-described tasks: a project or area, a description, sub-tasks, a \"done when\" list, an estimate, a priority, a planned day and a real deadline.\n- Change and reschedule: update, reprioritize, complete or cancel tasks, move tasks to another day, or move a whole day's plans when something comes up.\n- Organize areas and projects, order a project's roadmap and make tasks wait for each other.\n- Manage calendar events, and plan a day or week around your free focus time.\n- Save how you like to work, such as deep work in the mornings, so every assistant plans your way.\n- Follow the Claude Code and Codex sessions working on your tasks and read their reports.\n\nYou sign in with your PacedMind Cloud account and approve the connection on PacedMind's own page. You can disconnect it at any time in PacedMind under Settings → Connected agents. The connection only reads and changes that account's planner. It can't change your computers' settings, answer questions for you or delete your account. Asking one of your computers to start an agent session also requires two-factor sign-in and that computer's own approval settings.\n\nRequires a PacedMind Cloud account.",
+    "longDescription": "PacedMind is a personal planner for tasks, projects and your calendar, made for people who work with AI agents. Connect it to bring your plan into the conversation:\n\n- See what's on your plate: today's date, overdue work, what's due or planned today, today's events, and agent sessions waiting for your review.\n- Capture work as well-described tasks: a project or area, a description, sub-tasks, a \"done when\" list, an estimate, a priority, a planned day and a real deadline.\n- Change and reschedule: update, reprioritize, complete or cancel tasks, move tasks to another day, or move a whole day's plans when something comes up.\n- Organize areas and projects, order a project's roadmap and make tasks wait for each other.\n- Manage calendar events, and plan a day or week around your free focus time.\n- Save how you like to work, such as deep work in the mornings, so every assistant plans your way.\n- Follow the coding-agent sessions working on your tasks and read their reports.\n\nYou sign in with your PacedMind Cloud account and approve the connection on PacedMind's own page. You can disconnect it at any time in PacedMind under Settings → Connected agents. The connection only reads and changes that account's planner. It can't change your computers' settings, answer questions for you or delete your account. Asking one of your computers to start an agent session also requires two-factor sign-in and that computer's own approval settings.\n\nRequires a PacedMind Cloud account.",
     "developerName": "NMD Mikołaj Bednarczyk",
     "category": "Productivity",
     "capabilities": [
@@ -28,7 +28,7 @@
       "Create, move and delete calendar events",
       "Plan a day or week around free focus time",
       "Remember how you like to plan and work",
-      "Follow Claude Code and Codex sessions working on your tasks"
+      "Follow the coding-agent sessions working on your tasks"
     ],
     "websiteURL": "https://pacedmind.com",
     "supportURL": "https://pacedmind.com/support",
@@ -93,7 +93,7 @@
             },
             {
               "description": "Controlling a computer from a planner-only connection: the review account has no two-factor sign-in, so start_session refuses with \"This connection has planner access only\" and nothing starts. The assistant explains what would be needed instead of retrying.",
-              "prompt": "Start a Claude Code session on my computer for the task Start sessions from the app."
+              "prompt": "Start a coding agent session on my computer for the task Start sessions from the app."
             }
           ]
         },
@@ -105,7 +105,7 @@
         "translations": {
           "pl-PL": {
             "subtitle": "Planuj zadania i kalendarz",
-            "description": "PacedMind to osobisty planer zadań, projektów i kalendarza dla osób, które pracują z agentami AI. Połącz go, aby mieć swój plan w rozmowie: zobacz, co masz dziś do zrobienia, zapisuj dobrze opisane zadania, przekładaj je i cały dzień, porządkuj obszary i projekty, zarządzaj wydarzeniami w kalendarzu i śledź sesje Claude Code i Codex pracujące nad Twoimi zadaniami.\n\nLogujesz się kontem PacedMind Cloud i zatwierdzasz połączenie na stronie PacedMind. Możesz je odłączyć w każdej chwili w Ustawieniach → Connected agents. Połączenie odczytuje i zmienia tylko planer tego konta.\n\nWymaga konta PacedMind Cloud."
+            "description": "PacedMind to osobisty planer zadań, projektów i kalendarza dla osób, które pracują z agentami AI. Połącz go, aby mieć swój plan w rozmowie: zobacz, co masz dziś do zrobienia, zapisuj dobrze opisane zadania, przekładaj je i cały dzień, porządkuj obszary i projekty, zarządzaj wydarzeniami w kalendarzu i śledź sesje agentów programistycznych pracujących nad Twoimi zadaniami.\n\nLogujesz się kontem PacedMind Cloud i zatwierdzasz połączenie na stronie PacedMind. Możesz je odłączyć w każdej chwili w Ustawieniach → Connected agents. Połączenie odczytuje i zmienia tylko planer tego konta.\n\nWymaga konta PacedMind Cloud."
           }
         }
       }
