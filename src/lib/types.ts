@@ -392,6 +392,32 @@ export interface Preference {
   updatedAt: string;
 }
 
+/** What replaced the data a copy holds: the sample data, starting empty, or another copy put back. */
+export type CopyReason = "sample" | "empty" | "restore";
+
+/**
+ * A copy of the data in use, kept before Settings → Data replaced it, so it can be put back: the account's in the
+ * account itself, this computer's own in a file next to it (`id` is the file's name).
+ */
+export interface DataCopy {
+  id: string;
+  /** When it was kept, a local timestamp. */
+  at: string;
+  reason: CopyReason;
+  areas: number;
+  projects: number;
+  tasks: number;
+  events: number;
+}
+
+/** How much the data in use holds: what starting over would delete. */
+export interface DataSummary {
+  areas: number;
+  projects: number;
+  tasks: number;
+  events: number;
+}
+
 /** At most this many preferences, each one line (the database holds all three). */
 export const MAX_PREFERENCES = 100;
 export const PREFERENCE_TEXT_MAX = 500;

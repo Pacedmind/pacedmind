@@ -19,10 +19,10 @@ import { CloudReadOnly } from "@/lib/billing";
 import { PALETTE, renewColor } from "@/lib/colors";
 import { nowStamp, toDateStr, toStamp } from "@/lib/dates";
 import { cleanNeeds } from "@/lib/needs";
-import { MAX_PREFERENCES, repeatOf } from "@/lib/types";
+import { MAX_PREFERENCES, repeatOf, type CopyReason, type DataCopy, type DataSummary } from "@/lib/types";
 
 /*
- * An account's data as a whole: starting over, sample data, moving over this computer's own data (what
+ * An account's data as a whole: starting over (after keeping a copy, which can be put back), sample data, moving over this computer's own data (what
  * PacedMind keeps without an account, store/local-db.ts), and moving the account's data back to this computer.
  */
 
@@ -42,28 +42,79 @@ export const DEFAULT_AREAS = [
   { name: "Dev", key: "DEV", color: "#68AAB9" },
 ];
 
-/** Deletes the account's areas, projects, tasks (with their sessions, reports and connections) and events. Settings stay. */
-async function clearAccount(db: SupabaseClient) {
+/**
+ * Deletes the account's areas, projects, tasks (with their sessions, reports and connections) and events. Settings stay.
+ * `kept`: a copy of them stays in the account, so this computer keeps their images and folders for putting it back.
+ */
+async function clearAccount(db: SupabaseClient, kept = false) {
   const { id } = (await requirePlannerAccess()).user;
-  // The images this computer keeps for the account's tasks go with them, and so do its folders.
+  // Otherwise the images this computer keeps for the account's tasks go with them, and so do its folders.
   const device = deviceConfig().deviceId;
-  const files = device ? (check(await db.from("attachments").select("file").eq("device_id", device)) as Row[]).map((r) => String(r.file)) : [];
+  const files = device && !kept ? (check(await db.from("attachments").select("file").eq("device_id", device)) as Row[]).map((r) => String(r.file)) : [];
   const projects = (check(await db.from("projects").select("id")) as Row[]).map((r) => String(r.id));
   const areas = (check(await db.from("areas").select("id")) as Row[]).map((r) => String(r.id));
   // Deleting tasks takes their sub-tasks, sessions, reports, images and connections along; areas take their projects.
   for (const table of ["tasks", "events", "projects", "areas", "key_counters"]) {
     check(await db.from(table).delete().eq("user_id", id));
   }
+  if (kept) return;
   removeImageFiles(files);
   forgetAll("cloud", projects, areas);
 }
 
-/** Starts the account over with the default areas, and optionally the sample data. */
+/**
+ * Starts the account over with the default areas, and optionally the sample data. A copy of what was there stays in
+ * the account first (save_account_copy), which Settings → Data can put back; without it nothing is deleted.
+ */
 export async function resetAccount(mode: "sample" | "empty") {
   const db = await supabase();
-  await clearAccount(db);
+  check(await db.rpc("save_account_copy", { reason: mode }));
+  await clearAccount(db, true);
   const areas = check(await db.from("areas").insert(DEFAULT_AREAS.map((a, i) => ({ ...a, sort: i }))).select("id, key")) as Row[];
   if (mode === "sample") await seedSample(db, new Map(areas.map((a) => [String(a.key), String(a.id)])));
+}
+
+/* ---------- copies kept before starting over ---------- */
+
+const COPY_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/** The copies the account keeps of its data (account_copies), newest first. */
+export async function accountCopies(): Promise<DataCopy[]> {
+  const db = await supabase();
+  const rows = check(await db.from("account_copies").select("id, created_at, reason, areas, projects, tasks, events")
+    .order("created_at", { ascending: false })) as Row[];
+  return rows.map((r) => ({
+    id: String(r.id), at: toStamp(new Date(String(r.created_at))), reason: String(r.reason) as CopyReason,
+    areas: Number(r.areas), projects: Number(r.projects), tasks: Number(r.tasks), events: Number(r.events),
+  }));
+}
+
+/**
+ * Puts a copy back in place of the account's data, with its ids and keys (restore_account_copy, one transaction); what's
+ * there now becomes a copy first. This computer kept the copy's images and folders, so they come back with it.
+ */
+export async function restoreAccountCopy(id: string) {
+  if (!COPY_ID.test(id)) throw new Error("That copy isn't there any more.");
+  const db = await supabase();
+  check(await db.rpc("restore_account_copy", { copy_id: id }));
+}
+
+export async function deleteAccountCopy(id: string) {
+  if (!COPY_ID.test(id)) throw new Error("That copy isn't there any more.");
+  const db = await supabase();
+  check(await db.from("account_copies").delete().eq("id", id));
+}
+
+/** How much the account holds. */
+export async function accountSummary(): Promise<DataSummary> {
+  const db = await supabase();
+  const count = async (table: string) => {
+    const r = await db.from(table).select("id", { count: "exact", head: true });
+    if (r.error) throw new Error(r.error.message);
+    return r.count ?? 0;
+  };
+  const [areas, projects, tasks, events] = await Promise.all([count("areas"), count("projects"), count("tasks"), count("events")]);
+  return { areas, projects, tasks, events };
 }
 
 /* ---------- sample data ---------- */

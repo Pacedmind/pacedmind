@@ -19,6 +19,7 @@ The app's server reads and writes these files; without an account, nothing is se
 | The key that encrypts those two files, itself protected by the operating system (DPAPI on Windows, the Keychain on macOS) | `%APPDATA%\Organizer\data\data-key.bin` |
 | Files for each agent session: the start script and, for Claude Code, its MCP and hook settings, or for Codex, the token file its `notify` program reads | `%APPDATA%\Organizer\data\sessions\<session id>\` |
 | Images from agents' reports, copied when the agent attaches them, one file per image | `%APPDATA%\Organizer\data\attachments\` |
+| Copies of the database kept before **Settings → Data** replaced it (see [Copies](#copies)) | `%APPDATA%\Organizer\data\organizer-before-<what>-<time>.db` |
 | Working folders for tasks without their own folder, a project folder or an area workspace, one per task, named after its key in lowercase | `%APPDATA%\Organizer\data\workspaces\<task key>\`, such as `workspaces\wrk-12` |
 | Window size and position, the theme, and whether the tray hint was shown | `%APPDATA%\Organizer\window-state.json` |
 | The server log | `%APPDATA%\Organizer\logs\server.log` |
@@ -55,9 +56,22 @@ The same steps move this computer's data to another computer: install PacedMind 
 | Button | Result |
 | --- | --- |
 | **Load sample data** | Replaces everything with an example workspace. Asks *Replace everything with the sample data?* first. |
-| **Start empty** | Deletes all tasks, projects, activities and sessions and restores the five default areas. Asks *Delete all tasks, projects, activities and sessions?* first. |
+| **Start empty** | Deletes all tasks, projects, activities and sessions and restores the five default areas. Asks *Start empty?* first. |
 
-Neither can be undone. Both keep your preferences and the settings: work hours, how sessions start, and the MCP access token. They change the database and delete the images of its agents' reports; this computer forgets the folders it had for the projects and tasks that are gone. The `sessions` and `workspaces` folders stay on disk, and can be deleted by hand while PacedMind is closed.
+The question says what goes, such as *This deletes 30 tasks, 7 projects and 8 activities from this computer's data, with their sessions and reports*. While there are tasks, projects or activities, its button works only once **delete** is typed in it.
+
+Both keep a copy of what was there first, and keep your preferences and the settings: work hours, how sessions start, and the MCP access token. The images of agents' reports and this computer's folders for the projects and tasks that went stay for the copy. With nothing but areas there, no copy is kept. The `sessions` and `workspaces` folders stay on disk, and can be deleted by hand while PacedMind is closed.
+
+### Copies
+
+**Copies**, on the same page, lists the copies kept before a reset, newest first: when, what replaced the data (*Before the sample data*, *Before starting empty* or *Before putting a copy back*) and what the copy holds.
+
+| Button | Result |
+| --- | --- |
+| **Put back** | Asks *Put this copy back?*, then replaces the data with the copy's: the same tasks with their keys, projects, areas, activities, sessions and reports, and this computer's folders for them (*Copy put back*). What was there is kept as a copy first, so this can be undone the same way. |
+| **Delete** | Asks *Delete this copy?*, then deletes it for good (*Copy deleted*). |
+
+The newest ten copies stay; a new one deletes the oldest. Without an account, they're files next to the database, such as `organizer-before-sample-20261008-010417.db`. With PacedMind Cloud, they're in your account, and **Copies** shows them on every computer and in the web app.
 
 ## Reinstalling and uninstalling
 

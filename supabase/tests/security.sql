@@ -17,6 +17,7 @@ declare
   ask_id uuid; ask2 uuid; ask3 uuid;
   area_del uuid; t_del bigint; t_moved bigint; code text; proj_b uuid; req_ag uuid; freq uuid;
   sid text := '0123456789abcdef';
+  cp uuid; cp2 uuid; p_copy uuid; t_copy bigint; k_copy text; nb int;
   n int; out text := '';
   now_s bigint := extract(epoch from now())::bigint;
   claims_aal1 text; claims_aal2_old text; claims_aal2_fresh text; claims_bad_session text; claims_new_factor text;
@@ -1488,6 +1489,87 @@ begin
     out := out || '25b FAIL a request for a signed-out computer accepted' || E'\n';
     reset role;
   exception when others then out := out || '25b signed-out computer refused: ' || left(sqlerrm, 60) || E'\n'; end;
+
+  -- 33. copies of the account's data: kept before a reset and before putting one back, only through the functions,
+  -- read, put back and deleted only by the account's own person, and put back with the same ids and keys
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    insert into public.projects (area_id, name) values (area_a, 'Copy test') returning id into p_copy;
+    insert into public.tasks (area_id, project_id, title, created_at, updated_at)
+      values (area_a, p_copy, 'Kept in a copy', '2026-10-08T00:00:00', '2026-10-08T00:00:00') returning id, key into t_copy, k_copy;
+    insert into public.subtasks (task_id, title) values (t_copy, 'Kept sub-task');
+    cp := public.save_account_copy('sample');
+    select count(*) into n from public.account_copies; out := out || '33 own copy saved=' || n || ' (want 1)' || E'\n';
+    select count(*) into n from public.account_copies c, jsonb_array_elements(c.data -> 'tasks') e
+      where c.id = cp and (e ->> 'id')::bigint = t_copy;
+    out := out || '33a the copy holds the task=' || n || ' (want 1)' || E'\n';
+    reset role;
+  exception when others then out := out || '33 ERROR ' || sqlerrm || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    insert into public.account_copies (reason, areas, projects, tasks, events, data) values ('sample', 0, 0, 0, 0, '{}');
+    out := out || '33b FAIL a copy written directly' || E'\n';
+    reset role;
+  exception when others then out := out || '33b copy written directly refused: ' || left(sqlerrm, 50) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    update public.account_copies set data = '{"tasks": []}' where id = cp;
+    out := out || '33c FAIL a copy changed' || E'\n';
+    reset role;
+  exception when others then out := out || '33c changing a copy refused: ' || left(sqlerrm, 50) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_b_old, true); set local role authenticated;
+    select count(*) into n from public.account_copies; out := out || '33d other account sees copies=' || n || ' (want 0)' || E'\n';
+    delete from public.account_copies;
+    perform public.restore_account_copy(cp);
+    out := out || '33e FAIL another account put a copy back' || E'\n';
+    reset role;
+  exception when others then out := out || '33e another account''s copy refused: ' || left(sqlerrm, 50) || E'\n'; end;
+  select count(*) into n from public.account_copies where user_id = a;
+  out := out || '33f other account deleted a copy=' || (1 - n) || ' (want 0)' || E'\n';
+  begin
+    perform set_config('request.jwt.claims', claims_aal1, true); set local role authenticated;
+    perform public.save_account_copy('empty');
+    out := out || '33g FAIL a password-only session saved a copy' || E'\n';
+    reset role;
+  exception when others then out := out || '33g password-only session refused: ' || left(sqlerrm, 50) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', json_build_object('role', 'anon')::text, true); set local role anon;
+    perform public.save_account_copy('empty');
+    out := out || '33h FAIL anon saved a copy' || E'\n';
+    reset role;
+  exception when others then out := out || '33h anon refused: ' || left(sqlerrm, 50) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    perform private.put_back('tasks', '[]', a);
+    out := out || '33i FAIL put_back called directly' || E'\n';
+    reset role;
+  exception when others then out := out || '33i put_back refused: ' || left(sqlerrm, 50) || E'\n'; end;
+  select count(*) into nb from public.tasks where user_id = b;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    -- What a reset does: the task and project go, something else takes their place.
+    delete from public.tasks where id = t_copy;
+    delete from public.projects where id = p_copy;
+    insert into public.tasks (area_id, title, created_at, updated_at) values (area_a, 'Sample task', '2026-10-08T00:00:00', '2026-10-08T00:00:00');
+    cp2 := public.restore_account_copy(cp);
+    select count(*) into n from public.tasks where id = t_copy and key = k_copy and project_id = p_copy;
+    out := out || '33j task back with its id, key and project=' || n || ' (want 1)' || E'\n';
+    select count(*) into n from public.subtasks where task_id = t_copy; out := out || '33k its sub-task back=' || n || ' (want 1)' || E'\n';
+    select count(*) into n from public.tasks where title = 'Sample task'; out := out || '33l what replaced it left=' || n || ' (want 0)' || E'\n';
+    select count(*) into n from public.account_copies where id = cp2 and reason = 'restore';
+    out := out || '33m what was there kept as a copy=' || n || ' (want 1)' || E'\n';
+    reset role;
+  exception when others then out := out || '33j ERROR ' || sqlerrm || E'\n'; end;
+  select count(*) into n from public.tasks where user_id = b; out := out || '33n other account''s tasks changed=' || abs(n - nb) || ' (want 0)' || E'\n';
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    for i in 1..11 loop perform public.save_account_copy('empty'); end loop;
+    select count(*) into n from public.account_copies; out := out || '33o copies kept=' || n || ' (want 10)' || E'\n';
+    delete from public.account_copies;
+    select count(*) into n from public.account_copies; out := out || '33p own copies deleted, left=' || n || ' (want 0)' || E'\n';
+    reset role;
+  exception when others then out := out || '33o ERROR ' || sqlerrm || E'\n'; end;
 
   -- 12. revoking the device ends its session at once
   begin

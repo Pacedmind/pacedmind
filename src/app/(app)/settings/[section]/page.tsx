@@ -8,6 +8,7 @@ import {
 } from "@/components/views/settings";
 import * as repo from "@/server/repo";
 import { legacySummary } from "@/server/account";
+import { dataCopies, dataSummary } from "@/server/copies";
 import { readPlan } from "@/server/billing";
 import { mcpLinks, thisDevice } from "@/server/devices";
 import { mcpUrl } from "@/server/launcher";
@@ -74,8 +75,12 @@ async function body(section: SettingsSection, state: Auth | null, desktop: boole
     case "computers":
       return <ComputersSettings />;
     case "data": {
-      const [legacy, sessions] = await Promise.all([state && desktop ? legacySummary() : null, repo.listSessions()]);
-      return <DataSettings account={!!state} desktop={desktop} legacy={legacy} sessionsCount={sessions.length} />;
+      const [legacy, sessions, summary, copies] = await Promise.all([
+        state && desktop ? legacySummary() : null, repo.listSessions(), dataSummary(),
+        // Before the account's copies exist in its database, there are none to list.
+        dataCopies().catch(() => []),
+      ]);
+      return <DataSettings account={!!state} desktop={desktop} legacy={legacy} sessionsCount={sessions.length} summary={summary} copies={copies} />;
     }
     case "appearance":
       return <AppearanceSettings />;

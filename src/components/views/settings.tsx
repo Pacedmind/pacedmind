@@ -5,7 +5,8 @@ import { Picker, type PickerOption } from "../picker";
 import { useRouter, useSelectedLayoutSegment } from "next/navigation";
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import {
-  connectAgentAction, createProjectAction, disconnectAgentAction, importLegacyAction, manageBillingAction, moveToThisComputerAction, resetDataAction, rotateMcpTokenAction, subscribeAction,
+  connectAgentAction, createProjectAction, deleteCopyAction, disconnectAgentAction, importLegacyAction, manageBillingAction, moveToThisComputerAction,
+  resetDataAction, restoreCopyAction, rotateMcpTokenAction, subscribeAction,
   linkFoundFolderAction, markFoldersAction, updateDeviceSettingsAction, savePreferencesAction, setProjectServersAction, updateProjectAction, updateSettingsAction,
 } from "@/app/actions";
 import {
@@ -15,17 +16,18 @@ import {
   FALLBACK_MARKET, MARKETS, YEARLY_MONTHS, daysLeft, marketOf, planPrice, type BillingPeriod, type Plan,
 } from "@/lib/billing";
 import { projectColor } from "@/lib/colors";
-import { fmtShort, toDateStr } from "@/lib/dates";
+import { fmtShort, fmtTime, toDateStr } from "@/lib/dates";
 import { REMOTE_START_OPTIONS, fromElsewhereText } from "@/lib/from-elsewhere";
 import { OLD_ANCHORS, type SettingsGroup, type SettingsSection } from "@/lib/settings-menu";
 import { TERMINALS, terminalFor } from "@/lib/terminals";
 import {
   AGENT_LABEL, APP_LABEL, PREFERENCE_TEXT_MAX, PREFERENCE_TOPIC_MAX, SUGGESTED_TOPICS, deviceOnline, sameTopic, topicHint, topicOrder,
   type AgentId, type AgentTools, type Area, type ConnectedAgent, type Device, type DeviceSettings, type FolderExtras, type McpLink, type Preference,
-  type Project, type ProjectAgentsView, type Settings,
+  type CopyReason, type DataCopy, type DataSummary, type Project, type ProjectAgentsView, type Settings,
 } from "@/lib/types";
 import { guessCountry } from "../../../site/lib/markets";
 import { useOpenBilling } from "../billing";
+import { ConfirmDialog } from "../dialog";
 import { AgentIcon, AreaMark, Icon, type IconName } from "../icons";
 import { ImportProjects } from "../import-projects";
 import { AreaWorkspace } from "../area-workspace";
@@ -443,16 +445,46 @@ export function SecuritySettings({ account }: { account: AccountView }) {
   </>;
 }
 
-/** Settings → Data: where the data is, moving it between this computer and the account, starting over. */
-export function DataSettings({ account, desktop, legacy, sessionsCount }: {
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+/** What some data holds, in a few words: "12 tasks, 3 projects and 2 activities". */
+function holds(d: DataSummary): string {
+  const parts = [
+    d.tasks ? plural(d.tasks, "task", "tasks") : null, d.projects ? plural(d.projects, "project", "projects") : null,
+    d.events ? plural(d.events, "activity", "activities") : null,
+  ].filter((p): p is string => !!p);
+  if (!parts.length) return plural(d.areas, "area", "areas");
+  return parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}`;
+}
+
+const COPY_REASON: Record<CopyReason, string> = {
+  sample: "Before the sample data",
+  empty: "Before starting empty",
+  restore: "Before putting a copy back",
+};
+
+const copyTime = (c: DataCopy) => `${fmtShort(c.at)}, ${fmtTime(c.at)}`;
+
+/** Settings → Data: where the data is, moving it between this computer and the account, starting over and undoing it. */
+export function DataSettings({ account, desktop, legacy, sessionsCount, summary, copies }: {
   account: boolean;
   desktop: boolean;
   /** What this computer's own data holds, to move into the signed-in account; null without an account. */
   legacy: { file: string; areas: number; projects: number; tasks: number } | null;
   sessionsCount: number;
+  /** What the data in use holds, which starting over deletes. */
+  summary: DataSummary;
+  /** The copies kept before it was started over or replaced, newest first. */
+  copies: DataCopy[];
 }) {
-  const { run } = useAction();
-  return (
+  const { run, pending } = useAction();
+  const [resetting, setResetting] = useState<"sample" | "empty" | null>(null);
+  const [restoring, setRestoring] = useState<DataCopy | null>(null);
+  const [deleting, setDeleting] = useState<DataCopy | null>(null);
+  // Only areas, which every start has: nothing a reset would lose.
+  const filled = summary.tasks + summary.projects + summary.events > 0;
+  const where = account ? "your account" : "this computer's data";
+  return <>
     <Section note={account
       ? `Stored in your account, not on this computer. Images agents attach stay on the computer they were saved on. ${sessionsCount} sessions recorded so far.`
       : `Stored on this computer, in PacedMind's data folder. ${sessionsCount} sessions recorded so far.`}>
@@ -473,11 +505,65 @@ export function DataSettings({ account, desktop, legacy, sessionsCount }: {
         </Row>
       )}
       <Row label="Reset">
-        <Button onClick={() => confirm("Replace everything with the sample data?") && run(() => resetDataAction("sample"), "Sample data loaded")}>Load sample data</Button>
-        <Button onClick={() => confirm("Delete all tasks, projects, activities and sessions?") && run(() => resetDataAction("empty"), "Workspace cleared")}>Start empty</Button>
+        <Button disabled={pending} onClick={() => setResetting("sample")}>Load sample data</Button>
+        <Button disabled={pending} onClick={() => setResetting("empty")}>Start empty</Button>
       </Row>
     </Section>
-  );
+
+    {copies.length > 0 && (
+      <Section title="Copies" note="Kept before starting over or putting a copy back, so that can be undone. The newest ten stay.">
+        {copies.map((c) => (
+          <Row key={c.id} label={copyTime(c)}>
+            <span className="min-w-0 flex-1 py-2 text-[12.5px] leading-snug text-fg3">{COPY_REASON[c.reason]}: {holds(c)}</span>
+            <Button disabled={pending} onClick={() => setRestoring(c)}>Put back</Button>
+            <Button variant="ghost" disabled={pending} onClick={() => setDeleting(c)} aria-label={`Delete the copy from ${copyTime(c)}`}>Delete</Button>
+          </Row>
+        ))}
+      </Section>
+    )}
+
+    {resetting && (
+      <ConfirmDialog danger title={resetting === "sample" ? "Replace everything with the sample data?" : "Start empty?"}
+        confirmLabel={resetting === "sample" ? "Load sample data" : "Start empty"} typed={filled ? "delete" : undefined}
+        onCancel={() => setResetting(null)}
+        onConfirm={() => {
+          const mode = resetting;
+          setResetting(null);
+          run(() => resetDataAction(mode), mode === "sample" ? "Sample data loaded" : "Workspace cleared");
+        }}>
+        {filled
+          ? <>
+              This deletes {holds(summary)} from {where}, with their sessions and reports,{" "}
+              {resetting === "sample" ? "and puts an example workspace in their place." : "and goes back to the five default areas."}{" "}
+              A copy is kept first: <span className="text-fg2">Copies</span> on this page puts it back.
+            </>
+          : resetting === "sample"
+            ? <>There are no tasks, projects or activities yet. This replaces the areas with an example workspace.</>
+            : <>There are no tasks, projects or activities yet. This goes back to the five default areas.</>}
+      </ConfirmDialog>
+    )}
+    {restoring && (
+      <ConfirmDialog title="Put this copy back?" confirmLabel="Put back" onCancel={() => setRestoring(null)}
+        onConfirm={() => {
+          const id = restoring.id;
+          setRestoring(null);
+          run(() => restoreCopyAction(id));
+        }}>
+        It replaces what&apos;s in {where} now ({holds(summary)}) with the copy from {copyTime(restoring)} ({holds(restoring)}).
+        {filled ? " What's there now is kept as a copy first, so this can be undone the same way." : ""}
+      </ConfirmDialog>
+    )}
+    {deleting && (
+      <ConfirmDialog danger title="Delete this copy?" confirmLabel="Delete copy" onCancel={() => setDeleting(null)}
+        onConfirm={() => {
+          const id = deleting.id;
+          setDeleting(null);
+          run(() => deleteCopyAction(id));
+        }}>
+        The copy from {copyTime(deleting)} ({holds(deleting)}) is deleted for good.
+      </ConfirmDialog>
+    )}
+  </>;
 }
 
 /** Settings → Appearance. */

@@ -6,12 +6,13 @@ import { DatabaseSync } from "node:sqlite";
 import { addDays, addMinutes } from "date-fns";
 import { removeImageFiles } from "../attachments";
 import {
-  commandProblem, dataDir, deviceConfig, forgetAll, setProjectFolder, setTaskFolder, updateDevice,
+  bringBackForCopy, commandProblem, dataDir, deviceConfig, forgetAll, keepForCopy, keepOnlyCopies, setProjectFolder, setTaskFolder,
+  updateDevice,
 } from "../device";
 import { SETTING_KEYS } from "./shared";
 import { EARLIER_PALETTE } from "@/lib/colors";
 import { toDateStr, toStamp } from "@/lib/dates";
-import type { TerminalId } from "@/lib/types";
+import type { CopyReason, DataCopy, DataSummary, TerminalId } from "@/lib/types";
 
 /*
  * This computer's own data, for the free One device plan: without an account, PacedMind keeps everything in
@@ -241,17 +242,22 @@ function adopt(conn: DatabaseSync) {
   }
 }
 
-/** Starts this computer's data over, empty (the default areas) or with the sample data. */
+/** What starting over deletes, in an order the foreign keys allow. */
+const CLEARED = ["session_asks", "attachments", "reports", "session_events", "sessions", "edges", "subtasks", "tasks", "events", "projects", "areas"];
+
+const idsOf = (conn: DatabaseSync, table: "projects" | "areas") =>
+  (conn.prepare(`SELECT id FROM ${table}`).all() as Row[]).map((r) => String(r.id));
+
+/** Starts this computer's data over, empty (the default areas) or with the sample data, after keeping a copy of it. */
 export function resetLocal(mode: "sample" | "empty") {
   const conn = db();
   const files = (conn.prepare("SELECT file FROM attachments").all() as Row[]).map((r) => String(r.file));
-  const projects = (conn.prepare("SELECT id FROM projects").all() as Row[]).map((r) => String(r.id));
-  const areas = (conn.prepare("SELECT id FROM areas").all() as Row[]).map((r) => String(r.id));
+  const projects = idsOf(conn, "projects");
+  const areas = idsOf(conn, "areas");
+  const kept = keepCopy(conn, mode);
   conn.exec("BEGIN");
   try {
-    for (const t of ["session_asks", "attachments", "reports", "session_events", "sessions", "edges", "subtasks", "tasks", "events", "projects", "areas"]) {
-      conn.exec(`DELETE FROM ${t}`);
-    }
+    for (const t of CLEARED) conn.exec(`DELETE FROM ${t}`);
     conn.exec("DELETE FROM sqlite_sequence");
     seed(conn, mode);
     conn.exec("COMMIT");
@@ -259,9 +265,128 @@ export function resetLocal(mode: "sample" | "empty") {
     conn.exec("ROLLBACK");
     throw e;
   }
-  // Only this data's images: the account's, if you use Cloud here too, stay.
-  removeImageFiles(files);
+  // Only this data's images, the account's stay; and none while a copy can bring their reports back.
+  if (!kept) removeImageFiles(files);
   forgetAll("local", projects, areas);
+}
+
+/* ---------- copies ---------- */
+
+/** A copy kept before Settings → Data replaced this computer's data, next to its file: organizer-before-<what replaced it>-<time>.db. */
+const COPY_FILE = /^organizer-before-(sample|empty|restore)-(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})(?:-(\d{1,3}))?\.db$/;
+const KEEP_COPIES = 10;
+const COPY_GONE = "That copy isn't there any more.";
+
+/** The tables a copy puts back, in an order the foreign keys allow. */
+const RESTORED = ["areas", "projects", "tasks", "subtasks", "events", "sessions", "session_events", "reports", "attachments", "edges"];
+
+const copiesDir = () => path.dirname(localDbPath());
+
+/** The copies next to the data, newest first, by the time in their names. */
+function copyNames(): string[] {
+  let names: string[];
+  try {
+    names = fs.readdirSync(/*turbopackIgnore: true*/ copiesDir());
+  } catch {
+    return [];
+  }
+  const order = (name: string) => {
+    const m = COPY_FILE.exec(name)!;
+    return `${m.slice(2, 8).join("")}${(m[8] ?? "0").padStart(3, "0")}`;
+  };
+  return names.filter((n) => COPY_FILE.test(n)).sort((a, b) => order(b).localeCompare(order(a)));
+}
+
+/**
+ * Keeps a copy of this computer's data next to it, with what this computer forgets once it's replaced (device.ts),
+ * before Settings → Data replaces it. Only the newest ten copies stay; `spare` is one that must stay anyway, the copy
+ * being put back. Answers the copy's name, or null when there was nothing to keep: no projects, tasks or activities.
+ */
+function keepCopy(conn: DatabaseSync, reason: CopyReason, spare?: string): string | null {
+  const used = conn.prepare("SELECT (SELECT COUNT(*) FROM projects) + (SELECT COUNT(*) FROM tasks) + (SELECT COUNT(*) FROM events) AS n").get() as Row;
+  if (Number(used.n) === 0) return null;
+  const stamp = toStamp(new Date()).replace(/[-:]/g, "").replace("T", "-");
+  let name = `organizer-before-${reason}-${stamp}.db`;
+  for (let i = 2; fs.existsSync(/*turbopackIgnore: true*/ path.join(copiesDir(), name)); i++) name = `organizer-before-${reason}-${stamp}-${i}.db`;
+  conn.prepare("VACUUM INTO ?").run(path.join(/*turbopackIgnore: true*/ copiesDir(), name));
+  keepForCopy(name, idsOf(conn, "projects"), idsOf(conn, "areas"));
+  const names = copyNames();
+  for (const old of names.slice(KEEP_COPIES)) {
+    if (old !== spare) fs.rmSync(/*turbopackIgnore: true*/ path.join(copiesDir(), old), { force: true });
+  }
+  keepOnlyCopies(copyNames());
+  return name;
+}
+
+/** The copies of this computer's data, newest first. */
+export function localCopies(): DataCopy[] {
+  return copyNames().flatMap((name) => {
+    const m = COPY_FILE.exec(name)!;
+    const conn = new DatabaseSync(path.join(/*turbopackIgnore: true*/ copiesDir(), name), { readOnly: true });
+    try {
+      const count = (table: string) => Number((conn.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as Row).n);
+      return [{
+        id: name, at: `${m[2]}-${m[3]}-${m[4]}T${m[5]}:${m[6]}:${m[7]}`, reason: m[1] as CopyReason,
+        areas: count("areas"), projects: count("projects"), tasks: count("tasks"), events: count("events"),
+      }];
+    } catch {
+      return [];
+    } finally {
+      conn.close();
+    }
+  });
+}
+
+/**
+ * Puts a copy back in place of this computer's data: what's there now becomes a copy first, then every table the
+ * resets replace takes the copy's rows, ids included, and this computer's folders follow. Settings and preferences
+ * aren't in a copy and stay as they are. A copy from an older version brings the columns it has; folders in its rows,
+ * which older versions kept there, stay out: folders are this computer's settings (device.ts).
+ */
+export function restoreLocal(name: string) {
+  if (!COPY_FILE.test(name) || !fs.existsSync(/*turbopackIgnore: true*/ path.join(copiesDir(), name))) throw new Error(COPY_GONE);
+  const conn = db();
+  const projects = idsOf(conn, "projects");
+  const areas = idsOf(conn, "areas");
+  keepCopy(conn, "restore", name);
+  conn.prepare("ATTACH DATABASE ? AS kept").run(path.join(/*turbopackIgnore: true*/ copiesDir(), name));
+  try {
+    const columns = (schema: string, table: string) =>
+      (conn.prepare(`PRAGMA ${schema}.table_info(${table})`).all() as { name: string }[]).map((c) => c.name);
+    const legacy = (table: string, column: string) => column === "folder" && (table === "projects" || table === "tasks");
+    conn.exec("BEGIN");
+    try {
+      for (const t of CLEARED) conn.exec(`DELETE FROM main.${t}`);
+      conn.exec("DELETE FROM main.sqlite_sequence");
+      for (const t of RESTORED) {
+        const there = new Set(columns("kept", t));
+        const list = columns("main", t).filter((c) => there.has(c) && !legacy(t, c)).map((c) => `"${c}"`).join(", ");
+        if (list) conn.exec(`INSERT INTO main.${t} (${list}) SELECT ${list} FROM kept.${t}`);
+      }
+      conn.exec("COMMIT");
+    } catch (e) {
+      conn.exec("ROLLBACK");
+      throw e;
+    }
+  } finally {
+    conn.exec("DETACH DATABASE kept");
+  }
+  forgetAll("local", projects, areas);
+  bringBackForCopy(name);
+}
+
+/** Deletes a copy of this computer's data, with what was kept for it. */
+export function deleteLocalCopy(name: string) {
+  if (!COPY_FILE.test(name)) throw new Error(COPY_GONE);
+  fs.rmSync(/*turbopackIgnore: true*/ path.join(copiesDir(), name), { force: true });
+  keepOnlyCopies(copyNames());
+}
+
+/** How much this computer's data holds. */
+export function localSummary(): DataSummary {
+  const conn = db();
+  const count = (table: string) => Number((conn.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as Row).n);
+  return { areas: count("areas"), projects: count("projects"), tasks: count("tasks"), events: count("events") };
 }
 
 export const DEFAULT_AREAS = [

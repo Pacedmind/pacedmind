@@ -40,6 +40,12 @@ export interface DeviceConfig {
    * listed gets all of them, as Claude Code and Codex would give them anyway; an empty list gets PacedMind's alone.
    */
   servers: Record<string, string[]>;
+  /**
+   * What starting this computer's own data over made it forget (its projects' and areas' folders and MCP servers, its
+   * tasks' folders), by the copy of the data kept before it (store/local-db.ts), so putting that copy back brings
+   * them back too. Here rather than in the copy, so a file in the data folder can't choose where sessions run.
+   */
+  copies?: Record<string, KeptSettings>;
   remoteStart: RemoteStart;
   /**
    * Whether sessions asked for from elsewhere need a two-factor code entered in the last five minutes (on by default).
@@ -274,6 +280,50 @@ export function forgetAll(scope: TaskScope, projectIds: string[], areaIds: strin
   const taskFolders = Object.fromEntries(Object.entries(d.taskFolders ?? {}).filter(([key]) => local(key) !== (scope === "local")));
   const servers = Object.fromEntries(Object.entries(d.servers ?? {}).filter(([id]) => !gone.has(id)));
   save({ ...d, folders, areaFolders, taskFolders, servers });
+}
+
+/** This computer's settings for some of its own data's projects, areas and tasks, kept with a copy of that data. */
+export type KeptSettings = Pick<DeviceConfig, "folders" | "areaFolders" | "taskFolders" | "servers">;
+
+/**
+ * Keeps what forgetAll("local", projectIds, areaIds) is about to drop, with the copy of this computer's own data
+ * made before it was started over or replaced.
+ */
+export function keepForCopy(copy: string, projectIds: string[], areaIds: string[]) {
+  const d = deviceConfig();
+  const projects = new Set(projectIds);
+  const areas = new Set(areaIds);
+  const pick = <T>(all: Record<string, T> | undefined, keep: (key: string) => boolean) =>
+    Object.fromEntries(Object.entries(all ?? {}).filter(([key]) => keep(key)));
+  const kept: KeptSettings = {
+    folders: pick(d.folders, (id) => projects.has(id)),
+    areaFolders: pick(d.areaFolders, (id) => areas.has(id)),
+    taskFolders: pick(d.taskFolders, (key) => key.startsWith("local:")),
+    servers: pick(d.servers, (id) => projects.has(id)),
+  };
+  save({ ...d, copies: { ...(d.copies ?? {}), [copy]: kept } });
+}
+
+/** Brings back what was kept with a copy, once its data is back in place (after forgetAll for the data it replaced). */
+export function bringBackForCopy(copy: string) {
+  const d = deviceConfig();
+  const kept = d.copies?.[copy];
+  if (!kept) return;
+  save({
+    ...d,
+    folders: { ...d.folders, ...kept.folders },
+    areaFolders: { ...(d.areaFolders ?? {}), ...kept.areaFolders },
+    taskFolders: { ...(d.taskFolders ?? {}), ...kept.taskFolders },
+    servers: { ...(d.servers ?? {}), ...kept.servers },
+  });
+}
+
+/** Lets go of what was kept with copies that are gone. */
+export function keepOnlyCopies(names: string[]) {
+  const d = deviceConfig();
+  const still = new Set(names);
+  const copies = Object.fromEntries(Object.entries(d.copies ?? {}).filter(([name]) => still.has(name)));
+  if (Object.keys(copies).length !== Object.keys(d.copies ?? {}).length) save({ ...d, copies });
 }
 
 /** Forgets a deleted project's folder and MCP servers. */

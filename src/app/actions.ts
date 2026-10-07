@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import * as repo from "@/server/repo";
 import { importLegacy, moveToThisComputer, resetAccount } from "@/server/account";
 import { billingPortal, readPlan, subscribe } from "@/server/billing";
+import { deleteCopy, restoreCopy } from "@/server/copies";
 import { usesCloud } from "@/server/scope";
 import { resetLocal } from "@/server/store/local-db";
 import { checkThisDevice, deviceIdFor, offeredDevice, runsHere, thisDeviceId, toolsHere } from "@/server/devices";
@@ -1055,15 +1056,44 @@ export async function dismissImportAction(): Promise<Result> {
 
 /* ---------- data ---------- */
 
-/** Starts the data in use over: the account's, or without an account this computer's own. */
+/** Starts the data in use over, after keeping a copy of it: the account's, or without an account this computer's own. */
 export async function resetDataAction(mode: "sample" | "empty"): Promise<Result> {
   await guard();
-  if (await usesCloud()) {
-    // Starting over deletes before it adds: on a read-only account only the deleting would go through.
-    if ((await readPlan())?.writable === false) return { ok: false, error: READ_ONLY_MESSAGE };
-    await resetAccount(mode);
-  } else resetLocal(mode);
+  if (mode !== "sample" && mode !== "empty") return { ok: false, error: "Pick the sample data or an empty start." };
+  try {
+    if (await usesCloud()) {
+      // Starting over deletes before it adds: on a read-only account only the deleting would go through.
+      if ((await readPlan())?.writable === false) return { ok: false, error: READ_ONLY_MESSAGE };
+      await resetAccount(mode);
+    } else resetLocal(mode);
+  } catch (e) {
+    return done({ ok: false, error: errorOf(e) });
+  }
   return done();
+}
+
+/** Puts a copy kept before a reset back in place of the data in use; what's there now becomes a copy first. */
+export async function restoreCopyAction(id: string): Promise<Result> {
+  await guard();
+  if (typeof id !== "string") return { ok: false, error: "That copy isn't there any more." };
+  try {
+    if ((await usesCloud()) && (await readPlan())?.writable === false) return { ok: false, error: READ_ONLY_MESSAGE };
+    await restoreCopy(id);
+  } catch (e) {
+    return done({ ok: false, error: errorOf(e) });
+  }
+  return done({ ok: true, message: "Copy put back" });
+}
+
+export async function deleteCopyAction(id: string): Promise<Result> {
+  await guard();
+  if (typeof id !== "string") return { ok: false, error: "That copy isn't there any more." };
+  try {
+    await deleteCopy(id);
+  } catch (e) {
+    return { ok: false, error: errorOf(e) };
+  }
+  return done({ ok: true, message: "Copy deleted" });
 }
 
 /* ---------- billing ---------- */
