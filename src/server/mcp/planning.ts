@@ -185,7 +185,7 @@ export function registerPlanningTools(server: McpServer) {
   tool(server, "get_overview", {
     title: "Get overview",
     description:
-      "Start here. Today's date and time, the user's preferences for how they work, their areas and projects with their ids, what's overdue, due or planned today, today's calendar, and agent sessions waiting for review or running.",
+      "Today's date and time, the user's preferences for how they work, their areas and projects with their ids, what's overdue, due or planned today, today's calendar, and agent sessions waiting for review or running.",
     input: z.object({}),
     kind: "read",
   }, async () => {
@@ -272,7 +272,7 @@ export function registerPlanningTools(server: McpServer) {
 
   tool(server, "delete_area", {
     title: "Delete area",
-    description: "Delete an area and its projects. Its tasks are kept and move to the Inbox. Ask the user first.",
+    description: "Delete an area and its projects. Its tasks are kept and move to the Inbox. It can't be undone.",
     input: z.object({ area: areaRef }),
     kind: "delete",
   }, async ({ area }) => {
@@ -398,7 +398,7 @@ export function registerPlanningTools(server: McpServer) {
 
   tool(server, "delete_project", {
     title: "Delete project",
-    description: "Delete a project. Its tasks are kept in the project's area without a project. Ask the user first.",
+    description: "Delete a project. Its tasks are kept in the project's area without a project. It can't be undone.",
     input: z.object({ project: projectRef }),
     kind: "delete",
   }, async ({ project }) => {
@@ -656,7 +656,7 @@ export function registerPlanningTools(server: McpServer) {
 
   tool(server, "delete_task", {
     title: "Delete task",
-    description: "Delete a task with its sub-tasks, sessions and dependencies. Prefer status canceled when the user may want a record. Ask first.",
+    description: "Delete a task with its sub-tasks, sessions and dependencies. It can't be undone; status canceled keeps a record instead.",
     input: z.object({ task: taskRef }),
     kind: "delete",
   }, async ({ task }) => {

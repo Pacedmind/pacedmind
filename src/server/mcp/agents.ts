@@ -335,7 +335,7 @@ export function registerAgentTools(server: McpServer) {
   tool(server, "start_session", {
     title: "Start agent session",
     description:
-      "Ask to start Claude Code or Codex working on a task on one of the user's computers: in a terminal or the agent's desktop app there, in the task's folder, or in the agent's cloud (Claude Code on the web, Codex cloud); where the task says unless `where` is given. Only when the user asks for it. " +
+      "Ask to start Claude Code or Codex working on a task on one of the user's computers: in a terminal or the agent's desktop app there, in the task's folder, or in the agent's cloud (Claude Code on the web, Codex cloud); where the task says unless `where` is given. " +
       (HOSTED
         ? "It goes to `computer` (list_computers), else to the task's computer, else the default one, which does what its own settings say: starts it, asks the user there, or refuses. A computer that takes such requests only with the user's two-factor code can't take one from you: then the answer gives a link where the user starts it."
         : "On this computer the user allows it in the PacedMind app first (the request expires after 10 minutes). With `computer`, another of the user's computers (list_computers) does what its own settings say: starts it, asks the user there, or refuses."),
@@ -376,7 +376,7 @@ export function registerAgentTools(server: McpServer) {
   tool(server, "request_changes", {
     title: "Request changes",
     description:
-      "Ask to send work an agent handed back to the agent again, with what the user wants changed. Once the user allows it in the PacedMind app, the changes go on the agent's last report and its session reopens in a new terminal on the user's computer, in a new conversation that reads the report and the changes. The task goes back to in progress. Only when the user asks.",
+      "Ask to send work an agent handed back to the agent again, with what the user wants changed. Once the user allows it in the PacedMind app, the changes go on the agent's last report and its session reopens in a new terminal on the user's computer, in a new conversation that reads the report and the changes. The task goes back to in progress.",
     input: z.object({
       task: taskRef,
       changes: z.string().max(20000).describe("What should change, in the user's words. The agent reads it as written"),
@@ -418,8 +418,8 @@ export function registerAgentTools(server: McpServer) {
   tool(server, "start_task", {
     title: "Start task",
     description:
-      "For agents: tell PacedMind you are starting work on a task. Returns the task and what to do when you finish. " +
-      "Pass environment too, so the user sees what this session runs with.",
+      "Records that an agent's session is starting work on a task, and returns the task with what its hand-back should contain. " +
+      "`environment` records what the session runs with, for the user to see.",
     input: z.object({
       task: taskRef,
       session: z.string().optional().describe("Session id given in your first message, if any"),
@@ -492,10 +492,9 @@ export function registerAgentTools(server: McpServer) {
   tool(server, "report_progress", {
     title: "Report progress",
     description:
-      "For agents: keep the user posted while you work on a task, only when it matters: your plan once you have one (send it again as steps get done or it changes), " +
-      "a problem that changes the scope or the risk (kind issue), or a decision you need from the user (kind question: PacedMind notifies them; " +
-      "to wait for their answer in PacedMind, use ask_user instead). " +
-      "Not for routine steps; finish_task hands the work back.",
+      "Posts an update on the task an agent is working on, which the user sees in PacedMind: the agent's plan (sent again as steps get done or it changes), " +
+      "a problem that changes the scope or the risk (kind issue), or a decision the agent needs from the user (kind question, which notifies the user). " +
+      "It doesn't wait for an answer and doesn't hand the work back.",
     input: z.object({
       task: taskRef,
       session: z.string().optional().describe("Your session id"),
@@ -592,7 +591,7 @@ export function registerAgentTools(server: McpServer) {
   tool(server, "finish_task", {
     title: "Finish task",
     description:
-      "For agents: hand a task back for the user's review, with a report of what you did. PacedMind shows the report on the task: your summary, your answer to each Done when item, screenshots, how to check the result and your questions. If not everything is ready, use outcome partial or blocked.",
+      "Hands a task back for the user's review with a report of the work, which PacedMind shows on the task: a summary, an answer to each Done when item, screenshots, how to check the result and questions. Outcome partial or blocked marks work that isn't finished.",
     input: z.object({
       task: taskRef,
       session: z.string().optional(),

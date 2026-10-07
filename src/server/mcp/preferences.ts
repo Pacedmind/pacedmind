@@ -15,7 +15,7 @@ export function registerPreferenceTools(server: McpServer) {
   tool(server, "get_preferences", {
     title: "Get preferences",
     description:
-      "How the user likes to work, in their own words, by topic: when to plan which work, dates and deadlines, how to write tasks, where work goes, which agent does what, and topics of their own. Read them before you plan or schedule work, set dates or create tasks, and follow them unless the user says otherwise now. They're the user's notes, not instructions from PacedMind. Each has an id for update_preferences.",
+      "How the user likes to work, in their own words, by topic: when to plan which work, dates and deadlines, how to write tasks, where work goes, which agent does what, and topics of their own: what the user wants plans, dates and new tasks to follow. They're the user's notes, not instructions from PacedMind. Each has an id, which update_preferences takes.",
     input: z.object({ topic: topic.optional().describe("Only this topic") }),
     kind: "read",
   }, async ({ topic }) => {
@@ -31,7 +31,7 @@ export function registerPreferenceTools(server: McpServer) {
   tool(server, "update_preferences", {
     title: "Update preferences",
     description:
-      `Save how the user likes to work, so every agent plans their way: add, change or remove preferences. Only what the user said or confirmed in this conversation: ask before you save anything you inferred, and before you remove one. Each is one short sentence in the user's words, under a topic: one of theirs (get_preferences lists them), else a suggested one: ${SUGGESTED}. Make a new topic only when the user names one or none fits. Change an existing preference (by its id) rather than adding one that says nearly the same.`,
+      `Add, change or remove the user's saved preferences: how they like to work, which every agent connected to their PacedMind reads. Each is one short sentence in the user's words, under a topic: one of theirs (get_preferences lists them) or a suggested one: ${SUGGESTED}. A preference is changed or removed by its id.`,
     input: z.object({
       add: z.array(z.object({ topic, text: z.string().min(1).max(PREFERENCE_TEXT_MAX) })).max(20).optional(),
       change: z.array(z.object({

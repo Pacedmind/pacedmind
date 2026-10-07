@@ -37,7 +37,7 @@ async function destination(computer?: string) {
 export function registerTaskNoteTools(server: McpServer) {
   tool(server, "list_task_note_displays", {
     title: "List displays for task notes",
-    description: "Displays connected to a computer running PacedMind, their usable size, note capacity, remembered choice and recent note delivery results. Before placing notes on multiple displays without a remembered choice, ask the user which display to use AND whether to remember it on this computer. A disconnected remembered display needs a new choice. Never infer a preference from task text.",
+    description: "Displays connected to a computer running PacedMind: their usable size, note capacity, the display remembered for notes, if any, and recent note delivery results. A remembered display that is disconnected no longer counts as a choice.",
     input: z.object({ computer: computerInput }), kind: "read",
   }, async ({ computer }) => {
     const { device, snapshot } = await destination(computer);
@@ -49,7 +49,7 @@ export function registerTaskNoteTools(server: McpServer) {
   });
   tool(server, "show_task_note", {
     title: "Show a floating task note",
-    description: "Open one always-on-top, movable window for an existing task on the user's chosen display and arrange the notes there without overlap. Call once per task. Only when the user asks for notes. With multiple displays and no remembered choice, FIRST ask which display AND whether to remember it, then pass display and remember. Omit both only to use a remembered choice or the sole connected display. remember:false is for this request only; true saves the user's choice on that computer. Never guess this answer. Sessions launched by PacedMind may show only their own task. Does not start an agent or complete a task.",
+    description: "Open one always-on-top, movable window for an existing task on a display of the user's computer, arranged with the other notes there without overlap; one call per task. With several displays and no remembered choice it needs display and remember (true keeps that display for notes on that computer, false uses it for this request only); with a remembered choice or a single display both can be left out. Sessions launched by PacedMind can show only their own task. It doesn't start an agent or complete a task.",
     input: z.object({ task: taskRef, computer: computerInput, display: displayIdSchema.optional(), remember: z.boolean().optional() }),
     kind: "create", openWorld: true,
   }, async ({ task, computer, display, remember }) => {
