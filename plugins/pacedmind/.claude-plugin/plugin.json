@@ -10,6 +10,18 @@
   },
   "homepage": "https://pacedmind.com/docs/mcp/claude-and-chatgpt",
   "repository": "https://github.com/Pacedmind/pacedmind",
+  "documentationUrl": "https://pacedmind.com/docs/mcp/claude-and-chatgpt",
+  "supportUrl": "https://pacedmind.com/support",
+  "privacyPolicyUrl": "https://pacedmind.com/privacy",
+  "termsOfServiceUrl": "https://pacedmind.com/terms",
   "license": "AGPL-3.0-only",
-  "keywords": ["planner", "tasks", "projects", "calendar", "productivity", "time-blocking", "agents"]
+  "keywords": [
+    "planner",
+    "tasks",
+    "projects",
+    "calendar",
+    "productivity",
+    "time-blocking",
+    "agents"
+  ]
 }
