@@ -1,0 +1,23 @@
+{
+  "name": "pacedmind",
+  "owner": {
+    "name": "PacedMind",
+    "email": "mbednarczyk@preseed.tech"
+  },
+  "metadata": {
+    "description": "PacedMind's plugin for Claude Code: plan your tasks, projects and calendar with your agents."
+  },
+  "plugins": [
+    {
+      "name": "pacedmind",
+      "source": "./plugins/pacedmind",
+      "description": "Plan your tasks, projects and calendar in PacedMind: see what's on your plate, capture well-described tasks, reschedule your day and follow the agent sessions working on your tasks.",
+      "version": "1.0.0",
+      "author": { "name": "PacedMind" },
+      "homepage": "https://pacedmind.com/docs/mcp/claude-and-chatgpt",
+      "license": "AGPL-3.0-only",
+      "category": "productivity",
+      "keywords": ["planner", "tasks", "calendar", "productivity"]
+    }
+  ]
+}

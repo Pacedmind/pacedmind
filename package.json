@@ -24,7 +24,9 @@
     "stripe:prices": "node scripts/stripe-prices.mjs",
     "stripe:setup": "node scripts/stripe-setup.mjs",
     "lint": "eslint",
-    "typecheck": "next typegen && tsc --noEmit"
+    "typecheck": "next typegen && tsc --noEmit",
+    "plugins": "node scripts/plugins.mjs",
+    "directory:tools": "node --conditions=react-server --import tsx scripts/directory-tools.mts"
   },
   "dependencies": {
     "@codemirror/commands": "^6.11.1",

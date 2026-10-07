@@ -1,0 +1,85 @@
+---
+title: PacedMind in Claude and ChatGPT
+description: "Add PacedMind to Claude, ChatGPT, Claude Code and Codex with your PacedMind Cloud account: what each one needs, what it can do with your planner, and prompts to try."
+---
+
+Claude, ChatGPT, Claude Code and Codex reach your planner through PacedMind Cloud's MCP server, `https://app.pacedmind.com/api/mcp`. You need a PacedMind Cloud account. Each one signs in with that account in the browser, and you allow it once on PacedMind's page; no password, token or key goes into its settings.
+
+## Claude
+
+In Claude on the web, in the desktop app or on your phone, add PacedMind as a custom connector:
+
+1. Open [Claude connectors](https://claude.ai/settings/connectors), then **Customize → Connectors → + → Add custom connector**.
+2. Name it **PacedMind**, enter `https://app.pacedmind.com/api/mcp` and select **Add**.
+3. Select **Connect**, sign in to PacedMind and select **Allow** (see [Allow the agent](/mcp/connect-cloud#allow-the-agent)).
+
+Turn PacedMind on in a conversation's connectors menu. On Team and Enterprise plans, an owner first adds the connector for the organization.
+
+## Claude Code
+
+PacedMind's plugin for Claude Code brings the server and PacedMind's [skills](/skills) together:
+
+```text
+/plugin marketplace add Pacedmind/pacedmind
+/plugin install pacedmind@pacedmind
+```
+
+Then open `/mcp`, select **plugin:pacedmind:pacedmind** and **Authenticate**: the browser opens PacedMind's page, where you sign in and select **Allow**. The tools appear as `mcp__plugin_pacedmind_pacedmind__…`, for example `mcp__plugin_pacedmind_pacedmind__get_overview`.
+
+From a terminal, `claude plugin marketplace add Pacedmind/pacedmind` and `claude plugin install pacedmind@pacedmind` do the same. If you already added PacedMind by hand or with **Connect** in the desktop app (the server `pacedmind`), keep only one of the two, so the tools aren't listed twice: `claude mcp remove pacedmind --scope user` removes the hand-made one. Without the plugin, [Connect to PacedMind Cloud](/mcp/connect-cloud#claude-code) has the commands.
+
+## ChatGPT
+
+1. In ChatGPT, turn on **Developer mode** under **Settings → Security and login**.
+2. Open [Plugins](https://chatgpt.com/plugins), select **+**, name it **PacedMind** and enter `https://app.pacedmind.com/api/mcp` with **OAuth**. ChatGPT registers itself with PacedMind; there's no client secret to copy.
+3. Sign in on PacedMind's page and select **Allow**.
+
+Start a new chat and add PacedMind from the tools menu. Developer mode depends on your plan and your workspace's policy. These are the steps for a custom connection, until PacedMind is listed in ChatGPT's plugin directory.
+
+## Codex
+
+```bash
+codex mcp add pacedmind --url https://app.pacedmind.com/api/mcp
+codex mcp login pacedmind
+```
+
+The Codex command-line tool and the Codex app share this entry. See [Connect to PacedMind Cloud](/mcp/connect-cloud#codex).
+
+## What it can do
+
+Once you allow it, the assistant acts as you in PacedMind Cloud. It can:
+
+* tell you what's on your plate: today's date, overdue work, what's due or planned today, today's events, and agent sessions waiting for your review ([get_overview](/mcp/tools/overview-and-settings#get_overview));
+* add tasks with a description, sub-tasks, a **Done when** list, an estimate, a priority, a planned day and a deadline, and change, reschedule, complete or cancel them ([Tasks](/mcp/tools/tasks));
+* organize areas and projects, order a project's roadmap and make tasks wait for each other ([Areas and projects](/mcp/tools/areas-and-projects));
+* add, move and delete calendar events, show the day-by-day plan with your free focus time, and move a whole day's plans ([Calendar](/mcp/tools/calendar));
+* save how you like to work, when you tell it to ([Preferences](/mcp/tools/preferences));
+* show the Claude Code and Codex sessions working on your tasks and what they handed back ([Sessions](/mcp/tools/sessions)).
+
+It can't change your computers' settings, answer questions for you or delete your account. Asking one of your computers to start an agent session needs two-factor sign-in, a connection you allowed after setting it up, and that computer's own settings; see [What agents can do on PacedMind Cloud](/mcp/connect-cloud#what-agents-can-do-on-pacedmind-cloud).
+
+Claude and ChatGPT usually ask you before a tool that changes or deletes something runs. Check the dates and changes they propose.
+
+## Prompts to try
+
+* "What's on my plate today?"
+* "Add a task to call the dentist tomorrow at 9:00."
+* "Which tasks in my Apartment move project are still open?"
+* "Make the packing task high priority and add a sub-task to buy tape."
+* "Put a 30-minute call with the landlord on my calendar tomorrow at 10:00."
+* "I'm sick today: move everything to tomorrow."
+* "Break the website redesign down into tasks in a new project, and plan the first two for this week."
+
+## Your data
+
+Tool calls go to PacedMind Cloud with what the assistant passes, such as a task's title or a date, and the answers carry your planner: tasks, projects, areas, events, preferences, summaries of your computers and agent sessions with their reports. Those answers become part of your conversation in Claude or ChatGPT, under that service's own privacy policy. PacedMind's [privacy policy](https://pacedmind.com/privacy) says what PacedMind keeps.
+
+To end an assistant's access, select **Disconnect** next to it in PacedMind under **Settings → Connected agents**; see [Connected agents](/mcp/connect-cloud#connected-agents). Disconnecting doesn't remove what's already in that service's conversations.
+
+## If something doesn't work
+
+* A connection that fails, or a sign-in that ends without access: start connecting again from the assistant, sign in to the same PacedMind account, and with two-factor sign-in enabled, finish its code step before selecting **Allow**.
+* Connect from one place at a time: two sign-ins of the same assistant started within a few minutes of each other sign both out, so connect it again.
+* *This connection has planner access only*: the connection was allowed without two-factor sign-in. Planning works; to start sessions on your computers, set up two-factor sign-in in **Settings → Security**, sign in again and reconnect.
+
+[Troubleshooting](/troubleshooting) has more, and [pacedmind.com/support](https://pacedmind.com/support) says how to reach us.

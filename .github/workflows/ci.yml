@@ -28,6 +28,9 @@ jobs:
       - run: npm run test:auth
       - run: npm run test:sql
       - run: npm run test:connectors
+      # The plugin's copies of the skills, its manifests, and the tools' annotation sheet (deploy/directory).
+      - run: npm run plugins -- --check
+      - run: npm run directory:tools -- --check
       - run: npm run test:platforms
       - run: npm run lint
       - run: npm run build

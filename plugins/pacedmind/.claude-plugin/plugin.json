@@ -1,0 +1,15 @@
+{
+  "name": "pacedmind",
+  "displayName": "PacedMind",
+  "version": "1.0.0",
+  "description": "Plan your tasks, projects and calendar in PacedMind from Claude: see what's on your plate, capture well-described tasks, reschedule your day and follow the agent sessions working on your tasks. Connects to PacedMind Cloud with your own account.",
+  "author": {
+    "name": "PacedMind",
+    "email": "mbednarczyk@preseed.tech",
+    "url": "https://pacedmind.com"
+  },
+  "homepage": "https://pacedmind.com/docs/mcp/claude-and-chatgpt",
+  "repository": "https://github.com/Pacedmind/pacedmind",
+  "license": "AGPL-3.0-only",
+  "keywords": ["planner", "tasks", "projects", "calendar", "productivity", "time-blocking", "agents"]
+}

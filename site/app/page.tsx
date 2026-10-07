@@ -289,6 +289,7 @@ export default async function Home() {
             <Link href="/terms" className="hover:text-ink">Terms</Link>
             <Link href="/privacy" className="hover:text-ink">Privacy</Link>
             <Link href="/refunds" className="hover:text-ink">Refunds</Link>
+            <Link href="/support" className="hover:text-ink">Support</Link>
             <a href={`mailto:${SITE.operator.email}`} className="hover:text-ink">Contact</a>
             <span>© 2026 {SITE.operator.name}</span>
           </div>

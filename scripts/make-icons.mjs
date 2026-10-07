@@ -4,6 +4,7 @@
 //   desktop/trayTemplate.png (+ @2x)    – macOS menu bar icon: black on clear, so macOS can tint it
 //   src/app/favicon.ico                 – browser tab
 //   mobile/assets/                      – opaque iOS and padded Android adaptive icons
+//   plugins/pacedmind/assets/           – the plugin's listing icons, light and dark
 // Run with: npm run icons
 import fs from "node:fs";
 import path from "node:path";
@@ -50,9 +51,9 @@ function insideRoundedRect(x, y, lo, hi, r) {
 
 /**
  * RGBA pixels, drawn with 8×8 supersampling so small sizes stay smooth. `inset` shrinks the tile
- * toward the middle by that share of the size on each side.
+ * toward the middle by that share of the size on each side; `background` and `ink` swap for a dark theme.
  */
-function render(size, inset = 0) {
+function render(size, inset = 0, background = BACKGROUND, ink = INK) {
   const ss = 8;
   const out = Buffer.alloc(size * size * 4);
   for (let py = 0; py < size; py++) {
@@ -72,7 +73,7 @@ function render(size, inset = 0) {
       const f = inMark / inRect;
       const o = (py * size + px) * 4;
       for (let i = 0; i < 3; i++) {
-        out[o + i] = Math.round(BACKGROUND[i] * (1 - f) + INK[i] * f);
+        out[o + i] = Math.round(background[i] * (1 - f) + ink[i] * f);
       }
       out[o + 3] = Math.round((255 * inRect) / (ss * ss));
     }
@@ -211,6 +212,10 @@ write("desktop/trayTemplate.png", png(16, glyph(16)));
 write("desktop/trayTemplate@2x.png", png(32, glyph(32)));
 write("src/app/favicon.ico", ico([16, 32, 48]));
 write("public/brand/pacedmind-emblem.png", png(512, render(512)));
+// The plugin's listing icons (plugins/pacedmind): the black tile, and a white one for dark themes, where the
+// directories ask for contrast against their dark background.
+write("plugins/pacedmind/assets/logo.png", png(512, render(512)));
+write("plugins/pacedmind/assets/logo-dark.png", png(512, render(512, 0, INK, BACKGROUND)));
 
 // iOS supplies its own mask and requires an opaque icon. Composite on the brand's black background.
 const mobileIcon = render(1024, 0.06);

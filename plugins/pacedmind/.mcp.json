@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "pacedmind": {
+      "type": "http",
+      "url": "https://app.pacedmind.com/api/mcp"
+    }
+  }
+}

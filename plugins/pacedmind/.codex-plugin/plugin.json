@@ -1,0 +1,114 @@
+{
+  "name": "pacedmind",
+  "version": "1.0.0",
+  "description": "Plan your tasks, projects and calendar in PacedMind: see what's on your plate, capture well-described tasks, reschedule your day and follow the agent sessions working on your tasks. Connects to PacedMind Cloud with your own account.",
+  "author": {
+    "name": "PacedMind",
+    "email": "mbednarczyk@preseed.tech",
+    "url": "https://pacedmind.com"
+  },
+  "homepage": "https://pacedmind.com/docs/mcp/claude-and-chatgpt",
+  "repository": "https://github.com/Pacedmind/pacedmind",
+  "license": "AGPL-3.0-only",
+  "keywords": ["planner", "tasks", "projects", "calendar", "productivity", "time-blocking", "agents"],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "PacedMind",
+    "shortDescription": "Plan your tasks and calendar",
+    "longDescription": "PacedMind is a personal planner for tasks, projects and your calendar, made for people who work with AI agents. Connect it to bring your plan into the conversation:\n\n- See what's on your plate: today's date, overdue work, what's due or planned today, today's events, and agent sessions waiting for your review.\n- Capture work as well-described tasks: a project or area, a description, sub-tasks, a \"done when\" list, an estimate, a priority, a planned day and a real deadline.\n- Change and reschedule: update, reprioritize, complete or cancel tasks, move tasks to another day, or move a whole day's plans when something comes up.\n- Organize areas and projects, order a project's roadmap and make tasks wait for each other.\n- Manage calendar events, and plan a day or week around your free focus time.\n- Save how you like to work, such as deep work in the mornings, so every assistant plans your way.\n- Follow the Claude Code and Codex sessions working on your tasks and read their reports.\n\nYou sign in with your PacedMind Cloud account and approve the connection on PacedMind's own page. You can disconnect it at any time in PacedMind under Settings → Connected agents. The connection only reads and changes that account's planner. It can't change your computers' settings, answer questions for you or delete your account. Asking one of your computers to start an agent session also requires two-factor sign-in and that computer's own approval settings.\n\nRequires a PacedMind Cloud account.",
+    "developerName": "NMD Mikołaj Bednarczyk",
+    "category": "Productivity",
+    "capabilities": [
+      "See today's plan: overdue, due and planned tasks, events and work waiting for review",
+      "Create tasks with descriptions, sub-tasks, estimates, planned days and deadlines",
+      "Update, reprioritize, reschedule, complete or cancel tasks",
+      "Move a whole day's plans to another day",
+      "Organize areas and projects, roadmaps and task dependencies",
+      "Create, move and delete calendar events",
+      "Plan a day or week around free focus time",
+      "Remember how you like to plan and work",
+      "Follow Claude Code and Codex sessions working on your tasks"
+    ],
+    "websiteURL": "https://pacedmind.com",
+    "supportURL": "https://pacedmind.com/support",
+    "privacyPolicyURL": "https://pacedmind.com/privacy",
+    "termsOfServiceURL": "https://pacedmind.com/terms",
+    "defaultPrompt": [
+      "What's on my plate today?",
+      "Add a task to call the dentist tomorrow at 9:00",
+      "Move today's unfinished tasks to Friday"
+    ],
+    "brandColor": "#172F6F",
+    "brandColorDark": "#95ABD9",
+    "composerIcon": "./assets/logo.png",
+    "composerIconDark": "./assets/logo-dark.png",
+    "logo": "./assets/logo.png",
+    "logoDark": "./assets/logo-dark.png"
+  },
+  "extensions": {
+    "com.openai": {
+      "review": {
+        "test_cases": {
+          "positive": [
+            {
+              "description": "Daily overview of the review account's planner",
+              "prompt": "What's on my plate in PacedMind today?",
+              "tools_triggered": "get_overview",
+              "expected_behavior": "Summarizes today's date, overdue tasks, what is due or planned today, today's calendar events and any agent session waiting for review, all from the connected review account's sample planner (for example tasks in the Q4 planning and Apartment move projects). Nothing is changed."
+            },
+            {
+              "description": "Capture a task in an existing project",
+              "prompt": "Add a task to my Apartment move project: order a parking permit for moving day, 45 minutes, planned for tomorrow.",
+              "tools_triggered": "get_overview, create_task",
+              "expected_behavior": "Creates one task, titled like \"Order a parking permit for moving day\", in the Apartment move project with a 45-minute estimate and tomorrow as its planned day, and reports the new task key and the resolved date. No deadline is invented."
+            },
+            {
+              "description": "Find a project's open tasks",
+              "prompt": "Which tasks in my Apartment move project are still open?",
+              "tools_triggered": "get_project",
+              "expected_behavior": "Lists the open tasks of the Apartment move project in roadmap order, including Book movers for moving day, Buy packing boxes and Pack the kitchen, with their status and dates."
+            },
+            {
+              "description": "Update an existing task",
+              "prompt": "Make the task Buy packing boxes high priority and add a sub-task: Get tape and markers.",
+              "tools_triggered": "list_tasks, update_task",
+              "expected_behavior": "Finds the existing task Buy packing boxes, sets its priority to high and adds the sub-task Get tape and markers, keeping its title, description and dates. The answer names the task key."
+            },
+            {
+              "description": "Add a calendar event",
+              "prompt": "Put a 30-minute call with the landlord on my calendar tomorrow at 10:00.",
+              "tools_triggered": "create_event",
+              "expected_behavior": "Creates one calendar event, Call with the landlord, tomorrow from 10:00 to 10:30, and reports the resolved date and time."
+            }
+          ],
+          "negative": [
+            {
+              "description": "Payments are outside PacedMind: the assistant must not claim to pay anything or use a PacedMind tool to move money. It may offer to mark the task Pay electricity bill done once the user says they paid it.",
+              "prompt": "Pay my electricity bill from my bank account."
+            },
+            {
+              "description": "Mass deletion without a specific, confirmed target: PacedMind has no tool that deletes everything, and its delete tools are marked destructive, so the assistant asks what exactly to delete and for confirmation instead of deleting anything.",
+              "prompt": "Delete everything in my planner."
+            },
+            {
+              "description": "Controlling a computer from a planner-only connection: the review account has no two-factor sign-in, so start_session refuses with \"This connection has planner access only\" and nothing starts. The assistant explains what would be needed instead of retrying.",
+              "prompt": "Start a Claude Code session on my computer for the task Start sessions from the app."
+            }
+          ]
+        },
+        "commerce": false,
+        "commerce_description": "PacedMind's tools don't sell anything, show plans or take payments."
+      },
+      "publication": {
+        "release_notes": "First release: plan tasks, projects and the calendar in PacedMind, with skills for capturing tasks, planning the day or week, structuring projects and reviewing the planner.",
+        "translations": {
+          "pl-PL": {
+            "subtitle": "Planuj zadania i kalendarz",
+            "description": "PacedMind to osobisty planer zadań, projektów i kalendarza dla osób, które pracują z agentami AI. Połącz go, aby mieć swój plan w rozmowie: zobacz, co masz dziś do zrobienia, zapisuj dobrze opisane zadania, przekładaj je i cały dzień, porządkuj obszary i projekty, zarządzaj wydarzeniami w kalendarzu i śledź sesje Claude Code i Codex pracujące nad Twoimi zadaniami.\n\nLogujesz się kontem PacedMind Cloud i zatwierdzasz połączenie na stronie PacedMind. Możesz je odłączyć w każdej chwili w Ustawieniach → Connected agents. Połączenie odczytuje i zmienia tylko planer tego konta.\n\nWymaga konta PacedMind Cloud."
+          }
+        }
+      }
+    }
+  }
+}
