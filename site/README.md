@@ -42,13 +42,11 @@ A year of Cloud costs `yearlyMonths` (in `prices.json`) times the monthly price.
 
 Umami counts visits without cookies (the repository's `deploy/README.md`, step 5). `components/analytics.tsx` loads its tracker from `/stats/script.js` on pacedmind.com only, so `npm run dev` and local builds count nothing, and only once `SITE.analytics.websiteId` in `lib/site.ts` is set. The docs use the same website id. A link with `downloadEvent()`'s attributes is also counted as a `Download` event when clicked: give any new download button one.
 
-## Open source and the GitHub stars
+## Open source
 
-The header links to the repository on GitHub with its star count, and so does the open-source section (`#open-source`, words in `OPEN_SOURCE` in `lib/content.ts`), with the commands that build the app. The hero's "Open source." leads there. The repository's name is `SITE.repo` in `lib/site.ts`.
+The header links to the repository on GitHub, and so does the open-source section (`#open-source`, words in `OPEN_SOURCE` in `lib/content.ts`), with the commands that build the app. The hero's "Open source." leads there. The repository's name is `SITE.repo` in `lib/site.ts`.
 
-- The count in the HTML comes from GitHub's API while the page is built (`lib/github.ts`), so it's there from the first paint. If GitHub doesn't answer, the page shows the link without a count.
-- In the browser, `components/star-count.tsx` then reads `/github.json`, which the server refreshes every ten minutes (`deploy/github-stars.mjs`, the repository's `deploy/README.md`), so the count stays current between deploys and visitors' browsers never contact GitHub. `npm run dev` has no `/github.json` and keeps the build's count.
-- Phones show the GitHub mark and the count without the word, and the narrowest (under 360 px) the mark alone.
+The site does not display or fetch the repository's star count. Phones show the GitHub mark without the word.
 
 ## Design
 

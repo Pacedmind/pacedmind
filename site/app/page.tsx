@@ -5,11 +5,9 @@ import { SITE, downloadEvent, signInEvent, sourceEvent } from "@/lib/site";
 import type { Market } from "@/lib/markets";
 import { CLOUD, CONNECT, DAY, DOWNLOAD_NOTE, FAQ, ONE_DEVICE, OPEN_SOURCE, PLACES, PRICING, SUMMARY, TAGLINE, TRY, VIEWS as VIEW_COPY } from "@/lib/content";
 import { faqPage, graph, pageMetadata, softwareApplication, softwareSourceCode } from "@/lib/seo";
-import { starsAtBuild } from "@/lib/github";
 import { JsonLd } from "@/components/json-ld";
 import { Emblem } from "@/components/emblem";
 import { GitHubMark } from "@/components/github-mark";
-import { StarCount } from "@/components/star-count";
 import { Wordmark } from "@/components/wordmark";
 import { ScreenDeck, type DeckItem } from "@/components/screen-deck";
 import { Icon, SCREEN } from "@/components/screens/parts";
@@ -75,9 +73,7 @@ function Heading({ title, subtitle, intro }: { title: string; subtitle: string; 
   );
 }
 
-export default async function Home() {
-  // The stars as the page is built; in the browser, StarCount swaps in the count the server keeps current.
-  const stars = await starsAtBuild();
+export default function Home() {
   const [owner, repo] = SITE.repo.split("/");
   return (
     <>
@@ -89,12 +85,10 @@ export default async function Home() {
           <a href="#agents" className="hover:text-ink max-sm:hidden">Agents</a>
           <a href="#pricing" className="hover:text-ink">Pricing</a>
           <a href={SITE.docs} className="hover:text-ink">Docs</a>
-          {/* On phones the mark stands for the word, and the narrowest have room for the mark alone. */}
-          <a href={SITE.source} className="group flex items-center gap-2 hover:text-ink" {...sourceEvent("header")}>
+          {/* On phones the mark stands for the word. */}
+          <a href={SITE.source} className="flex items-center gap-2 hover:text-ink" {...sourceEvent("header")}>
             <GitHubMark size={18} />
             <span className="max-sm:sr-only">GitHub</span>
-            <StarCount initial={stars}
-              className="text-[14px] max-[359px]:hidden sm:h-6 sm:rounded-full sm:border sm:border-line sm:px-2 sm:group-hover:border-mut" />
           </a>
           <a href={SITE.app} className="rounded-[10px] border border-line px-4 py-2 font-medium whitespace-nowrap text-ink hover:border-mut" {...signInEvent("header")}>
             Sign in
@@ -203,7 +197,6 @@ export default async function Home() {
               </a>
               <div className="flex items-center gap-5 text-[15px] text-mut">
                 <a href={SITE.license} className="hover:text-ink">{OPEN_SOURCE.license}</a>
-                <StarCount initial={stars} className="h-6 rounded-full border border-line px-2 text-[14px]" />
               </div>
             </div>
             <pre className="overflow-x-auto px-5 py-6 font-mono text-[14px] leading-[1.9] text-text sm:px-7 sm:py-7 sm:text-[15px]">

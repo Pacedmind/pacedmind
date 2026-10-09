@@ -36,8 +36,6 @@ export const SITE = {
   source: `https://github.com/${repo}`,
   license: `https://github.com/${repo}/blob/master/LICENSE`,
   contributing: `https://github.com/${repo}/blob/master/CONTRIBUTING.md`,
-  // The repository's star count as the server keeps it (deploy/github-stars.mjs), so browsers never ask GitHub.
-  stars: "/github.json",
   // The current installers, which `npm run release` uploads (deploy/Caddyfile leads these to them).
   downloads: {
     windows: `${url}/download/windows`,
