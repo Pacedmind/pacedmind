@@ -16,7 +16,7 @@ const groups = (tx: Translator): { value: NoteLayoutSettings["group"]; label: st
   { value: "focus", label: tx("Focus"), description: tx("Separate what needs attention, work in progress and later tasks.") },
   { value: "project", label: tx("Project"), description: tx("Give each project its own space.") },
   { value: "area", label: tx("Area"), description: tx("Keep work, personal and other areas apart.") },
-  { value: "priority", label: tx("Priority"), description: "Put urgent and high-priority tasks first." },
+  { value: "priority", label: tx("Priority"), description: tx("Put urgent and high-priority tasks first.") },
   { value: "status", label: tx("Status"), description: tx("Arrange tasks by their stage of work.") },
   { value: "deadline", label: tx("Due date"), description: tx("Overdue, today, the next 7 days and later.") },
 ]);
@@ -71,14 +71,14 @@ export function TaskNoteLayout() {
           </select>
         </label>
         <div className="flex items-center justify-between gap-3">{tx("Card size")}<div role="group" aria-label={tx("Card size")} className="flex rounded-md border border-ctl p-0.5">
-            {(["xs", "small", "medium", "large"] as const).map((size, i) => <button key={size} type="button" aria-label={tx("{0} task notes", [size])} aria-pressed={display.settings.size === size} title={size === "xs" ? tx("Titles only") : undefined}
+            {(["xs", "small", "medium", "large"] as const).map((size, i) => <button key={size} type="button" aria-label={tx("{0} task notes", [tx(size)])} aria-pressed={display.settings.size === size} title={size === "xs" ? tx("Titles only") : undefined}
               className={cx("h-7 w-9 rounded text-[12px]", display.settings.size === size ? "bg-sel text-strong" : "text-mut hover:bg-hover")}
               onClick={() => set({ size })}>{["XS", "S", "M", "L"][i]}</button>)}
           </div>
         </div>
         {display.settings.size === "xs" && <p className="-mt-2 text-[11px] text-mut">{tx("Titles only. Select a title to open the task.")}</p>}
         <div className="flex flex-col gap-2"><span>{tx("Arrangement")}</span><div role="group" aria-label={tx("Arrangement")} className="grid grid-cols-3 gap-2">
-          {(["grid", "columns", "rows"] as const).map(value => <button key={value} type="button" aria-label={tx("Arrange in {0}", [value])} aria-pressed={display.settings.arrangement === value}
+          {(["grid", "columns", "rows"] as const).map(value => <button key={value} type="button" aria-label={tx("Arrange in {0}", [tx(value)])} aria-pressed={display.settings.arrangement === value}
             onClick={() => set({ arrangement: value, regions: {} })} className={cx("flex flex-col items-center gap-2 rounded-md border px-2 py-2", display.settings.arrangement === value ? "border-accent bg-sel text-strong" : "border-line2 text-mut hover:bg-hover")}>
             <span aria-hidden className={cx("grid h-6 w-10 gap-0.5", value === "grid" ? "grid-cols-3" : value === "columns" ? "grid-cols-3" : "grid-rows-3")}>
               {Array.from({ length: value === "grid" ? 6 : 3 }, (_, i) => <span key={i} className="rounded-[1px] bg-current opacity-50" />)}
@@ -155,7 +155,7 @@ function SpacesEditor({ display, error, update, onClose }: { display: NoteDispla
         </div>; })}
         {!items.length && <p className="p-5 text-[12px] text-mut">{kind === "spaces" ? tx("Show notes and choose a grouping to arrange spaces.") : tx("Show notes to arrange them here.")}</p>}
       </div>
-      {item && region && <div className="flex flex-wrap gap-3 text-[12px] text-mut">{(["x", "y", "width", "height"] as const).map(key => <label key={key}>{({ x: tx("Left"), y: tx("Top"), width: tx("Width"), height: tx("Height") })[key]} %<input type="number" min={0} max={100} aria-label={tx("{0} percent", [key])} className="ml-2 w-16 rounded border border-ctl bg-panel px-2 py-1 text-fg2" value={Math.round(region[key] * 100)} onChange={e => { const value = Number(e.target.value) / 100; if (Number.isFinite(value)) { const next = clamp({ ...region, [key]: value }); setDraft(next); } }} onBlur={() => { if (draft) { commit(item.id, clamp(draft)); setDraft(null); } }} /></label>)}</div>}
+      {item && region && <div className="flex flex-wrap gap-3 text-[12px] text-mut">{(["x", "y", "width", "height"] as const).map(key => <label key={key}>{({ x: tx("Left"), y: tx("Top"), width: tx("Width"), height: tx("Height") })[key]} %<input type="number" min={0} max={100} aria-label={tx("{0} percent", [({ x: tx("Left"), y: tx("Top"), width: tx("Width"), height: tx("Height") })[key]])} className="ml-2 w-16 rounded border border-ctl bg-panel px-2 py-1 text-fg2" value={Math.round(region[key] * 100)} onChange={e => { const value = Number(e.target.value) / 100; if (Number.isFinite(value)) { const next = clamp({ ...region, [key]: value }); setDraft(next); } }} onBlur={() => { if (draft) { commit(item.id, clamp(draft)); setDraft(null); } }} /></label>)}</div>}
       {error && <p role="alert" className="text-[12px] text-danger">{tx.generated(error)}</p>}
       <div className="flex justify-between text-[11px] text-mut"><span>{tx("Saved for this account and display on this computer.")}</span><Button variant="ghost" onClick={() => { setDraft(null); update({ displayId: display.id, settings: { regions: {} } }); }}>{tx("Reset spaces")}</Button></div>
     </div>

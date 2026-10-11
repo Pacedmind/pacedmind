@@ -2100,5 +2100,16 @@
   "top-right corner": "prawego górnego narożnika",
   "bottom-left corner": "lewego dolnego narożnika",
   "bottom-right corner": "prawego dolnego narożnika",
-  "Put urgent and high-priority tasks first.": "Najpierw pokaż zadania pilne i o wysokim priorytecie."
+  "Put urgent and high-priority tasks first.": "Najpierw pokaż zadania pilne i o wysokim priorytecie.",
+  "; in Codex,": "; w Codex,",
+  "Follow-up task": "Zadanie uzupełniające",
+  "Enter a preset name of up to 60 characters.": "Wpisz nazwę układu o długości do 60 znaków.",
+  "That preset no longer exists.": "Ten zapisany układ już nie istnieje.",
+  "Delete a preset before saving another (up to 20).": "Usuń jeden z zapisanych układów, zanim dodasz kolejny (maksymalnie 20).",
+  "xs": "najmniejsze",
+  "small": "małe",
+  "large": "duże",
+  "grid": "siatkę",
+  "columns": "kolumny",
+  "rows": "wiersze"
 }

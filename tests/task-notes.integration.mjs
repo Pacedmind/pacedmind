@@ -143,11 +143,17 @@ try {
   };
   notePoll = setInterval(() => { void pollNotes().catch(console.error); }, 1000);
   const requests = [];
+  let holdLanguageRefresh = false;
+  let delayedLanguageRequests = 0;
   let actionId;
   session.defaultSession.webRequest.onBeforeSendHeaders((details, callback) => {
     requests.push({ url: details.url, webContentsId: details.webContentsId, method: details.method });
     if (details.url.includes("/floating/task/")) actionId = Object.entries(details.requestHeaders).find(([name]) => name.toLowerCase() === "next-action")?.[1] ?? actionId;
-    callback({ requestHeaders: details.requestHeaders });
+    const serverRender = Object.entries(details.requestHeaders).some(([name, value]) => name.toLowerCase() === "rsc" && String(value) === "1");
+    if (holdLanguageRefresh && serverRender && /\/(settings\/appearance|floating\/task\/)/.test(new URL(details.url).pathname)) {
+      delayedLanguageRequests++;
+      setTimeout(() => callback({ requestHeaders: details.requestHeaders }), 1500);
+    } else callback({ requestHeaders: details.requestHeaders });
   });
   // Verify server rendering before renderer interaction, with the real protected server and isolated data.
   for (const language of ["pl", "en"]) {
@@ -297,13 +303,13 @@ try {
     await planner.webContents.executeJavaScript(`document.querySelector('input[aria-label=${JSON.stringify(label)}]').dispatchEvent(new FocusEvent('focusout', {bubbles:true}))`);
   };
   await chooseFirstItem();
-  await editPercent("width percent", 90);
+  await editPercent("Width percent", 90);
   await until(() => Object.values(layouts.get(`local:${noteDisplay}`).regions).some(r => r.width === .9), "space resized through editor");
   await click(planner, "Reset spaces");
   await until(() => Object.keys(layouts.get(`local:${noteDisplay}`).regions).length === 0, "spaces reset");
   await select("Edit spaces or cards", "cards");
   await chooseFirstItem();
-  await editPercent("x percent", 25);
+  await editPercent("Left percent", 25);
   await until(() => Object.values(layouts.get(`local:${noteDisplay}`).positions).some(r => Math.abs(r.x - .25) < .001), "card moved through editor and saved");
   await click(planner, "Done");
   assert.equal(await first.webContents.executeJavaScript("window.pacedMindDesktop.setTaskNoteLayout({displayId:'1',move:true})"), null);
@@ -489,8 +495,14 @@ try {
   const localeNote = BrowserWindow.getAllWindows().find(w => w !== planner);
   await until(async () => (await body(localeNote)).includes("Always on top"), "English note");
   const beforeLanguage = db.prepare("SELECT id, title, status, description FROM tasks ORDER BY id").all();
+  holdLanguageRefresh = true;
+  const languageStarted = Date.now();
   assert.equal(await changeLanguage("pl"), true);
-  await until(async () => (await body(planner)).includes("Język") && (await body(localeNote)).includes("Zawsze na wierzchu"), "Polish planner and live note");
+  await until(async () => (await body(planner)).includes("Język") && (await body(localeNote)).includes("Zawsze na wierzchu"), "Polish UI before server refresh", 1000);
+  assert.ok(Date.now() - languageStarted < 1500, "Client translations must not wait for delayed server rendering");
+  await until(() => delayedLanguageRequests > 0, "delayed language server refresh");
+  holdLanguageRefresh = false;
+  console.log(`PASS: planner and live note translated in ${Date.now() - languageStarted} ms while server rendering was delayed 1500 ms`);
   assert.equal(await planner.webContents.executeJavaScript("document.documentElement.lang"), "pl");
   assert.ok((await body(localeNote)).includes("Performance note 2"), "Preserve the task title");
   assert.equal(localeNote.isAlwaysOnTop(), true);

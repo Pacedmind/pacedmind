@@ -327,7 +327,7 @@ export function QuickAdd({ areas, projects }: { areas: Area[]; projects: Project
               <Menu width={280}
                 trigger={<button type="button" aria-label={tx("Run in: {0}", [runIn ? placeLabel(runIn) : tx("Automatic")])} className={chip}
                   title={runIn ? undefined : tx("Picked automatically: the terminal when the CLI is installed, else the app")}>
-                  <SurfaceIcon surface={place} size={13} />{placeLabel(place)}{!runIn && <span className="text-[11px] text-mut2">auto</span>}
+                  <SurfaceIcon surface={place} size={13} />{placeLabel(place)}{!runIn && <span className="text-[11px] text-mut2">{tx("Automatic")}</span>}
                 </button>}
                 items={[
                   { value: null as Surface | null, label: tx("Automatic"), hint: tx("Terminal, else the app"), icon: <Icon name="laptop" size={13} /> },

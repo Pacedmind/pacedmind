@@ -284,7 +284,7 @@ export function ReportBody({ report, criteria, hideChanges }: { report: Report; 
             </span>
           ))}
           {report.followUps.map((f) => f.href ? (
-            <Link key={f.key} href={f.href} title="Follow-up task"
+            <Link key={f.key} href={f.href} title={tx("Follow-up task")}
               className="inline-flex h-6 max-w-full items-center gap-1.5 rounded-md border border-ctl px-2 text-[12px] text-fg3 hover:bg-hover">
               <Icon name="plus" size={12} className="shrink-0 text-mut2" />
               <span className="font-mono text-[11px] text-mut2">{f.key}</span><span className="truncate">{f.title}</span>

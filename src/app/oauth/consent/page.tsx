@@ -69,7 +69,7 @@ export default async function ConsentPage(props: PageProps<"/oauth/consent">) {
       <AuthShell note={tx("Connect an agent to PacedMind.")}>
         <Card title={tx("This request has expired")}>
           <p className="text-[13px] leading-relaxed text-fg3">
-            {tx("It was already used, or it waited too long. Start connecting the agent again: in Claude Code,")}<span className="font-mono">/mcp</span>; in Codex, <span className="font-mono">codex mcp login pacedmind</span>.
+            {tx("It was already used, or it waited too long. Start connecting the agent again: in Claude Code,")}<span className="font-mono">/mcp</span>{tx("; in Codex,")} <span className="font-mono">codex mcp login pacedmind</span>.
           </p>
         </Card>
       </AuthShell>
