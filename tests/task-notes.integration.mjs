@@ -121,6 +121,13 @@ try {
   ipcMain.handle("pacedmind:close-task-note", (e) => notes.close(e));
   ipcMain.handle("pacedmind:show-floating-task", (e, href) => notes.showInPlanner(e, href));
   ipcMain.on("pacedmind:set-theme", (event, next) => { if (event.sender !== planner.webContents) return; theme = next; notes.setTheme(next, next === "light" ? "#f5f5f6" : "#010101"); });
+  // Match the production main process: on Windows, notes refresh through this IPC notification.
+  ipcMain.on("pacedmind:set-language", async (event, language) => {
+    if (!["en", "pl"].includes(language) || event.sender !== planner.webContents || event.senderFrame !== planner.webContents.mainFrame) return;
+    try { if (new URL(event.senderFrame.url).origin !== origin) return; } catch { return; }
+    await session.defaultSession.cookies.set({ url: origin, name: "pm_language", value: language, sameSite: "lax", expirationDate: Date.now() / 1000 + 31536000 });
+    for (const window of BrowserWindow.getAllWindows()) if (!window.isDestroyed()) window.webContents.send("pacedmind:language-changed", language);
+  });
   // The production main process performs this once for all notes; renderers never poll /api/state.
   let polling = false;
   let autoPoll = true;
