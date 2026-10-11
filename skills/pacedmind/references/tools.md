@@ -82,6 +82,10 @@ How the user likes to work, in their own words: one short sentence each, under a
 - `close_session`: marks a stuck or abandoned session closed, and the task goes back to todo.
 - `request_changes`: asks to send work an agent handed back in a terminal to it again, with what the user wants changed. Once the user allows it in PacedMind, the session reopens in a new terminal (Claude Code continues its conversation, Codex starts a new one) and the task goes back to in_progress. Sessions in the desktop apps or the cloud take changes where they run. Only when the user asks.
 
+## PacedMind Cloud's server
+
+`https://app.pacedmind.com/api/mcp` (the PacedMind plugin, and the connectors in Claude and ChatGPT) serves the account from no computer of the user's. There, `folder` arguments fail (use `set_folder` with `computer`), there is no `ask_user` or `attach_image`, `finish_task` takes no `images`, `request_changes` answers with a link where the user does it, and `start_session` asks a computer or answers with a link. Report what the answer says. A connection the user allowed without two-factor sign-in is planner-only: `start_session`, `request_changes`, `set_folder` and `show_task_note` answer *This connection has planner access only*.
+
 ## Protocol for agents working on a task
 
 - `get_next_task` (read): the next ready task in a project: the first open one in roadmap order whose dependencies are finished.

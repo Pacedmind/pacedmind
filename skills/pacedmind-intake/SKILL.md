@@ -5,7 +5,7 @@ description: Turn what the user asks for into a well-placed PacedMind task witho
 
 # Asking the right questions
 
-Every task needs a place, a time and someone to do it. Most of that the user has already told you, or told PacedMind. Work it out first, then ask only for the rest, once. The tools come from the PacedMind MCP server, `pacedmind` (in Claude Code: `mcp__pacedmind__<tool>`).
+Every task needs a place, a time and someone to do it. Most of that the user has already told you, or told PacedMind. Work it out first, then ask only for the rest, once. The tools come from the PacedMind MCP server, `pacedmind` (in Claude Code: `mcp__pacedmind__<tool>`, or `mcp__plugin_pacedmind_pacedmind__<tool>` from the PacedMind plugin).
 
 ## 1. Gather what's known
 

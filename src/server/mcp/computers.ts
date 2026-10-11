@@ -119,7 +119,7 @@ export function registerComputerTools(server: McpServer) {
   tool(server, "set_folder", {
     title: "Set a folder on a computer",
     description:
-      "Ask to use a folder on one of the user's computers for a project (its folder), an area (its workspace, which its projects without a folder of their own share) or a task (its own folder): where agent sessions for it start on that computer. Folders are each computer's own settings, so this only asks: the user allows it in PacedMind on that computer, which first checks that the folder is there. Only when the user asks, with the folder's absolute path on that computer.",
+      "Ask to use a folder on one of the user's computers for a project (its folder), an area (its workspace, which its projects without a folder of their own share) or a task (its own folder): where agent sessions for it start on that computer. Folders are each computer's own settings, so this only asks: the user allows it in PacedMind on that computer, which first checks that the folder is there. The folder is an absolute path on that computer.",
     input: z.object({
       project: projectRef.optional(),
       area: areaRef.optional(),

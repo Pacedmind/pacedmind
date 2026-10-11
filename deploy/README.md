@@ -131,5 +131,8 @@ sudo ufw allow OpenSSH && sudo ufw allow 80,443/tcp && sudo ufw --force enable
 - `app.caddy` and `app-placeholder.caddy`: what `app.pacedmind.com` does, the app or a redirect to the site; `deploy.sh` installs one of them as `/etc/caddy/app.caddy`.
 - `github-stars.mjs`, `pacedmind-github.service` and `pacedmind-github.timer`: the site's GitHub star count, refreshed every ten minutes as the `pacedmind` user (step 3).
 - `umami/compose.yml` and `umami/install.sh`: the visitor statistics (step 5), which `deploy.sh` leaves alone.
+- `openai-challenge.sh`: puts the domain-verification token from OpenAI's plugin portal into `web.env` (`ORGANIZER_OPENAI_APPS_CHALLENGE`) and restarts the app, or takes it out with `--remove`.
+- `directory/`: listing PacedMind in OpenAI's and Claude's directories: each portal's fields, the review account and test cases, and the tools' annotations.
+- `optional-mfa.md`: rolling out optional two-factor setup.
 
 The steps for Google Search Console and Bing Webmaster Tools are in `site/deploy/README.md`.

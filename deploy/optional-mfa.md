@@ -8,7 +8,7 @@ Planning and approved MCP access are available before MFA enrollment. Enrolled a
 2. On a disposable Supabase stack, run both `supabase/tests/security.sql` and `supabase/tests/optional_mfa.sql`. Test actual Auth sign-up, confirmation, MFA, password reset and OAuth exchange/refresh. The isolated PostgreSQL WASM runner does not implement Auth HTTP endpoints or replace this check.
 3. Apply `supabase/migrations/20260930180934_optional_mfa_planner.sql` before deploying the app. The new server fails closed for computer control if `can_control_computers()` is missing. Check Supabase security advisors after applying the migration.
 4. Deploy the app, site and docs from the landed checkout using the repository's normal release procedure. Existing desktop installations keep their older onboarding until upgraded.
-5. Run the live connector acceptance cases in [connectors.md](connectors.md). Publish the OpenAI challenge token from the submission portal only when domain verification is requested.
+5. Run the live connector test cases in [directory/review.md](directory/review.md#3-test-cases). Publish the OpenAI challenge token from the submission portal only when domain verification is requested ([directory/openai.md](directory/openai.md)).
 
 ## Acceptance matrix
 

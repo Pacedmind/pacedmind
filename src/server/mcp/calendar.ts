@@ -143,7 +143,7 @@ export function registerCalendarTools(server: McpServer) {
 
   tool(server, "delete_event", {
     title: "Delete calendar event",
-    description: "Remove an event from the calendar. For a weekly event this removes every occurrence. Ask the user first.",
+    description: "Remove an event from the calendar. For a weekly event this removes every occurrence. It can't be undone.",
     input: z.object({ event: z.number().int() }),
     kind: "delete",
   }, async ({ event }) => {
@@ -156,7 +156,7 @@ export function registerCalendarTools(server: McpServer) {
   tool(server, "get_agenda", {
     title: "Get agenda",
     description:
-      "Day-by-day plan: fixed events, tasks due or planned, and the auto-planner's focus blocks that fill free work time with open tasks, plus free time and what didn't fit. Use it to plan a day or week.",
+      "Day-by-day plan: fixed events, tasks due or planned, and the auto-planner's focus blocks that fill free work time with open tasks, plus free time and what didn't fit, for planning a day or week.",
     input: z.object({
       from: dateInput.optional().describe("Defaults to today"),
       to: dateInput.optional().describe("Defaults to from; at most 14 days"),

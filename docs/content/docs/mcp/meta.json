@@ -1,4 +1,4 @@
 {
   "title": "MCP server",
-  "pages": ["connect-cloud", "connect-claude-code", "connect-codex", "tools"]
+  "pages": ["connect-cloud", "claude-and-chatgpt", "connect-claude-code", "connect-codex", "tools"]
 }
