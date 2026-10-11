@@ -32,7 +32,7 @@ export function useNoteAppearance(data: FloatingTaskData | null) {
       projectId: data.projectId, projectName: data.projectName, areaId: data.areaId, areaName: data.areaName, reducedMotion: media.matches });
     report();
     media.addEventListener("change", report);
-    // Refresh urgency when a planned day or deadline arrives, without relocating any notes.
+    // Refresh urgency and grouping when a planned day or deadline arrives.
     const timer = setInterval(report, 60_000);
     return () => { clearInterval(timer); media.removeEventListener("change", report); };
   }, [data]);

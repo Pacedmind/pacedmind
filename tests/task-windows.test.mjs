@@ -559,3 +559,98 @@ test("deadline groups are chronological and XS cannot exceed the shared refresh 
   assert.equal(notes.displays("local").displays[0].capacity, 200);
   assert.equal(notes.tasks("local").length, 200);
 });
+
+test("split spaces align outward and each corner fills in the chosen direction", () => {
+  const area = { x: -1920, y: -80, width: 1920, height: 1080 };
+  const cards = ["backlog", "todo"].map((status, id) => ({ id, meta: { status } }));
+  const plan = workspaceLayout(area, cards, layoutSettings({ group: "status", arrangement: "columns" }));
+  assert.equal(plan.placements[0].bounds.x, area.x + 16);
+  assert.equal(plan.placements[1].bounds.x + plan.placements[1].bounds.width, area.x + area.width - 16);
+  for (const corner of ["top-left", "top-right", "bottom-left", "bottom-right"]) for (const axis of ["horizontal", "vertical"]) {
+    const layout = noteLayout(area, 8, "small", "grid", corner, axis);
+    const first = layout[0], next = layout[1];
+    assert.equal(corner.endsWith("left") ? first.x : first.x + first.width, corner.endsWith("left") ? area.x + 16 : area.x + area.width - 16);
+    assert.equal(corner.startsWith("top") ? first.y : first.y + first.height, corner.startsWith("top") ? area.y + 16 : area.y + area.height - 16);
+    assert.equal(axis === "horizontal" ? next.y : next.x, axis === "horizontal" ? first.y : first.x);
+    assert.ok(axis === "horizontal" ? (next.x - first.x) * (corner.endsWith("left") ? 1 : -1) > 0 : (next.y - first.y) * (corner.startsWith("top") ? 1 : -1) > 0);
+  }
+  const custom = workspaceLayout(area, cards, layoutSettings({ group: "status", arrangement: "columns", fills: { "status:backlog": { corner: "bottom-right", axis: "vertical" } } }));
+  assert.equal(custom.placements[0].bounds.y + custom.placements[0].bounds.height, area.y + area.height - 16);
+});
+
+test("presets persist through moves and settings changes, replace by name and stay scoped", () => {
+  const { notes, layouts } = fixture();
+  const change = input => notes.configure("local", { displayId: "1", ...input });
+  change({ settings: { size: "xs", group: "status", animation: "center", fills: { "status:todo": { corner: "bottom-left", axis: "horizontal" } } } });
+  assert.equal(change({ preset: { action: "save", name: "Focus" } }).ok, true);
+  notes.show(1, "local", createdAt, "1");
+  notes.moveNote("local", "1", `1:${createdAt}`, { x: .1, y: .2, width: .5, height: .3 });
+  change({ settings: { size: "large", group: "none" } });
+  assert.equal(change({ preset: { action: "load", name: "Focus" } }).ok, true);
+  assert.equal(notes.workspace("local").displays[0].settings.size, "xs");
+  assert.equal(notes.workspace("local").displays[0].settings.animation, "center");
+  assert.equal(notes.workspace(account).displays[0].presets.length, 0);
+  assert.deepEqual(layouts.get("local:1").positions, {});
+  change({ settings: { animation: "cascade" } }); change({ preset: { action: "save", name: "Focus" } });
+  assert.equal(notes.workspace("local").displays[0].presets.length, 1);
+  assert.equal(notes.workspace("local").displays[0].presets[0].settings.animation, "cascade");
+  assert.equal(change({ preset: { action: "save", name: "\n" } }).ok, false);
+  change({ preset: { action: "delete", name: "Focus" } });
+  assert.equal(change({ preset: { action: "load", name: "Focus" } }).ok, false);
+});
+
+test("status and priority updates regroup cards; unchanged metadata leaves manual placement alone", async () => {
+  const { notes, windows, event, layouts } = fixture();
+  notes.show(1, "local", createdAt, "1"); notes.show(2, "local", createdAt, "1");
+  notes.configure("local", { displayId: "1", settings: { group: "status", arrangement: "columns", size: "small" } });
+  notes.report(event(windows[0]), { status: "backlog", priority: 2 });
+  notes.report(event(windows[1]), { status: "todo", priority: 4 });
+  await new Promise(r => setTimeout(r, 200));
+  assert.equal(windows[0].getBounds().x, -1264);
+  assert.equal(windows[1].getBounds().x + windows[1].getBounds().width, -16);
+  notes.moveNote("local", "1", `1:${createdAt}`, { x: .1, y: .2, width: .3, height: .3 });
+  const manual = windows[0].getBounds();
+  notes.report(event(windows[0]), { status: "backlog", priority: 2, title: "New title" });
+  await new Promise(r => setTimeout(r, 200));
+  assert.deepEqual(windows[0].getBounds(), manual);
+  notes.report(event(windows[0]), { status: "todo", priority: 1 });
+  await new Promise(r => setTimeout(r, 200));
+  assert.deepEqual(layouts.get("local:1").positions, {});
+  assert.notDeepEqual(windows[0].getBounds(), manual);
+  assert.equal(notes.workspace("local").displays[0].groups.length, 1);
+  notes.hideAll(); notes.report(event(windows[0]), { status: "done", priority: 1 });
+  await new Promise(r => setTimeout(r, 200));
+  assert.ok(windows.every(w => !w.shown));
+});
+
+test("rearrange and closing a card fill gaps without deleting custom spaces or presets", async () => {
+  const { notes, windows, layouts } = fixture();
+  for (let id = 1; id <= 3; id++) notes.show(id, "local", createdAt, "1");
+  const region = { x: 0, y: 0, width: 1, height: 1 };
+  notes.configure("local", { displayId: "1", settings: { size: "xs", regions: { all: region } }, preset: { action: "save", name: "Grid" } });
+  notes.configure("local", { displayId: "1", settings: { size: "xs", regions: { all: region } } });
+  notes.moveNote("local", "1", `3:${createdAt}`, { x: .1, y: .5, width: .3, height: .2 });
+  const before = windows[2].getBounds();
+  assert.equal(notes.configure("local", { displayId: "1", rearrange: true }).ok, true);
+  assert.notDeepEqual(windows[2].getBounds(), before);
+  windows[1].close();
+  await new Promise(r => setTimeout(r, 200));
+  const expected = noteLayout({ x: -1280, y: 0, width: 1280, height: 720 }, 2, "xs");
+  assert.deepEqual([windows[0].getBounds(), windows[2].getBounds()], expected);
+  assert.deepEqual(layouts.get("local:1").regions.all, region);
+  assert.equal(layouts.get("local:1").presets[0].name, "Grid");
+});
+
+test("first hydration preserves saved manual positions until a real task change", async () => {
+  const { notes, windows, event } = fixture();
+  notes.show(1, "local", createdAt, "1");
+  notes.moveNote("local", "1", `1:${createdAt}`, { x: .1, y: .2, width: .3, height: .3 });
+  const saved = windows[0].getBounds();
+  windows[0].close(); notes.show(1, "local", createdAt, "1");
+  notes.report(event(windows[1]), { status: "todo", priority: 4 });
+  await new Promise(r => setTimeout(r, 200));
+  assert.deepEqual(windows[1].getBounds(), saved);
+  notes.report(event(windows[1]), { status: "in_progress", priority: 4 });
+  await new Promise(r => setTimeout(r, 200));
+  assert.notDeepEqual(windows[1].getBounds(), saved);
+});

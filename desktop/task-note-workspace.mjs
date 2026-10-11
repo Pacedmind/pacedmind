@@ -1,14 +1,17 @@
-import { noteLayout, noteMinimum } from "./task-note-layout.mjs";
+import { noteCorner, noteLayout, noteMinimum } from "./task-note-layout.mjs";
 
-export const DEFAULT_LAYOUT = { size: "medium", group: "none", arrangement: "grid", order: "manual", emphasis: true, animation: "shuffle", regions: {} };
-const choices = { size: ["xs", "small", "medium", "large"], group: ["none", "focus", "project", "area", "priority", "status", "deadline"], arrangement: ["grid", "columns", "rows"], order: ["manual", "relevance", "deadline"], animation: ["shuffle", "right", "diagonal", "together", "none"] };
+export const DEFAULT_LAYOUT = { size: "medium", group: "none", arrangement: "grid", order: "manual", emphasis: true, animation: "shuffle", regions: {}, fills: {} };
+const choices = { size: ["xs", "small", "medium", "large"], group: ["none", "focus", "project", "area", "priority", "status", "deadline"], arrangement: ["grid", "columns", "rows"], order: ["manual", "relevance", "deadline"], animation: ["shuffle", "right", "diagonal", "together", "cascade", "center", "none"] };
 export const refOf = (n) => `${n.id}:${n.createdAt}`;
 export function layoutSettings(raw) {
-  const result = { ...DEFAULT_LAYOUT, regions: {} };
+  const result = { ...DEFAULT_LAYOUT, regions: {}, fills: {} };
   for (const [key, values] of Object.entries(choices)) if (values.includes(raw?.[key])) result[key] = raw[key];
   if (typeof raw?.emphasis === "boolean") result.emphasis = raw.emphasis;
   for (const [key, r] of Object.entries(raw?.regions ?? {}).slice(0, 100)) {
     if (key.length <= 180 && validRegion(r)) result.regions[key] = { x: r.x, y: r.y, width: r.width, height: r.height };
+  }
+  for (const [key, fill] of Object.entries(raw?.fills ?? {}).slice(0, 100)) {
+    if (key.length <= 180 && ["auto", "top-left", "top-right", "bottom-left", "bottom-right"].includes(fill?.corner) && ["horizontal", "vertical"].includes(fill?.axis)) result.fills[key] = { corner: fill.corner, axis: fill.axis };
   }
   return result;
 }
@@ -109,7 +112,9 @@ export function workspaceLayout(area, notes, settings) {
   if (regions.some((r, i) => regions.slice(i + 1).some(other => overlaps(r.area, other.area)))) return null;
   const placements = [];
   for (const r of regions) {
-    const layout = noteLayout(r.area, r.group.notes.length, settings.size, settings.arrangement);
+    const fill = settings.fills[r.group.key];
+    const corner = noteCorner(area, r.area, fill?.corner, regions.length);
+    const layout = noteLayout(r.area, r.group.notes.length, settings.size, settings.arrangement, corner, fill?.axis ?? (settings.arrangement === "columns" ? "vertical" : "horizontal"));
     if (!layout) return null;
     r.group.notes.forEach((note, i) => placements.push({ note, bounds: layout[i] }));
   }
@@ -123,5 +128,11 @@ export function animationDelays(notes, mode, random = Math.random) {
   const bounds = n => n.window.getBounds();
   if (mode === "right") list.sort((a, b) => bounds(b).x - bounds(a).x || bounds(a).y - bounds(b).y);
   if (mode === "diagonal") list.sort((a, b) => bounds(a).x + bounds(a).y - bounds(b).x - bounds(b).y);
+  if (mode === "cascade") list.sort((a, b) => bounds(a).y - bounds(b).y || bounds(a).x - bounds(b).x);
+  if (mode === "center" && list.length) {
+    const points = list.map(bounds), x = points.reduce((sum, b) => sum + b.x, 0) / points.length, y = points.reduce((sum, b) => sum + b.y, 0) / points.length;
+    const distance = n => (bounds(n).x - x) ** 2 + (bounds(n).y - y) ** 2;
+    list.sort((a, b) => distance(a) - distance(b));
+  }
   return new Map(list.map((n, i) => [n, ["none", "together"].includes(mode) ? 0 : Math.round(i * Math.min(32, 180 / Math.max(1, list.length - 1)))]));
 }

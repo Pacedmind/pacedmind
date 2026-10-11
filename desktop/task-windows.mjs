@@ -1,5 +1,5 @@
 import { noteCapacity, noteLayout, noteMinimum } from "./task-note-layout.mjs";
-import { animationDelays, importance, layoutSettings, normalRegion, pixelRegion, refOf, validRegion, workspaceLayout } from "./task-note-workspace.mjs";
+import { animationDelays, importance, layoutSettings, normalRegion, noteGroups, pixelRegion, refOf, validRegion, workspaceLayout } from "./task-note-workspace.mjs";
 import { createNoteMotion } from "./task-note-motion.mjs";
 
 // Independent task notes, with shared visibility controls in the planner.
@@ -15,7 +15,21 @@ export function createTaskWindows({ BrowserWindow, screen, origin, preload, them
     if (!configs.has(key)) configs.set(key, layoutSettings(readLayout(scope, display)));
     return configs.get(key);
   };
-  const save = (scope, display, settings, resetPositions = false) => { configs.set(`${scope}:${display}`, settings); writeLayout(scope, display, { ...settings, positions: resetPositions ? {} : readLayout(scope, display)?.positions ?? {} }); };
+  const save = (scope, display, settings, resetPositions = false) => { configs.set(`${scope}:${display}`, settings); writeLayout(scope, display, { ...readLayout(scope, display), ...settings, positions: resetPositions ? {} : readLayout(scope, display)?.positions ?? {} }); };
+  const presets = (scope, display) => (Array.isArray(readLayout(scope, display)?.presets) ? readLayout(scope, display).presets : []).slice(0, 20).filter(p => typeof p?.name === "string" && p.name.length <= 60).map(p => ({ name: p.name, settings: layoutSettings(p.settings) }));
+  function scheduleArrange(scope, displayId, restore = false) {
+    const key = `${scope}:${displayId}`;
+    const pending = layoutTimers.get(key);
+    clearTimeout(pending?.timer);
+    restore = restore && (pending?.restore ?? true);
+    const timer = setTimeout(() => {
+      layoutTimers.delete(key);
+      const settings = config(scope, displayId);
+      save(scope, displayId, settings, !restore);
+      arrange(scope, displayId, settings, true, restore);
+    }, 160);
+    layoutTimers.set(key, { timer, restore });
+  }
   const delayFor = (group) => {
     const result = new Map();
     for (const note of group) {
@@ -35,7 +49,7 @@ export function createTaskWindows({ BrowserWindow, screen, origin, preload, them
   }
 
   const displayOf = (note) => note.displayId ?? String(screen.getDisplayMatching(note.window.getBounds()).id);
-  const onDisplay = (id, scope) => [...notes.values()].filter((n) => n.scope === scope && displayOf(n) === id);
+  const onDisplay = (id, scope) => [...notes.values()].filter((n) => !n.closing && n.scope === scope && displayOf(n) === id);
 
   function showOnTop(window) {
     if (window.isDestroyed()) return;
@@ -61,7 +75,7 @@ export function createTaskWindows({ BrowserWindow, screen, origin, preload, them
   function arrange(scope, displayId, settings = config(scope, displayId), animated = true, restore = false) {
     const display = screen.getAllDisplays().find(d => String(d.id) === displayId);
     if (!display) return null;
-    const group = onDisplay(displayId, scope), plan = workspaceLayout(display.workArea, group, settings);
+    const group = onDisplay(displayId, scope), plan = workspaceLayout(display.workArea, group, settings) ?? workspaceLayout(display.workArea, group, { ...settings, regions: {} });
     if (!plan) return null;
     const delays = animationDelays(group, settings.animation);
     const minimum = noteMinimum(settings.size);
@@ -76,6 +90,8 @@ export function createTaskWindows({ BrowserWindow, screen, origin, preload, them
       note.targetBounds = bounds;
       note.window.setMinimumSize?.(minimum.width, minimum.height);
       motion.run(note, { bounds, opacity: note.hidden ? 0 : 1, delay: delays.get(note), immediate: !animated || note.hidden || settings.animation === "none" });
+      // A live update can replace a pending hide animation. Finish hiding the native window too.
+      if (note.hidden) note.window.hide();
       publish(note);
     }
     return plan;
@@ -115,19 +131,36 @@ export function createTaskWindows({ BrowserWindow, screen, origin, preload, them
       const snapshot = api.displays(scope);
       return { scope, defaultDisplay: snapshot.defaultDisplay, displays: snapshot.displays.map(d => {
         const settings = config(scope, d.id), group = onDisplay(d.id, scope);
-        const plan = workspaceLayout(d, group, settings);
-        return { ...d, settings, groups: plan?.groups ?? [], compact: !!plan?.compact,
-          notes: group.map(n => ({ ref: refOf(n), title: n.meta?.title ?? `Task ${n.id}`, ...normalRegion(d, n.targetBounds ?? n.window.getBounds()) })) };
+        const grouped = noteGroups(group, settings);
+        const plan = workspaceLayout(d, group, settings) ?? workspaceLayout(d, group, { ...settings, regions: {} });
+        return { ...d, settings, presets: presets(scope, d.id), groups: plan?.groups ?? [], compact: !!plan?.compact,
+          notes: grouped.flatMap(g => g.notes.map(n => ({ ref: refOf(n), groupKey: g.key, title: n.meta?.title ?? `Task ${n.id}`, ...normalRegion(d, n.targetBounds ?? n.window.getBounds()) }))) };
       }) };
     },
     configure(scope, input) {
       const display = screen.getAllDisplays().find(d => String(d.id) === input?.displayId);
       if (!display || !validScope(scope)) return { ok: false, error: "That display is no longer connected." };
       const id = String(display.id), previous = config(scope, id);
+      const savedPresets = presets(scope, id);
+      if (input.preset) {
+        const { action, name } = input.preset;
+        if (typeof name !== "string" || !name.trim() || name.length > 60 || /[\u0000-\u001f\u007f]/.test(name) || !["save", "load", "delete"].includes(action)) return { ok: false, error: "Enter a preset name of up to 60 characters." };
+        const found = savedPresets.find(p => p.name === name.trim());
+        if (action === "load") {
+          if (!found) return { ok: false, error: "That preset no longer exists." };
+          input = { ...input, settings: found.settings, rearrange: true };
+        } else {
+          if (action === "save" && !found && savedPresets.length >= 20) return { ok: false, error: "Delete a preset before saving another (up to 20)." };
+          const next = savedPresets.filter(p => p.name !== name.trim());
+          if (action === "save") next.push({ name: name.trim(), settings: previous });
+          writeLayout(scope, id, { ...readLayout(scope, id), ...previous, presets: next });
+          return { ok: true, workspace: api.workspace(scope) };
+        }
+      }
       const settings = layoutSettings({ ...previous, ...input.settings });
       const group = input.move ? [...notes.values()].filter(n => n.scope === scope) : onDisplay(id, scope);
       if (!workspaceLayout(display.workArea, group, settings)) return { ok: false, error: "The spaces overlap or are too small for these cards. Enlarge them or reset the spaces." };
-      const resetPositions = ["size", "group", "order", "regions", "arrangement"].some(k => input.settings && k in input.settings);
+      const resetPositions = input.rearrange === true || ["size", "group", "order", "regions", "arrangement", "fills"].some(k => input.settings && k in input.settings);
       const rearrange = input.move === true || resetPositions;
       save(scope, id, settings, resetPositions);
       if (input.move === true) { group.forEach(n => { n.displayId = id; }); rememberDisplay(scope, id); }
@@ -154,7 +187,7 @@ export function createTaskWindows({ BrowserWindow, screen, origin, preload, them
       const settings = config(note.scope, displayOf(note));
       const saved = readLayout(note.scope, displayOf(note)) ?? {};
       const positions = { ...saved.positions, [refOf(note)]: normalRegion(display.workArea, note.targetBounds ?? note.window.getBounds()) };
-      writeLayout(note.scope, displayOf(note), { ...settings, positions: Object.fromEntries(Object.entries(positions).slice(-200)) });
+      writeLayout(note.scope, displayOf(note), { ...saved, ...settings, positions: Object.fromEntries(Object.entries(positions).slice(-200)) });
     },
     report(event, meta) {
       const note = senderNote(event);
@@ -165,12 +198,9 @@ export function createTaskWindows({ BrowserWindow, screen, origin, preload, them
       if (Number.isInteger(meta.priority)) note.meta.priority = ["none", "urgent", "high", "medium", "low"][meta.priority] ?? "none";
       note.reducedMotion = meta.reducedMotion === true;
       publish(note);
-      // Initial hydration can fill groups, but live deadline changes must not move the user's cards.
-      if (first && config(note.scope, displayOf(note)).group !== "none") {
-        const key = `${note.scope}:${displayOf(note)}`;
-        clearTimeout(layoutTimers.get(key));
-        layoutTimers.set(key, setTimeout(() => { layoutTimers.delete(key); arrange(note.scope, displayOf(note), undefined, true, true); }, 120));
-      }
+      const signature = JSON.stringify({ ...note.meta, title: undefined, day: new Date().toDateString() });
+      if (signature !== note.layoutSignature) scheduleArrange(note.scope, displayOf(note), first);
+      note.layoutSignature = signature;
       return true;
     },
     setTheme(name, color) {
@@ -283,6 +313,7 @@ export function createTaskWindows({ BrowserWindow, screen, origin, preload, them
       window.on("closed", () => {
         motion.cancel(note); clearTimeout(positionTimer); clearTimeout(note.themeTimer); clearTimeout(note.layoutTimer);
         if (notes.get(key) === note) notes.delete(key);
+        if (onDisplay(displayOf(note), scope).length) scheduleArrange(scope, displayOf(note));
         onChange(api.state());
       });
       onChange(api.state());
@@ -298,6 +329,7 @@ export function createTaskWindows({ BrowserWindow, screen, origin, preload, them
       const note = senderNote(event);
       if (!note) return false;
       note.hidden = true;
+      note.closing = true;
       motion.run(note, { opacity: 0, immediate: config(note.scope, displayOf(note)).animation === "none", done: () => note.window.close() });
       return true;
     },
