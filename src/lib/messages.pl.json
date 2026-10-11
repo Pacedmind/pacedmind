@@ -2095,5 +2095,10 @@
   "top left corner": "lewego górnego narożnika",
   "top right corner": "prawego górnego narożnika",
   "bottom left corner": "lewego dolnego narożnika",
-  "bottom right corner": "prawego dolnego narożnika"
+  "bottom right corner": "prawego dolnego narożnika",
+  "top-left corner": "lewego górnego narożnika",
+  "top-right corner": "prawego górnego narożnika",
+  "bottom-left corner": "lewego dolnego narożnika",
+  "bottom-right corner": "prawego dolnego narożnika",
+  "Put urgent and high-priority tasks first.": "Najpierw pokaż zadania pilne i o wysokim priorytecie."
 }
