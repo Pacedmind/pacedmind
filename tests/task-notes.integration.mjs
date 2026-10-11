@@ -1,5 +1,5 @@
 import { app, BrowserWindow, ipcMain, session } from "electron";
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { randomBytes, createHash } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import assert from "node:assert/strict";
@@ -7,6 +7,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createTaskWindows } from "../desktop/task-windows.mjs";
+import { nodeExecutable } from "../desktop/node-executable.mjs";
 import { registerTaskNoteControls } from "../desktop/task-note-controls.mjs";
 import { createTaskNoteOpener } from "../desktop/task-note-opener.mjs";
 
@@ -27,7 +28,7 @@ app.commandLine.appendSwitch("force-device-scale-factor", "1");
 app.on("window-all-closed", () => {});
 const origin = "http://127.0.0.1:4361";
 const serverLog = fs.openSync(path.join(temp, "server.log"), "a");
-const child = spawn(process.execPath, [path.join(root, "node_modules/next/dist/bin/next"), "start", "-p", "4361", "-H", "127.0.0.1"], {
+const child = spawn(nodeExecutable(), [path.join(root, "node_modules/next/dist/bin/next"), "start", "-p", "4361", "-H", "127.0.0.1"], {
   cwd: root, windowsHide: true, stdio: ["pipe", serverLog, serverLog],
   env: { ...process.env, ELECTRON_RUN_AS_NODE: "1", ORGANIZER_MODE: "desktop", ORGANIZER_DATA_KEY: "", ORGANIZER_DB: path.join(dirs.data, "organizer.db"), ORGANIZER_SEED: "empty", ORGANIZER_UI_SECRET: key,
     ORGANIZER_EXIT_WITH_PARENT: "1", USERPROFILE: dirs.home, HOME: dirs.home, APPDATA: dirs.appdata, CLAUDE_CONFIG_DIR: dirs.claude, CODEX_HOME: dirs.codex, NODE_ENV: "production" },
@@ -80,6 +81,12 @@ let db;
 let notePoll;
 try {
   await until(async () => fetch(`${origin}/api/state`, { headers }).then((r) => r.ok, () => false), "server");
+  if (process.platform === "darwin") {
+    const applications = execFileSync("/usr/bin/lsappinfo", ["list"], { encoding: "utf8" }).split(/(?=^\s*\d+\) )/m);
+    const serverApp = applications.find((entry) => entry.includes(`pid = ${child.pid} `));
+    assert.ok(!serverApp?.includes('type="Foreground"'), "The server must not add a foreground Dock icon");
+    await app.dock.show();
+  }
   await rpc("initialize", { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "note-check", version: "1" } });
   await call("create_task", { title: "Prepare the release checklist", agent: "codex", subtasks: ["Review the changes", "Check the installer"] });
   await call("create_task", { title: "Write the daily project update", agent: "human", repeat: "day", planned_date: "2026-10-04" });
@@ -135,6 +142,24 @@ try {
     if (details.url.includes("/floating/task/")) actionId = Object.entries(details.requestHeaders).find(([name]) => name.toLowerCase() === "next-action")?.[1] ?? actionId;
     callback({ requestHeaders: details.requestHeaders });
   });
+  // Verify server rendering before renderer interaction, with the real protected server and isolated data.
+  for (const language of ["pl", "en"]) {
+    for (const [route, polishLabel, englishLabel] of [
+      ["/today", "Dzisiaj", "Today"], ["/inbox", "Skrzynka", "Inbox"], ["/upcoming", "Nadchodzące", "Upcoming"],
+      ["/calendar", "Kalendarz", "Calendar"], ["/calendar/week", "Kalendarz", "Calendar"],
+      ["/timeline", "Oś czasu", "Timeline"], ["/roadmap", "Plan projektów", "Roadmap"], ["/projects", "Projekty", "Projects"],
+      ["/sessions", "Sesje", "Sessions"], ["/settings/appearance", "Język", "Language"], ["/settings/planning", "Planowanie", "Planning"],
+      ["/settings/computers", "Komputery", "Computers"], ["/login", "Zaloguj się", "Sign in"],
+    ]) {
+      const response = await fetch(origin + route, { headers: { ...headers, Cookie: `pm_language=${language}` } });
+      assert.equal(response.status, 200, route);
+      const html = await response.text();
+      assert.match(html, new RegExp(`<html[^>]*lang="${language}"`), route);
+      assert.ok(html.includes(language === "pl" ? polishLabel : englishLabel), route + " locale " + language);
+      if (route === "/inbox") assert.ok(html.includes("Prepare the release checklist"), "User titles must not be translated");
+    }
+  }
+  console.log("PASS: Polish and English protected server rendering, planner/settings/sign-in routes and unchanged user content");
   await session.defaultSession.cookies.set({ url: origin, name: "pm_ui", value: key, httpOnly: true, sameSite: "strict" });
   await planner.loadURL(`${origin}/inbox`);
   await until(() => planner.webContents.executeJavaScript("document.querySelectorAll('button[aria-label=\"Float task\"]').length === 2"), "two float buttons");
@@ -170,6 +195,12 @@ try {
   assert.equal(first.isVisible(), true);
   assert.equal(second.isVisible(), true);
   assert.equal(second.isAlwaysOnTop(), true);
+  if (process.platform === "darwin") {
+    assert.equal(first.isVisibleOnAllWorkspaces(), true);
+    assert.equal(second.isVisibleOnAllWorkspaces(), true);
+    assert.equal(app.dock.isVisible(), true, "Task notes must not hide the planner's Dock icon");
+    console.log("PASS: background server has no Dock icon; Mac notes cover Spaces and preserve the app icon");
+  }
   console.log("PASS: real renderer buttons, independent topmost windows, duplicate prevention, main window hidden");
   const noteDisplay = notes.displays("local").displays.find((d) => d.openCount > 0).id;
   first.setAlwaysOnTop(false);
@@ -370,6 +401,8 @@ try {
   assert.equal(preferred.get("local"), chosen);
   assert.match(JSON.stringify(await call("list_task_note_displays", {})), /opened/);
   agentWindow.close();
+  // Closing a native window can finish after the bridge exchange, especially on macOS.
+  await until(() => agentWindow.isDestroyed(), "close agent note");
   assert.equal((await exchange()).requests.length, 0);
   assert.equal(BrowserWindow.getAllWindows().length, 1);
   // The saved choice avoids another monitor question; replaced tasks and expiry fail closed.
@@ -434,6 +467,33 @@ try {
     "completing one task must not refresh the other 45");
   console.log(`PASS: 46 real notes, zero renderer state polls, only the changed task refreshed, completion ${elapsed} ms (local fixture)`);
   many.keepScope(null);
+  await until(() => BrowserWindow.getAllWindows().length === 1, "performance notes closed");
+  await planner.loadURL(origin + "/settings/appearance");
+  await until(async () => (await body(planner)).includes("Language"), "appearance controls");
+  const changeLanguage = (language) => planner.webContents.executeJavaScript(`(() => {
+    const select = document.querySelector('select[aria-label="Language"], select[aria-label="Język"]');
+    if (!select) return false;
+    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(select, ${JSON.stringify(language)});
+    select.dispatchEvent(new Event('change', { bubbles: true })); return true;
+  })()`);
+  const localeTask = db.prepare("SELECT id, created_at FROM tasks WHERE title = 'Performance note 2'").get();
+  const localeNotes = createTaskWindows({ BrowserWindow: TestWindow, screen, origin, preload: path.join(root, "desktop/preload.cjs"), theme: () => ({ name: theme, background: "#f5f5f6" }), showMain() {} });
+  assert.equal(localeNotes.show(localeTask.id, "local", localeTask.created_at, String(display.id)).status, "opened");
+  const localeNote = BrowserWindow.getAllWindows().find(w => w !== planner);
+  await until(async () => (await body(localeNote)).includes("Always on top"), "English note");
+  const beforeLanguage = db.prepare("SELECT id, title, status, description FROM tasks ORDER BY id").all();
+  assert.equal(await changeLanguage("pl"), true);
+  await until(async () => (await body(planner)).includes("Język") && (await body(localeNote)).includes("Zawsze na wierzchu"), "Polish planner and live note");
+  assert.equal(await planner.webContents.executeJavaScript("document.documentElement.lang"), "pl");
+  assert.ok((await body(localeNote)).includes("Performance note 2"), "Preserve the task title");
+  assert.equal(localeNote.isAlwaysOnTop(), true);
+  await screenshot(planner, "appearance-polish.png");
+  await screenshot(localeNote, "task-note-polish.png");
+  assert.equal(await changeLanguage("en"), true);
+  await until(async () => (await body(planner)).includes("Language") && (await body(localeNote)).includes("Always on top"), "English round trip");
+  assert.deepEqual(db.prepare("SELECT id, title, status, description FROM tasks ORDER BY id").all(), beforeLanguage, "Language switching cannot mutate planner data");
+  localeNotes.keepScope(null);
+  console.log("PASS: real Polski/English selector, live floating-note translation, unchanged data and preserved topmost behavior");
   clearInterval(notePoll);
   console.log(`Artifacts: ${path.join(root, "dist")}`);
   console.log(`Fixture: ${temp}`);

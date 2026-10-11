@@ -1,4 +1,5 @@
 "use client";
+import { useTranslation } from "@/components/language";
 
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
@@ -17,6 +18,7 @@ export function DateField({
   withTime?: boolean;
   align?: "left" | "right";
 }) {
+  const tx = useTranslation();
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
   const ref = useRef<HTMLDivElement>(null);
@@ -69,7 +71,7 @@ export function DateField({
           <DatePicker value={value} withTime={withTime} onChange={(v, done) => { onChange(v); if (done) close(); }} onDone={close}>
             {value && (
               <button type="button" onClick={() => { onChange(null); close(); }}
-                className="ml-auto h-7 rounded-md px-2 text-[12.5px] text-mut2 hover:bg-sel">Clear</button>
+                className="ml-auto h-7 rounded-md px-2 text-[12.5px] text-mut2 hover:bg-sel">{tx("Clear")}</button>
             )}
           </DatePicker>
         </div>,

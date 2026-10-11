@@ -1,11 +1,13 @@
 "use client";
+import { useTranslation } from "@/components/language";
+import { createTranslator, type Translator } from "@/lib/i18n";
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   useLayoutEffect, useOptimistic, useRef, useState, type CSSProperties, type MouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode,
 } from "react";
-import { format } from "date-fns";
+
 import { updateTaskAction } from "@/app/actions";
 import { projectColor } from "@/lib/colors";
 import { addDaysStr, dateOnly, fmtDay, fmtTime, hhmm, minutesOf, parseLocal, timeOf } from "@/lib/dates";
@@ -40,7 +42,7 @@ const DAY = 24 * 60;
 const SNAP = 15;
 /** The shortest a block is drawn, in minutes of the grid, so a two-minute session still has a line to click. */
 const MIN_DRAWN = 25;
-const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const DAY_NAMES = (tx: Translator) => ([tx("Mon"), tx("Tue"), tx("Wed"), tx("Thu"), tx("Fri"), tx("Sat"), tx("Sun")]);
 
 const y = (min: number) => Math.round((min / 60) * PX);
 const minutes = (b: { start: string; end: string }) => minutesOf(b.end.slice(11, 16)) - minutesOf(b.start.slice(11, 16));
@@ -168,6 +170,7 @@ export function WeekView({
   nav: { month: string; week: string };
   initialKey: string | null;
 }) {
+  const tx = useTranslation();
   const now = useNow(serverNow);
   const today = now.slice(0, 10);
   const nowMin = minutesOf(now.slice(11, 16));
@@ -228,7 +231,7 @@ export function WeekView({
       if (b.kind === "task" && t && (t.plannedTime || (t.plannedDate && t.plannedDate > day))) continue;
       list.push({
         id: `b${b.taskId}-${b.start}`, s: minOn(b.start, day), e: minOn(b.end, day), kind: b.kind === "check" ? "check" : "auto",
-        title: b.kind === "check" ? `Check ${b.key}` : `${b.key} ${b.title}`, start: b.start, end: b.end,
+        title: b.kind === "check" ? tx("Check {0}", [b.key]) : `${b.key} ${b.title}`, start: b.start, end: b.end,
         color: t ? taskColor(t, ctx.projects, ctx.areas) : areaColor(ctx.areas, b.areaId), task: t,
       });
     }
@@ -309,19 +312,19 @@ export function WeekView({
     let message: string;
     if (d.mode === "bottom" && drop.kind === "grid") {
       patch = { estimateMin: drop.len };
-      message = `${t.key} finishes at ${hhmm(drop.min + drop.len)} now`;
+      message = tx("{0} finishes at {1} now", [t.key, hhmm(drop.min + drop.len)]);
     } else if (d.mode === "top" && drop.kind === "grid") {
       patch = { plannedTime: hhmm(drop.min), estimateMin: drop.len };
-      message = `${t.key} starts at ${hhmm(drop.min)} now`;
+      message = tx("{0} starts at {1} now", [t.key, hhmm(drop.min)]);
     } else if (drop.kind === "grid") {
       patch = { plannedDate: drop.day, plannedTime: hhmm(drop.min) };
-      message = `${t.key} is planned for ${fmtDay(drop.day)} at ${hhmm(drop.min)}`;
+      message = tx("{0} is planned for {1} at {2}", [t.key, fmtDay(drop.day, tx.language), hhmm(drop.min)]);
     } else if (drop.kind === "allday") {
       patch = { plannedDate: drop.day, plannedTime: null };
-      message = `${t.key} is planned for ${fmtDay(drop.day)}`;
+      message = tx("{0} is planned for {1}", [t.key, fmtDay(drop.day, tx.language)]);
     } else {
       patch = { plannedDate: null, plannedTime: null };
-      message = `${t.key} isn't planned for a day now`;
+      message = tx("{0} isn't planned for a day now", [t.key]);
     }
     if (Object.entries(patch).every(([k, v]) => t[k as keyof Patch] === v)) return;
     run(() => {
@@ -385,13 +388,13 @@ export function WeekView({
 
   const legend = (
     <>
-      <Legend swatch="border-ctl">Fixed</Legend>
-      <Legend swatch="border-line-strong bg-line">Yours</Legend>
-      <Legend swatch="border-dashed border-ctl bg-hover">Auto-planned</Legend>
-      <Legend swatch="border-accent/55 bg-line">Check a finished session</Legend>
+      <Legend swatch="border-ctl">{tx("Fixed")}</Legend>
+      <Legend swatch="border-line-strong bg-line">{tx("Yours")}</Legend>
+      <Legend swatch="border-dashed border-ctl bg-hover">{tx("Auto-planned")}</Legend>
+      <Legend swatch="border-accent/55 bg-line">{tx("Check a finished session")}</Legend>
       <Legend style={tint("claude", false)}>{AGENT_LABEL.claude}</Legend>
       <Legend style={tint("codex", false)}>{AGENT_LABEL.codex}</Legend>
-      <Legend swatch="border-line-strong bg-line opacity-40">Done</Legend>
+      <Legend swatch="border-line-strong bg-line opacity-40">{tx("Done")}</Legend>
     </>
   );
 
@@ -399,11 +402,11 @@ export function WeekView({
 
   return (
     <div className="flex min-w-0 flex-1">
-      <section aria-label="Week" className="flex min-w-0 flex-1 flex-col">
+      <section aria-label={tx("Week")} className="flex min-w-0 flex-1 flex-col">
         {/* On a phone the subtitle is the shown day's month, short, as in the month view; the day strip has the dates. */}
-        <ViewHeader icon="calendar" title="Calendar" phoneSubtitleOnly subtitle={<>
+        <ViewHeader icon="calendar" title={tx("Calendar")} phoneSubtitleOnly subtitle={<>
           <span className="max-sm:hidden">{subtitle}</span>
-          <span className="sm:hidden">{format(parseLocal(shown), "MMM yyyy")}</span>
+          <span className="sm:hidden">{tx.date(parseLocal(shown), "MMM yyyy")}</span>
         </>}>
           <PeriodNav unit="week" prev={`/calendar/week?w=${addDaysStr(shown, -7)}`} next={`/calendar/week?w=${addDaysStr(shown, 7)}`}
             today="/calendar/week" />
@@ -416,23 +419,23 @@ export function WeekView({
           <span className="flex-1" />
           {plan && (
             <span className="truncate">
-              {hours(plan.plannedMinutes)} h planned of {hours(plan.capacityMinutes)} h focus time{current ? " left" : ""}
+              {hours(plan.plannedMinutes)} {" "}{tx("h planned of")}{" "}{hours(plan.capacityMinutes)} {" "}{tx("h focus time")}{current ? tx(" left") : ""}
             </span>
           )}
         </div>
 
         {/* A phone has room for one day: the strip picks it and shows each day's deadlines. */}
-        <div role="group" aria-label="Day" className="flex shrink-0 gap-0.5 border-b border-line px-1.5 py-1 md:hidden">
+        <div role="group" aria-label={tx("Day")} className="flex shrink-0 gap-0.5 border-b border-line px-1.5 py-1 md:hidden">
           {days.map((day, i) => {
             const { dues, late, single } = deadlines(day);
             const isToday = day === today;
             const past = day < today;
-            const label = [format(parseLocal(day), "EEEE d MMMM"), isToday && "today",
+            const label = [tx.date(parseLocal(day), "EEEE d MMMM"), isToday && tx("today"),
               dues.length > 0 && `${dues.length} ${past ? "missed" : "due"}`].filter(Boolean).join(", ");
             return (
               <button key={day} type="button" aria-pressed={day === shown} aria-label={label} onClick={() => show(day)}
                 className={cx("flex min-w-0 flex-1 flex-col items-center gap-1 rounded-md py-1", day === shown ? "bg-sel" : "hover:bg-hover")}>
-                <span className={cx("text-[11px] leading-none", isToday || day === shown ? "text-strong" : past ? "text-mut2" : "text-fg3")}>{DAY_NAMES[i]}</span>
+                <span className={cx("text-[11px] leading-none", isToday || day === shown ? "text-strong" : past ? "text-mut2" : "text-fg3")}>{tx(DAY_NAMES(tx)[i])}</span>
                 <span className={cx("inline-flex h-[22px] min-w-[22px] items-center justify-center rounded-full px-[5px] text-[12px] font-medium",
                   isToday ? "bg-accent text-bg" : day === shown ? "text-strong" : past ? "text-mut2" : "text-fg2")}>
                   {Number(day.slice(8))}
@@ -476,9 +479,9 @@ export function WeekView({
                   const isToday = day === today;
                   const past = day < today;
                   return (
-                    <div key={day} title={`New task on ${fmtDay(day)}`} {...addOnClick(() => ({ plannedDate: day }))}
+                    <div key={day} title={tx("New task on {0}", [fmtDay(day, tx.language)])} {...addOnClick(() => ({ plannedDate: day }))}
                       className={cx("flex min-w-0 flex-1 basis-0 items-center gap-1.5 overflow-hidden border-l border-line px-2 hover:bg-hover", hovered === day && "bg-hover")}>
-                      <span className={cx("shrink-0 text-[12px]", isToday ? "text-strong" : past ? "text-mut2" : "text-fg3")}>{DAY_NAMES[i]}</span>
+                      <span className={cx("shrink-0 text-[12px]", isToday ? "text-strong" : past ? "text-mut2" : "text-fg3")}>{tx(DAY_NAMES(tx)[i])}</span>
                       <span className={cx("inline-flex h-[22px] min-w-[22px] shrink-0 items-center justify-center rounded-full px-[5px] text-[12px] font-medium",
                         isToday ? "bg-accent text-bg" : past ? "text-mut2" : "text-fg2")}>
                         {Number(day.slice(8))}
@@ -491,7 +494,7 @@ export function WeekView({
                         <span data-item title={dues.map((t) => `${t.key} ${t.title}`).join("\n")}
                           className={cx("inline-flex min-w-0 items-center gap-[3px] text-[11px]", late ? "text-danger" : isToday ? "text-fg2" : "text-fg3")}>
                           <Icon name="flag" size={10} strokeWidth={2.4} className="shrink-0" />
-                          <span className="truncate">{past ? `${dues.length} missed` : (single ?? dues.length)}</span>
+                          <span className="truncate">{past ? tx("{0} missed", [dues.length]) : (single ?? dues.length)}</span>
                         </span>
                       )}
                     </div>
@@ -502,7 +505,7 @@ export function WeekView({
               {/* Tasks planned for a day without a time. Dropped here, a task keeps the day and loses its time. */}
               {hasAllDay && (
                 <div className="flex border-t border-line">
-                  <div className="flex w-[52px] shrink-0 items-start justify-end pr-2 pt-1.5 text-[10px] text-dim">Day</div>
+                  <div className="flex w-[52px] shrink-0 items-start justify-end pr-2 pt-1.5 text-[10px] text-dim">{tx("Day")}</div>
                   {days.map((day, i) => (
                     <div key={day} data-drop="allday" data-day={day}
                       className={cx("flex max-h-[98px] min-h-[30px] min-w-0 flex-1 basis-0 flex-col gap-[3px] overflow-y-auto border-l border-line p-[3px]",
@@ -635,6 +638,7 @@ function BlockView({ block: b, past, selected, dragging, onOpen, onGrab }: {
   /** Given for a task you can move: picks it up by its middle, or by its top or bottom edge to move its start or finish. */
   onGrab?: (e: ReactPointerEvent<HTMLElement>, mode: Drag["mode"]) => void;
 }) {
+  const tx = useTranslation();
   const top = y(b.s) + 1;
   const height = Math.max(18, y(b.e) - top - 1);
   // A finished task's block, and its sessions, are dimmed.
@@ -655,10 +659,10 @@ function BlockView({ block: b, past, selected, dragging, onOpen, onGrab }: {
   const cls = cx("group absolute block overflow-hidden rounded-[5px] border px-1.5 text-left text-[11px] leading-[1.35]",
     height >= 24 ? "py-[3px]" : "py-0", tone, selected && "ring-1 ring-accent/70", dragging ? "opacity-40" : done && DIMMED,
     onGrab ? "cursor-grab" : "cursor-pointer", b.kind === "session" ? "z-[5]" : "");
-  const time = `${fmtTime(b.start)}–${b.running ? "now" : fmtTime(b.end)}`;
+  const time = `${fmtTime(b.start)}–${b.running ? tx("now") : fmtTime(b.end)}`;
   const label = b.kind === "session"
-    ? `${AGENT_LABEL[b.agent!]}: ${b.title}, ${fmtTime(b.start)}–${b.running ? "now, running" : fmtTime(b.end)}`
-    : `${b.title}, ${time}${b.kind === "auto" ? " (auto-planned)" : ""}${done ? ", done" : ""}${onGrab ? ". Drag to move it." : ""}`;
+    ? `${tx(AGENT_LABEL[b.agent!])}: ${b.title}, ${fmtTime(b.start)}–${b.running ? tx("now, running") : fmtTime(b.end)}`
+    : `${b.title}, ${time}${b.kind === "auto" ? tx(" (auto-planned)") : ""}${done ? tx(", done") : ""}${onGrab ? ". Drag to move it." : ""}`;
   return (
     <div data-block data-item title={label} aria-label={label} {...pressable(onOpen)} className={cls} style={style}
       onPointerDown={onGrab ? (e) => onGrab(e, "move") : undefined}>
@@ -695,13 +699,14 @@ function BlockView({ block: b, past, selected, dragging, onOpen, onGrab }: {
 type Tab = "tasks" | "plan";
 
 function SidePanel({ taskOpen, children }: { taskOpen: boolean; children: (tab: Tab) => ReactNode }) {
+  const tx = useTranslation();
   const [tab, setTab] = useState<Tab>("tasks");
   return (
     // On a phone it follows the day, full width, and scrolls with it.
-    <aside aria-label={tab === "tasks" ? "Tasks to place" : "Auto-plan"} className={cx("flex w-[300px] shrink-0 flex-col overflow-hidden border-l border-line",
+    <aside aria-label={tab === "tasks" ? tx("Tasks to place") : tx("Auto-plan")} className={cx("flex w-[300px] shrink-0 flex-col overflow-hidden border-l border-line",
       "max-md:w-auto max-md:overflow-visible max-md:border-l-0 max-md:border-t", taskOpen && "md:hidden")}>
       <div className="flex h-11 shrink-0 items-center border-b border-line px-4">
-        <Segmented value={tab} onChange={setTab} options={[{ value: "tasks", label: "Tasks" }, { value: "plan", label: "Auto-plan" }]} />
+        <Segmented value={tab} onChange={setTab} options={[{ value: "tasks", label: tx("Tasks") }, { value: "plan", label: tx("Auto-plan") }]} />
       </div>
       {children(tab)}
     </aside>
@@ -720,6 +725,7 @@ function PlaceList({ tasks, total, ctx, sel, dragging, over, onOpen, grabProps }
   onOpen: (key: string) => void;
   grabProps: (t: Task) => { onPointerDown: (e: ReactPointerEvent) => void };
 }) {
+  const tx = useTranslation();
   const [q, setQ] = useState("");
   const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
   const shown = words.length ? tasks.filter((t) => words.every((w) => `${t.key} ${t.title}`.toLowerCase().includes(w))) : tasks;
@@ -727,9 +733,9 @@ function PlaceList({ tasks, total, ctx, sel, dragging, over, onOpen, grabProps }
     <div data-drop="list" className={cx("flex min-h-0 flex-1 flex-col max-md:overflow-visible", over && "bg-sel")}>
       <div className="flex flex-col gap-2 px-4 pb-2 pt-3">
         <p className="text-[12px] leading-[1.45] text-mut2">
-          {over ? "Drop it here to take it off its day." : "Drag a task onto an hour to plan it then, or onto a day's top row to plan only the day."}
+          {over ? tx("Drop it here to take it off its day.") : tx("Drag a task onto an hour to plan it then, or onto a day's top row to plan only the day.")}
         </p>
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter tasks" aria-label="Filter tasks"
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={tx("Filter tasks")} aria-label={tx("Filter tasks")}
           className="h-7 rounded-md border border-line bg-input px-2 text-[12.5px] text-fg outline-none placeholder:text-dim focus:border-ctl" />
       </div>
       <div className="flex min-h-0 flex-1 flex-col gap-[3px] overflow-y-auto px-3 pb-4 max-md:overflow-visible">
@@ -745,49 +751,49 @@ function PlaceList({ tasks, total, ctx, sel, dragging, over, onOpen, grabProps }
                 : <Dot color={taskColor(t, ctx.projects, ctx.areas)} size={7} />}
               <span className="shrink-0 font-mono text-[11px] text-mut2">{t.key}</span>
               <span className="min-w-0 flex-1 truncate">{t.title}</span>
-              {late && <span className="shrink-0 text-[11px] text-danger" title={`Was planned for ${fmtDay(t.plannedDate!)}`}>{format(parseLocal(t.plannedDate!), "d MMM")}</span>}
-              <span className="shrink-0 text-[11px] text-dim">{blockMinutes(t) >= 60 ? `${hours(blockMinutes(t))} h` : `${blockMinutes(t)}m`}</span>
+              {late && <span className="shrink-0 text-[11px] text-danger" title={tx("Was planned for {0}", [fmtDay(t.plannedDate!, tx.language)])}>{tx.date(parseLocal(t.plannedDate!), "d MMM")}</span>}
+              <span className="shrink-0 text-[11px] text-dim">{blockMinutes(t) >= 60 ? tx("{0} h", [hours(blockMinutes(t))]) : `${blockMinutes(t)}m`}</span>
             </div>
           );
         })}
-        {!shown.length && <p className="px-1 py-2 text-[12px] text-mut2">{words.length ? "No task matches." : "Every open task has its day."}</p>}
+        {!shown.length && <p className="px-1 py-2 text-[12px] text-mut2">{words.length ? tx("No task matches.") : tx("Every open task has its day.")}</p>}
         {!words.length && total > tasks.length && (
-          <p className="px-1 py-2 text-[12px] text-mut2">{total - tasks.length} more, less urgent. Plan these first.</p>
+          <p className="px-1 py-2 text-[12px] text-mut2">{total - tasks.length} {" "}{tx("more, less urgent. Plan these first.")}</p>
         )}
       </div>
     </div>
   );
 }
 
-function workDaysText(days: number[]) {
+function workDaysText(days: number[], tx: Translator = createTranslator("en")) {
   const ds = [...days].sort((a, b) => a - b);
-  if (!ds.length) return "on no days";
+  if (!ds.length) return tx("on no days");
   const range = ds.length > 2 && ds.every((d, i) => i === 0 || d === ds[i - 1] + 1);
-  return range ? `${DAY_NAMES[ds[0] - 1]} to ${DAY_NAMES[ds[ds.length - 1] - 1]}` : ds.map((d) => DAY_NAMES[d - 1]).join(", ");
+  return range ? tx("{0} to {1}", [DAY_NAMES(tx)[ds[0] - 1], DAY_NAMES(tx)[ds[ds.length - 1] - 1]]) : ds.map((d) => tx(DAY_NAMES(tx)[d - 1])).join(", ");
 }
 
 /** Short notes on what the planner did: checks it added, overdue work it placed, tasks it split. */
-function planNotes(plan: WeekPlan, tasks: Task[], today: string, now: string) {
+function planNotes(plan: WeekPlan, tasks: Task[], today: string, now: string, tx: Translator = createTranslator("en")) {
   const when = (stamp: string) => {
     const d = dateOnly(stamp);
-    const day = d === today ? "today" : d === addDaysStr(today, 1) ? "tomorrow" : `on ${format(parseLocal(d), "EEE")}`;
-    return `${day} at ${fmtTime(stamp)}`;
+    const day = d === today ? tx("today") : d === addDaysStr(today, 1) ? tx("tomorrow") : tx("on {0}", [tx.date(parseLocal(d), "EEE")]);
+    return tx("{0} at {1}", [day, fmtTime(stamp)]);
   };
   const notes: { dot: string; text: string }[] = [];
   const count = new Map<string, number>();
   for (const b of plan.blocks as PlannedBlock[]) {
     if (b.kind === "check") {
-      notes.push({ dot: "var(--color-accent)", text: `${b.key} finished, so ${minutes(b)} min to check it was added ${when(b.start)}` });
+      notes.push({ dot: "var(--color-accent)", text: tx("{0} finished, so {1} min to check it was added {2}", [b.key, minutes(b), when(b.start)]) });
       continue;
     }
     const n = (count.get(b.key) ?? 0) + 1;
     count.set(b.key, n);
     const t = tasks.find((x) => x.id === b.taskId);
     if (n === 1 && t?.dueDate && (timeOf(t.dueDate) ? t.dueDate < now : dateOnly(t.dueDate) < today)) {
-      notes.push({ dot: "var(--color-danger)", text: `${b.key} is overdue, planned ${when(b.start)}` });
+      notes.push({ dot: "var(--color-danger)", text: tx("{0} is overdue, planned {1}", [b.key, when(b.start)]) });
     }
   }
-  for (const [key, n] of count) if (n > 1) notes.push({ dot: "var(--color-dim)", text: `Split ${key} into ${n} blocks` });
+  for (const [key, n] of count) if (n > 1) notes.push({ dot: "var(--color-dim)", text: tx("Split {0} into {1} blocks", [key, n]) });
   return notes.slice(0, 4);
 }
 
@@ -804,34 +810,35 @@ function AutoPlan({ plan, on, onToggle, current, tasks, areas, rules, today, now
   onOpen: (key: string) => void;
   onReplan: () => void;
 }) {
+  const tx = useTranslation();
   const placed = new Set(plan?.blocks.map((b) => b.taskId));
   const byArea = new Map<string | null, number>();
   for (const b of plan?.blocks ?? []) byArea.set(b.areaId, (byArea.get(b.areaId) ?? 0) + minutes(b));
   const parts = [...byArea].sort((a, b) => b[1] - a[1]);
   const scale = Math.max(plan?.capacityMinutes ?? 0, plan?.plannedMinutes ?? 0, 1);
-  const status = !plan ? "This week is over, so there is nothing left to plan."
-    : !on ? "Auto-plan is off. Only fixed events, your own blocks and agent sessions are shown."
+  const status = !plan ? tx("This week is over, so there is nothing left to plan.")
+    : !on ? tx("Auto-plan is off. Only fixed events, your own blocks and agent sessions are shown.")
     : plan.blocks.length
-      ? `Planned at ${plan.at} · ${placed.size} task${placed.size === 1 ? "" : "s"} in ${plan.blocks.length} block${plan.blocks.length === 1 ? "" : "s"}`
-      : `Planned at ${plan.at} · nothing to place this week`;
+      ? tx("Planned at {0} · {1} task{2} in {3} block{4}", [plan.at, placed.size, placed.size === 1 ? "" : "s", plan.blocks.length, plan.blocks.length === 1 ? "" : "s"])
+      : tx("Planned at {0} · nothing to place this week", [plan.at]);
   const ruleList = [
-    `Focus time ${workDaysText(rules.workDays)}, ${rules.workStart} to ${rules.workEnd}`,
-    `Keep ${rules.lunchStart} to ${rules.lunchEnd} free`,
-    "Tasks you put at a time stay there",
-    "Deadlines first, then priority",
-    "Finished agent sessions get a check block",
-    "Tasks for Claude Code and Codex are left to them",
+    tx("Focus time {0}, {1} to {2}", [workDaysText(rules.workDays, tx), rules.workStart, rules.workEnd]),
+    tx("Keep {0} to {1} free", [rules.lunchStart, rules.lunchEnd]),
+    tx("Tasks you put at a time stay there"),
+    tx("Deadlines first, then priority"),
+    tx("Finished agent sessions get a check block"),
+    tx("Tasks for Claude Code and Codex are left to them"),
   ];
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-[18px] overflow-y-auto px-5 py-3.5 max-md:overflow-visible max-md:pb-6">
       <div className="flex flex-col gap-2">
         <div className="flex items-center gap-2.5">
-          <span className="flex-1 text-[12.5px] text-fg2">Show auto-planned blocks</span>
-          <Switch on={on} onChange={onToggle} label="Show auto-planned blocks" />
+          <span className="flex-1 text-[12.5px] text-fg2">{tx("Show auto-planned blocks")}</span>
+          <Switch on={on} onChange={onToggle} label={tx("Show auto-planned blocks")} />
         </div>
         <div className="text-[12px] text-mut2">{status}</div>
-        {plan && on && planNotes(plan, tasks, today, now).map((n, i) => (
+        {plan && on && planNotes(plan, tasks, today, now, tx).map((n, i) => (
           <div key={i} className="flex gap-2.5 text-[12.5px] leading-[1.45] text-fg3">
             <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: n.dot }} />
             <span>{n.text}</span>
@@ -842,8 +849,8 @@ function AutoPlan({ plan, on, onToggle, current, tasks, areas, rules, today, now
       {plan && (
         <div className="flex flex-col gap-2">
           <div className="flex items-baseline text-[12.5px]">
-            <span className="flex-1 text-fg2">{current ? "Rest of this week" : "This week"}</span>
-            <span className="text-mut2">{hours(plan.plannedMinutes)} of {hours(plan.capacityMinutes)} h</span>
+            <span className="flex-1 text-fg2">{current ? tx("Rest of this week") : tx("This week")}</span>
+            <span className="text-mut2">{hours(plan.plannedMinutes)} {" "}{tx("of")}{" "}{hours(plan.capacityMinutes)} h</span>
           </div>
           <div className="flex h-1.5 gap-0.5 overflow-hidden rounded-[3px] bg-line">
             {parts.map(([id, m]) => (
@@ -852,7 +859,7 @@ function AutoPlan({ plan, on, onToggle, current, tasks, areas, rules, today, now
           </div>
           {parts.length > 0 && (
             <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11.5px] text-mut2">
-              {parts.map(([id, m]) => <span key={id ?? "none"}>{areas.find((a) => a.id === id)?.name ?? "No area"} {hours(m)} h</span>)}
+              {parts.map(([id, m]) => <span key={id ?? "none"}>{areas.find((a) => a.id === id)?.name ?? tx("No area")} {hours(m)} h</span>)}
             </div>
           )}
         </div>
@@ -860,21 +867,20 @@ function AutoPlan({ plan, on, onToggle, current, tasks, areas, rules, today, now
 
       {plan && plan.unplaced.length > 0 && (
         <div className="flex flex-col gap-2 rounded-lg border border-ink/5 bg-ink/5 p-3">
-          <div className="text-[12.5px] font-medium text-fg2">Didn&apos;t fit this week</div>
+          <div className="text-[12.5px] font-medium text-fg2">{tx("Didn't fit this week")}</div>
           {plan.unplaced.map((u) => (
             <button key={u.taskId} type="button" onClick={() => onOpen(u.key)}
               className="text-left text-[12.5px] leading-[1.45] text-fg3 hover:text-strong">
-              <span className="font-mono text-[11.5px] text-mut2">{u.key}</span> {u.title} needs {hours(u.minutes)} h
-              {placed.has(u.taskId) ? " more" : ""} and there&apos;s no free slot left this week.
-            </button>
+              <span className="font-mono text-[11.5px] text-mut2">{u.key}</span> {u.title} {" "}{tx("needs")}{" "}{hours(u.minutes)} h
+              {placed.has(u.taskId) ? tx(" more") : ""} {tx("and there's no free slot left this week.")}</button>
           ))}
         </div>
       )}
 
       <div className="flex flex-col gap-1.5">
         <div className="flex items-baseline text-[12.5px]">
-          <span className="flex-1 text-fg2">Rules</span>
-          <Link href="/settings/planning" className="text-[12px] text-mut2 hover:text-fg2">Change</Link>
+          <span className="flex-1 text-fg2">{tx("Rules")}</span>
+          <Link href="/settings/planning" className="text-[12px] text-mut2 hover:text-fg2">{tx("Change")}</Link>
         </div>
         {ruleList.map((r) => (
           <div key={r} className="flex gap-2 text-[12px] leading-[1.45] text-mut">
@@ -886,8 +892,7 @@ function AutoPlan({ plan, on, onToggle, current, tasks, areas, rules, today, now
 
       {plan && (
         <Button onClick={onReplan} className="justify-center">
-          <Icon name="refresh" size={13} strokeWidth={2} />Replan the week
-        </Button>
+          <Icon name="refresh" size={13} strokeWidth={2} />{tx("Replan the week")}</Button>
       )}
     </div>
   );

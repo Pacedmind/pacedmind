@@ -1,4 +1,6 @@
 "use client";
+import { useTranslation } from "@/components/language";
+import { createTranslator, type Translator } from "@/lib/i18n";
 
 import { useState, useSyncExternalStore } from "react";
 import type { Task } from "@/lib/types";
@@ -75,23 +77,23 @@ const COMPARE: Record<Exclude<Ordering, "default">, (a: Task, b: Task) => number
  * The page's groups as this viewer wants them. By label, a task shows under each of its labels, and the ones
  * without a label come last. A stable sort, so ties keep the page's own order (priority, then yours).
  */
-export function arrange(groups: TaskGroup[], { group, order }: TaskDisplay): TaskGroup[] {
+export function arrange(groups: TaskGroup[], { group, order }: TaskDisplay, tx: Translator = createTranslator("en")): TaskGroup[] {
   let out = groups;
   if (group === "label") {
     const all = groups.flatMap((g) => g.tasks).filter((t, i, list) => list.findIndex((u) => u.id === t.id) === i);
     const labels = [...new Set(all.flatMap((t) => t.labels))].sort(byText);
     out = [
       ...labels.map((l) => ({ id: `label:${l}`, name: l, tasks: all.filter((t) => t.labels.includes(l)) })),
-      { id: "label:", name: "No label", tasks: all.filter((t) => !t.labels.length) },
+      { id: "label:", name: tx("No label"), tasks: all.filter((t) => !t.labels.length) },
     ].filter((g) => g.tasks.length);
   }
   if (order === "default") return out;
   return out.map((g) => ({ ...g, tasks: [...g.tasks].sort(COMPARE[order]) }));
 }
 
-const ORDER_NAMES: Record<Ordering, string> = {
-  default: "Priority", label: "Label", due: "Due date", title: "Title", created: "Newest first",
-};
+const ORDER_NAMES = (tx: Translator): Record<Ordering, string> => ({
+  default: tx("Priority"), label: tx("Label"), due: tx("Due date"), title: tx("Title"), created: tx("Newest first"),
+});
 
 export function DisplayMenu({ display, onChange, groupedBy }: {
   display: TaskDisplay;
@@ -99,32 +101,33 @@ export function DisplayMenu({ display, onChange, groupedBy }: {
   /** What the page itself groups by, such as "Status". */
   groupedBy: string;
 }) {
+  const tx = useTranslation();
   const [anchor, setAnchor] = useState<Anchor | null>(null);
   const changed = display.group !== "default" || display.order !== "default";
   const tick = (on: boolean) => <Icon name="check" size={13} className={on ? "" : "invisible"} />;
   const pick = (d: Partial<TaskDisplay>) => onChange({ ...display, ...d });
   return (
     <>
-      <Button aria-label="Display" aria-haspopup="menu" aria-expanded={!!anchor}
+      <Button aria-label={tx("Display")} aria-haspopup="menu" aria-expanded={!!anchor}
         // Below the button, right edges lined up (the popover opens 6 px right of its anchor).
         onClick={(e) => { const a = anchorOf(e.currentTarget); setAnchor((o) => o ? null : { x: a.x + (a.w ?? 0) - 206, y: a.y + (a.h ?? 0) + 4 }); }}>
         <Icon name="timeline" size={13} />
-        <span className="@max-xl:hidden">{changed ? [display.group === "label" && "By label", display.order !== "default" && ORDER_NAMES[display.order]].filter(Boolean).join(" · ") : "Display"}</span>
+        <span className="@max-xl:hidden">{changed ? [display.group === "label" && tx("By label"), display.order !== "default" && ORDER_NAMES(tx)[display.order]].filter(Boolean).join(" · ") : tx("Display")}</span>
       </Button>
       {anchor && (
         <Popover anchor={anchor} onClose={() => setAnchor(null)} width={200}>
-          <PopoverLabel>Group by</PopoverLabel>
+          <PopoverLabel>{tx("Group by")}</PopoverLabel>
           <PopoverItem icon={tick(display.group === "default")} onClick={() => pick({ group: "default" })}>{groupedBy}</PopoverItem>
-          <PopoverItem icon={tick(display.group === "label")} onClick={() => pick({ group: "label" })}>Label</PopoverItem>
+          <PopoverItem icon={tick(display.group === "label")} onClick={() => pick({ group: "label" })}>{tx("Label")}</PopoverItem>
           <PopoverSeparator />
-          <PopoverLabel>Order by</PopoverLabel>
+          <PopoverLabel>{tx("Order by")}</PopoverLabel>
           {ORDERINGS.map((o) => (
-            <PopoverItem key={o} icon={tick(display.order === o)} onClick={() => pick({ order: o })}>{ORDER_NAMES[o]}</PopoverItem>
+            <PopoverItem key={o} icon={tick(display.order === o)} onClick={() => pick({ order: o })}>{ORDER_NAMES(tx)[o]}</PopoverItem>
           ))}
           {changed && (
             <>
               <PopoverSeparator />
-              <PopoverItem onClick={() => { onChange(DEFAULT); setAnchor(null); }}>Reset</PopoverItem>
+              <PopoverItem onClick={() => { onChange(DEFAULT); setAnchor(null); }}>{tx("Reset")}</PopoverItem>
             </>
           )}
         </Popover>

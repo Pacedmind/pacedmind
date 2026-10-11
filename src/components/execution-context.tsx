@@ -1,4 +1,6 @@
 "use client";
+import { useTranslation } from "@/components/language";
+import { createTranslator, type Translator } from "@/lib/i18n";
 
 import { createContext, useContext, type ReactNode } from "react";
 import { MAX_NEEDS, cleanNeeds, deviceWithNeeds, missingOn, needKey, toolsOn } from "@/lib/needs";
@@ -14,14 +16,14 @@ export function ExecutionProvider({ children, ...value }: ExecutionContext & { c
 }
 export const useExecution = () => useContext(Context);
 
-export function harnesses(d: Device): string[] {
+export function harnesses(d: Device, tx: Translator = createTranslator("en")): string[] {
   return (["claude", "codex"] as const).flatMap((a) => [
-    ...(d.agents[a].cli ? [AGENT_LABEL[a]] : []), ...(d.agents[a].app ? [APP_LABEL[a]] : []),
+    ...(d.agents[a].cli ? [tx(AGENT_LABEL[a])] : []), ...(d.agents[a].app ? [tx(APP_LABEL[a])] : []),
   ]);
 }
 
 /** "This computer", "Online" or "Offline". */
-export const deviceState = (d: Device, hereId: string | null) => d.id === hereId ? "This computer" : deviceOnline(d) ? "Online" : "Offline";
+export const deviceState = (d: Device, hereId: string | null, tx: Translator = createTranslator("en")) => d.id === hereId ? tx("This computer") : deviceOnline(d) ? tx("Online") : tx("Offline");
 
 /**
  * The computer a task's sessions go to: the one it or its project names, else the one PacedMind picks (this computer in
@@ -48,30 +50,33 @@ export function useComputerChoice(value: string | null) {
 export function ComputerPicker({ value, inherited, agent, needs, onChange, trigger }: {
   value: string | null; inherited?: string | null; agent: AgentId; needs?: string[]; onChange: (id: string | null) => void; trigger: string;
 }) {
+  const tx = useTranslation();
   const { devices, hereId, desktop } = useExecution();
   const { device } = useTaskDevice(value ?? inherited ?? null, agent, needs);
   const parent = devices.find((d) => d.id === inherited);
   const options = [
-    parent ? { value: "", label: `Project's computer, ${parent.name}` }
-      : { value: "", label: "Automatic", detail: desktop ? "This computer, or one that has what the task needs" : "One that has what the task needs, else your default" },
+    parent ? { value: "", label: tx("Project's computer, {0}", [parent.name]) }
+      : { value: "", label: tx("Automatic"), detail: desktop ? tx("This computer, or one that has what the task needs") : tx("One that has what the task needs, else your default") },
     ...devices.filter((d) => !!d.id).map((d) => ({ value: d.id, label: d.name,
-      detail: [deviceState(d, hereId), harnesses(d).join(", ") || "No agents found"].join(" · ") })),
+      detail: [deviceState(d, hereId, tx), harnesses(d).join(", ") || tx("No agents found")].join(" · ") })),
   ];
-  if (value && !options.some((o) => o.value === value)) options.push({ value, label: "Unavailable computer" });
+  if (value && !options.some((o) => o.value === value)) options.push({ value, label: tx("Unavailable computer") });
   const picked = value ? null : inherited ? "project" : "auto";
-  return <Picker label="Computer" values={[value ?? ""]} options={options} onChange={([id]) => onChange(id || null)} trigger={trigger}
-    title={device ? `Runs on ${device.name}${picked === "auto" ? ", picked automatically" : picked === "project" ? ", the project's computer" : ""}` : undefined}
+  return <Picker label={tx("Computer")} values={[value ?? ""]} options={options} onChange={([id]) => onChange(id || null)} trigger={trigger}
+    title={device ? tx("Runs on {0}{1}", [device.name, picked === "auto" ? tx(", picked automatically") : picked === "project" ? tx(", the project's computer") : ""]) : undefined}
     content={<>
       <Icon name="laptop" size={13} className="shrink-0" />
-      <span className="truncate">{device?.name ?? (value ? "Unavailable computer" : "Computer")}</span>
+      <span className="truncate">{device?.name ?? (value ? tx("Unavailable computer") : tx("Computer"))}</span>
       {picked && device && <span className="text-[11px] text-mut2">{picked}</span>}
     </>} />;
 }
 
 /** What the task's agent needs from the computer: MCP servers or claude.ai connectors, suggested from what computers reported. */
-export function NeedsPicker({ values, onChange, agent, tools, deferred = false, trigger, empty = "MCP servers" }: {
+export function NeedsPicker({ values, onChange, agent, tools, deferred = false, trigger, empty }: {
   values: string[]; onChange: (values: string[]) => void; agent?: AgentId; deferred?: boolean; tools?: { name: string; on: string[] }[]; trigger: string; empty?: string;
 }) {
+  const tx = useTranslation();
+  empty ??= tx("MCP servers");
   const { devices } = useExecution();
   const choices = new Map<string, { name: string; on: Set<string> }>();
   const add = (name: string, on: string[]) => {
@@ -84,33 +89,34 @@ export function NeedsPicker({ values, onChange, agent, tools, deferred = false, 
   if (tools) tools.forEach((t) => add(t.name, t.on));
   else devices.forEach((d) => (agent ? [agent] : ["claude", "codex"] as const).forEach((a) => (toolsOn(d, a) ?? []).forEach((name) => add(name, [d.name]))));
   values.forEach((v) => add(v, []));
-  return <Picker label="MCP servers and connectors" multiple deferred={deferred} values={values.map(needKey)} max={MAX_NEEDS} trigger={trigger}
-    title="MCP servers or connectors its agent needs on the computer"
+  return <Picker label={tx("MCP servers and connectors")} multiple deferred={deferred} values={values.map(needKey)} max={MAX_NEEDS} trigger={trigger}
+    title={tx("MCP servers or connectors its agent needs on the computer")}
     content={<>
       <Icon name="plug" size={13} className="shrink-0" />
       <span className="truncate">{values.length ? values.join(", ") : empty}</span>
     </>}
     options={[...choices].sort((a, b) => a[1].name.localeCompare(b[1].name)).map(([key, t]) => ({
-      value: key, label: t.name, detail: t.on.size ? `On ${[...t.on].join(", ")}` : "Not reported by a computer",
+      value: key, label: t.name, detail: t.on.size ? tx("On {0}", [[...t.on].join(", ")]) : tx("Not reported by a computer"),
     }))} custom={(text) => cleanNeeds([text])[0] ?? null}
     onChange={(keys) => onChange(cleanNeeds(keys.map((k) => choices.get(k)?.name ?? k)))} />;
 }
 
 /** What would keep the task's session from starting where it goes, in short lines; none when nothing would. */
 export function useExecutionIssues(deviceId: string | null, agent: AgentId, runIn: Surface | null, needs: string[] = []): string[] {
+  const tx = useTranslation();
   const { device, local } = useTaskDevice(deviceId, agent, needs);
-  if (deviceId && !device) return ["The chosen computer isn't available any more"];
+  if (deviceId && !device) return [tx("The chosen computer isn't available any more")];
   if (!device) return [];
   const tools = device.agents[agent];
   const surface = surfaceOf(runIn, device.checkedAt ? tools : undefined);
   if (surface === "cloud") return [];
   const issues: string[] = [];
   if (tools && device.checkedAt && !(surface === "desktop" ? tools.app : tools.cli)) {
-    issues.push(`${surface === "desktop" ? APP_LABEL[agent] : AGENT_LABEL[agent]} isn't installed on ${device.name}`);
-  } else if (tools && surface === "desktop" && !mcpReaches(tools.mcp)) issues.push(`${APP_LABEL[agent]} isn't connected to PacedMind`);
-  if (!local && device.remoteStart === "off") issues.push(`${device.name} refuses starts from other computers`);
+    issues.push(tx("{0} isn't installed on {1}", [surface === "desktop" ? tx(APP_LABEL[agent]) : tx(AGENT_LABEL[agent]), device.name]));
+  } else if (tools && surface === "desktop" && !mcpReaches(tools.mcp)) issues.push(tx("{0} isn't connected to PacedMind", [tx(APP_LABEL[agent])]));
+  if (!local && device.remoteStart === "off") issues.push(tx("{0} refuses starts from other computers", [device.name]));
   const missing = missingOn(needs, device, agent);
-  if (missing.length) issues.push(`Not reported on ${device.name}: ${missing.join(", ")}`);
+  if (missing.length) issues.push(tx("Not reported on {0}: {1}", [device.name, missing.join(", ")]));
   return issues;
 }
 

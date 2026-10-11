@@ -1,3 +1,4 @@
+import { getTranslation } from "@/server/i18n";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { TaskList } from "@/components/task-list";
@@ -10,6 +11,7 @@ import { fmtShort } from "@/lib/dates";
 import { NO_USE, addUse, agentUseShort, hasUse } from "@/lib/usage";
 
 export default async function ProjectPage(props: PageProps<"/project/[id]">) {
+  const tx = await getTranslation();
   const { id } = await props.params;
   const sp = await props.searchParams;
   const project = await repo.getProject(id);
@@ -27,11 +29,11 @@ export default async function ProjectPage(props: PageProps<"/project/[id]">) {
     <TaskList
       icon="layers"
       title={project.name}
-      subtitle={[area?.name, project.targetDate && `target ${fmtShort(project.targetDate)}`, hasUse(use) && agentUseShort(use)].filter(Boolean).join(" · ")}
+      subtitle={[area?.name, project.targetDate && tx("target {0}", [fmtShort(project.targetDate, tx.language)]), hasUse(use) && agentUseShort(use, tx.language)].filter(Boolean).join(" · ")}
       groups={[
         ...groupByStatus(tasks),
         ...(related.length ? [{
-          id: "related", name: "Related", folded: related.every((t) => t.status === "done"),
+          id: "related", name: tx("Related"), folded: related.every((t) => t.status === "done"),
           tasks: related.sort((a, b) => Number(a.status === "done") - Number(b.status === "done") || a.sortOrder - b.sortOrder),
           add: { projectId: null, areaId: project.areaId, relatedProjectId: id },
         }] : []),
@@ -44,10 +46,10 @@ export default async function ProjectPage(props: PageProps<"/project/[id]">) {
         <>
           <ProjectFolderChip project={project} areaFolder={area?.folder ?? null} />
           <RepoLink repo={project.repo ?? area?.repo} />
-          <Link href={`/roadmap?p=${id}`} aria-label="Roadmap" className={link}><Icon name="roadmap" size={13} /><span className="@max-xl:hidden">Roadmap</span></Link>
+          <Link href={`/roadmap?p=${id}`} aria-label={tx("Roadmap")} className={link}><Icon name="roadmap" size={13} /><span className="@max-xl:hidden">{tx("Roadmap")}</span></Link>
         </>
       }
-      empty={`No tasks in ${project.name} yet`}
+      empty={tx("No tasks in {0} yet", [project.name])}
     />
   );
 }

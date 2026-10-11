@@ -1,3 +1,4 @@
+import { desktopText } from "./localization.mjs";
 // PacedMind desktop app. Runs the built Next.js server (server/server.js) with Electron's own Node,
 // shows it in a window and keeps running in the tray (the menu bar on macOS), so agents can still
 // report back after the window is closed. Built and installed by scripts/build-desktop.mjs.
@@ -8,6 +9,7 @@ import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
 import { createTaskWindows } from "./task-windows.mjs";
+import { nodeExecutable } from "./node-executable.mjs";
 import { registerTaskNoteControls } from "./task-note-controls.mjs";
 import { createTaskNoteOpener } from "./task-note-opener.mjs";
 
@@ -187,6 +189,9 @@ function openOutside(url) {
   if (/^(https?|mailto):/i.test(url)) shell.openExternal(url);
 }
 
+let activeLanguage = readState().language === "pl" ? "pl" : "en";
+const tx = (message, values) => desktopText(message, activeLanguage, values);
+
 let activeTheme = readState().theme === "light" ? "light" : "dark";
 
 const taskWindows = createTaskWindows({
@@ -209,8 +214,8 @@ registerTaskNoteControls({ ipcMain, taskWindows, planner: () => win, origin: ORI
   readScope: readTaskNoteScope,
   openNotes: async (event, scope) => {
     const data = await getJson("/api/desktop/task-notes", 10_000);
-    if (data?.scope !== scope || !Array.isArray(data.tasks)) return { ok: false, error: "Couldn't load your tasks. Try again." };
-    if (!data.tasks.length) return { ok: true, message: "You have no open tasks to show." };
+    if (data?.scope !== scope || !Array.isArray(data.tasks)) return { ok: false, error: tx("Couldn't load your tasks. Try again.") };
+    if (!data.tasks.length) return { ok: true, message: tx("You have no open tasks to show.") };
     return showTaskNotes(event, data.tasks, scope);
   },
 });
@@ -220,6 +225,17 @@ const showTaskNotes = createTaskNoteOpener({ ipcMain, taskWindows, planner: () =
 ipcMain.handle("pacedmind:float-task", (event, id, scope, createdAt) => showTaskNotes(event, [{ id, createdAt }], scope));
 ipcMain.handle("pacedmind:close-task-note", (event) => taskWindows.close(event));
 ipcMain.handle("pacedmind:show-floating-task", (event, href) => taskWindows.showInPlanner(event, href));
+
+ipcMain.on("pacedmind:set-language", async (event, language) => {
+  if (!["en", "pl"].includes(language) || !win || event.sender !== win.webContents || event.senderFrame !== win.webContents.mainFrame) return;
+  try { if (new URL(event.senderFrame.url).origin !== ORIGIN) return; } catch { return; }
+  activeLanguage = language;
+  writeState({ language });
+  await session.defaultSession.cookies.set({ url: ORIGIN, name: "pm_language", value: language, sameSite: "lax", expirationDate: Date.now() / 1000 + 31536000 });
+  appMenu();
+  tray?.setContextMenu(trayMenu());
+  for (const window of BrowserWindow.getAllWindows()) if (!window.isDestroyed()) window.webContents.send("pacedmind:language-changed", language);
+});
 
 ipcMain.on("pacedmind:set-theme", (event, theme, preference) => {
   if ((theme !== "dark" && theme !== "light") || !win || event.sender !== win.webContents || event.senderFrame !== win.webContents.mainFrame) return;
@@ -240,17 +256,17 @@ ipcMain.handle("pacedmind:pick-folder", async (event, near) => {
   let defaultPath;
   try { if (typeof near === "string" && path.isAbsolute(near) && fs.statSync(near).isDirectory()) defaultPath = near; } catch { /* gone */ }
   const { canceled, filePaths } = await dialog.showOpenDialog(win, {
-    title: "Choose a folder", buttonLabel: "Use this folder", defaultPath,
+    title: tx("Choose a folder"), buttonLabel: tx("Use this folder"), defaultPath,
     properties: ["openDirectory", "createDirectory", "dontAddToRecent"],
   });
   return canceled ? null : filePaths[0] ?? null;
 });
 
 const wordmark = fs.readFileSync(path.join(SERVER_DIR, "public", "brand", "pacedmind-wordmark.png")).toString("base64");
-const loadingArrows = ["back", "forward"].map((direction) => `<button disabled aria-label="Go ${direction}" style="-webkit-app-region:no-drag;display:grid;place-items:center;width:32px;height:32px;padding:0;border:0;background:none;color:inherit;opacity:0.3"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="transform:rotate(${direction === "back" ? 180 : 0}deg)"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>`).join("");
+const loadingArrows = ["back", "forward"].map((direction) => `<button disabled aria-label="${tx(direction === "back" ? "Go back" : "Go forward")}" style="-webkit-app-region:no-drag;display:grid;place-items:center;width:32px;height:32px;padding:0;border:0;background:none;color:inherit;opacity:0.3"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="transform:rotate(${direction === "back" ? 180 : 0}deg)"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>`).join("");
 const page = (text) =>
   `data:text/html;charset=utf-8,${encodeURIComponent(
-    `<!doctype html><title>PacedMind</title><body style="margin:0;height:100vh;display:flex;flex-direction:column;background:${THEME_COLORS[activeTheme].background};color:${THEME_COLORS[activeTheme].symbol};font:13px 'Segoe UI',system-ui,sans-serif"><header style="-webkit-app-region:drag;flex-shrink:0;box-sizing:border-box;height:calc(max(40px,env(titlebar-area-height,40px)) + 1px);border-bottom:1px solid ${THEME_COLORS[activeTheme].line};user-select:none"><div style="height:100%;display:flex;align-items:center;box-sizing:border-box;margin-left:env(titlebar-area-x,0px);width:env(titlebar-area-width,100%);padding:0 8px"><div style="display:flex;gap:2px">${loadingArrows}</div><div style="position:relative;margin-left:8px;width:112px;aspect-ratio:1819/298;overflow:hidden;mix-blend-mode:${activeTheme === "light" ? "multiply" : "screen"}"><img alt="PacedMind" src="data:image/png;base64,${wordmark}" style="position:absolute;width:116.8774%;max-width:none;left:-9.5107%;top:-85.5705%;filter:grayscale(1) ${activeTheme === "light" ? "" : "invert(1)"}"></div></div></header><main style="flex:1;display:grid;place-items:center">${text}</main></body>`,
+    `<!doctype html><html lang="${activeLanguage}"><title>PacedMind</title><body style="margin:0;height:100vh;display:flex;flex-direction:column;background:${THEME_COLORS[activeTheme].background};color:${THEME_COLORS[activeTheme].symbol};font:13px 'Segoe UI',system-ui,sans-serif"><header style="-webkit-app-region:drag;flex-shrink:0;box-sizing:border-box;height:calc(max(40px,env(titlebar-area-height,40px)) + 1px);border-bottom:1px solid ${THEME_COLORS[activeTheme].line};user-select:none"><div style="height:100%;display:flex;align-items:center;box-sizing:border-box;margin-left:env(titlebar-area-x,0px);width:env(titlebar-area-width,100%);padding:0 8px"><div style="display:flex;gap:2px">${loadingArrows}</div><div style="position:relative;margin-left:8px;width:112px;aspect-ratio:1819/298;overflow:hidden;mix-blend-mode:${activeTheme === "light" ? "multiply" : "screen"}"><img alt="PacedMind" src="data:image/png;base64,${wordmark}" style="position:absolute;width:116.8774%;max-width:none;left:-9.5107%;top:-85.5705%;filter:grayscale(1) ${activeTheme === "light" ? "" : "invert(1)"}"></div></div></header><main style="flex:1;display:grid;place-items:center">${text}</main></body>`,
   )}`;
 
 /* ---------- the server ---------- */
@@ -262,7 +278,7 @@ async function startServer() {
     if (await isOurServer()) return;
     await sleep(100);
   }
-  if (await getJson("/api/health")) throw new Error(`Another program answers on port ${PORT}.`);
+  if (await getJson("/api/health")) throw new Error(tx("Another program answers on port {0}.", [PORT]));
 
   fs.mkdirSync(dataDir(), { recursive: true });
   fs.mkdirSync(path.dirname(logFile()), { recursive: true });
@@ -276,7 +292,7 @@ async function startServer() {
   const dataKeyValue = dataKey();
   if (!dataKeyValue) fs.writeSync(log, "The OS keychain isn't available: secrets on disk are not encrypted.\n");
 
-  const child = spawn(process.execPath, [path.join(SERVER_DIR, "server.js")], {
+  const child = spawn(nodeExecutable(), [path.join(SERVER_DIR, "server.js")], {
     cwd: SERVER_DIR,
     env: {
       ...process.env,
@@ -308,7 +324,7 @@ async function startServer() {
     if (await isOurServer()) return;
     await sleep(100);
   }
-  throw new Error(exited ? "The server stopped while starting." : "The server did not answer within 30 seconds.");
+  throw new Error(exited ? tx("The server stopped while starting.") : tx("The server did not answer within 30 seconds."));
 }
 
 function stopServer() {
@@ -321,9 +337,9 @@ async function serverDied(code) {
   const { response } = await dialog.showMessageBox({
     type: "error",
     title: "PacedMind",
-    message: "PacedMind's server stopped.",
-    detail: `Exit code ${code}. Details are in ${logFile()}`,
-    buttons: ["Restart", "Open log", "Quit"],
+    message: tx("PacedMind's server stopped."),
+    detail: tx("Exit code {0}. Details are in {1}", [code, logFile()]),
+    buttons: [tx("Restart"), tx("Open log"), tx("Quit")],
     defaultId: 0,
   });
   if (response === 1) shell.openPath(logFile());
@@ -390,13 +406,13 @@ function createWindow() {
       if (WINDOWS) {
         tray?.displayBalloon({
           iconType: "info",
-          title: "PacedMind is still running",
-          content: "It stays in the tray so agents can report back. Right-click the icon to quit.",
+          title: tx("PacedMind is still running"),
+          content: tx("It stays in the tray so agents can report back. Right-click the icon to quit."),
         });
       } else if (Notification.isSupported()) {
         new Notification({
-          title: "PacedMind is still running",
-          body: "It stays in the menu bar so agents can report back. Quit it from the menu bar icon or with ⌘Q.",
+          title: tx("PacedMind is still running"),
+          body: tx("It stays in the menu bar so agents can report back. Quit it from the menu bar icon or with ⌘Q."),
         }).show();
       }
     }
@@ -434,7 +450,7 @@ function createWindow() {
     }
   });
 
-  win.loadURL(serverReady ? `${ORIGIN}/today` : page("Starting PacedMind…"));
+  win.loadURL(serverReady ? `${ORIGIN}/today` : page(tx("Starting PacedMind…")));
 }
 
 function showWindow(url) {
@@ -450,10 +466,10 @@ function showWindow(url) {
 function trayMenu() {
   const startsAtLogin = app.getLoginItemSettings(loginArgs).openAtLogin;
   return Menu.buildFromTemplate([
-    { label: "Open PacedMind", click: () => showWindow() },
+    { label: tx("Open PacedMind"), click: () => showWindow() },
     { type: "separator" },
     {
-      label: MAC ? "Open at Login" : "Start with Windows",
+      label: MAC ? tx("Open at Login") : tx("Start with Windows"),
       type: "checkbox",
       checked: startsAtLogin,
       click: (item) => {
@@ -461,10 +477,10 @@ function trayMenu() {
         tray.setContextMenu(trayMenu());
       },
     },
-    { label: "Open data folder", click: () => shell.openPath(dataDir()) },
-    { label: "Open server log", click: () => shell.openPath(logFile()) },
+    { label: tx("Open data folder"), click: () => shell.openPath(dataDir()) },
+    { label: tx("Open server log"), click: () => shell.openPath(logFile()) },
     { type: "separator" },
-    { label: "Quit PacedMind", click: quit },
+    { label: tx("Quit PacedMind"), click: quit },
   ]);
 }
 
@@ -484,31 +500,43 @@ function appMenu() {
   const nav = () => win?.webContents.navigationHistory;
   Menu.setApplicationMenu(
     Menu.buildFromTemplate([
-      MAC ? { role: "appMenu" } : {
+      MAC ? { label: "PacedMind", submenu: [
+        { role: "about", label: tx("About PacedMind") }, { type: "separator" },
+        { role: "hide", label: tx("Hide PacedMind") }, { role: "hideOthers", label: tx("Hide others") },
+        { role: "unhide", label: tx("Show all windows") }, { type: "separator" },
+        { label: tx("Quit PacedMind"), accelerator: "CmdOrCtrl+Q", click: quit },
+      ] } : {
         label: "PacedMind",
         submenu: [
-          { label: "Close window", accelerator: "CmdOrCtrl+W", click: () => BrowserWindow.getFocusedWindow()?.close() },
-          { label: "Quit PacedMind", accelerator: "CmdOrCtrl+Q", click: quit },
+          { label: tx("Close window"), accelerator: "CmdOrCtrl+W", click: () => BrowserWindow.getFocusedWindow()?.close() },
+          { label: tx("Quit PacedMind"), accelerator: "CmdOrCtrl+Q", click: quit },
         ],
       },
-      { role: "editMenu" },
+      { label: tx("Edit"), submenu: [
+        { role: "undo", label: tx("Undo") }, { role: "redo", label: tx("Redo") }, { type: "separator" },
+        { role: "cut", label: tx("Cut") }, { role: "copy", label: tx("Copy") }, { role: "paste", label: tx("Paste") },
+        { role: "selectAll", label: tx("Select all") },
+      ] },
       {
-        label: "View",
+        label: tx("View"),
         submenu: [
-          { role: "reload" },
-          { role: "forceReload" },
-          { role: "toggleDevTools" },
+          { role: "reload", label: tx("Reload") },
+          { role: "forceReload", label: tx("Force reload") },
+          { role: "toggleDevTools", label: tx("Developer tools") },
           { type: "separator" },
-          { role: "resetZoom" },
-          { role: "zoomIn" },
-          { role: "zoomOut" },
+          { role: "resetZoom", label: tx("Actual size") },
+          { role: "zoomIn", label: tx("Zoom in") },
+          { role: "zoomOut", label: tx("Zoom out") },
           { type: "separator" },
-          { role: "togglefullscreen" },
-          { label: "Back", accelerator: MAC ? "Cmd+[" : "Alt+Left", click: () => nav()?.canGoBack() && nav().goBack() },
-          { label: "Forward", accelerator: MAC ? "Cmd+]" : "Alt+Right", click: () => nav()?.canGoForward() && nav().goForward() },
+          { role: "togglefullscreen", label: tx("Full screen") },
+          { label: tx("Back"), accelerator: MAC ? "Cmd+[" : "Alt+Left", click: () => nav()?.canGoBack() && nav().goBack() },
+          { label: tx("Forward"), accelerator: MAC ? "Cmd+]" : "Alt+Right", click: () => nav()?.canGoForward() && nav().goForward() },
         ],
       },
-      ...(MAC ? [{ role: "windowMenu" }] : []),
+      ...(MAC ? [{ label: tx("Window"), submenu: [
+        { role: "minimize", label: tx("Minimize") }, { role: "close", label: tx("Close window") },
+        { role: "front", label: tx("Bring all to front") },
+      ] }] : []),
     ]),
   );
 }
@@ -540,7 +568,7 @@ function watchSessions() {
       heard = new Set(attention.map((s) => `${s.id}:${s.eventId}`));
       asked = new Set(approvals.map((a) => a.id));
       const count = waiting.length + attention.length + approvals.length;
-      tray?.setToolTip(count ? `PacedMind · ${count} waiting for you` : "PacedMind");
+      tray?.setToolTip(count ? tx("PacedMind · {0} waiting for you", [count]) : "PacedMind");
       await syncTaskNotes(state.floatingScope);
     } catch (error) {
       console.error("[PacedMind] Desktop state refresh failed", error);
@@ -572,7 +600,7 @@ async function syncTaskNotes(scope) {
     if (typeof r.id !== "string" || noteResults.has(r.id)) continue;
     const result = Date.parse(r.expiresAt) > Date.now()
       ? taskWindows.show(r.taskId, scope, r.taskCreatedAt, r.displayId, r.remember)
-      : { status: "failed", note: "The request expired before the note could open." };
+      : { status: "failed", note: tx("The request expired before the note could open.") };
     noteResults.set(r.id, { id: r.id, ...result });
   }
   if (noteResults.size) await exchange(false);
@@ -583,11 +611,11 @@ async function syncTaskNotes(scope) {
  * with changes (`kind`, from /api/state). `agent` reads "Claude Code · Terminal".
  */
 function approvalTitle(a) {
-  if (a.kind === "folder") return `Use a folder for ${a.title}?`;
+  if (a.kind === "folder") return tx("Use a folder for {0}?", [a.title]);
   const key = a.key ?? "a session";
-  if (a.kind === "resume") return /· Cloud$/.test(a.agent ?? "") ? `Pull ${key} in from the cloud?` : `Resume ${key} with ${a.agent}?`;
-  if (a.kind === "changes") return `Send ${key} back to ${String(a.agent ?? "its agent").split(" · ")[0]} with changes?`;
-  return `Start ${key} with ${a.agent}?`;
+  if (a.kind === "resume") return /· Cloud$/.test(a.agent ?? "") ? tx("Pull {0} in from the cloud?", [key]) : tx("Resume {0} with {1}?", [key, a.agent]);
+  if (a.kind === "changes") return tx("Send {0} back to {1} with changes?", [key, String(a.agent ?? "its agent").split(" · ")[0]]);
+  return tx("Start {0} with {1}?", [key, a.agent]);
 }
 
 /** A session asked for over MCP or from elsewhere: nothing starts until you allow it in the window. */
@@ -595,7 +623,7 @@ function notifyApproval(a) {
   if (!Notification.isSupported()) return;
   const n = new Notification({
     title: approvalTitle(a),
-    body: [a.kind === "folder" ? a.folder : a.title, `Asked by ${a.from}. Open PacedMind to allow or refuse it.`].filter(Boolean).join("\n"),
+    body: [a.kind === "folder" ? a.folder : a.title, tx("Asked by {0}. Open PacedMind to allow or refuse it.", [a.from])].filter(Boolean).join("\n"),
     icon: ICON_PNG,
   });
   notifications.add(n);
@@ -611,14 +639,14 @@ function notifyApproval(a) {
 function notifyAttention(s) {
   if (!Notification.isSupported()) return;
   const who = s.key ?? "A session";
-  const title = s.kind === "permission" ? `${who} asks for your permission`
-    : s.kind === "question" || s.kind === "input" ? `${who} has a question for you`
-    : s.kind === "limit" ? `${who} stopped at a usage limit`
-    : s.kind === "capacity" ? `${who}: model at capacity`
-    : s.kind === "locked" ? `${who}: conversation open elsewhere`
-    : s.kind === "error" ? `${who}: agent stopped on an error`
-    : s.kind === "setup" ? `${who}: check agent startup`
-    : s.kind === "send_prompt" ? `${who}: send the first message` : `${who} is waiting for you`;
+  const title = s.kind === "permission" ? tx("{0} asks for your permission", [who])
+    : s.kind === "question" || s.kind === "input" ? tx("{0} has a question for you", [who])
+    : s.kind === "limit" ? tx("{0} stopped at a usage limit", [who])
+    : s.kind === "capacity" ? tx("{0}: model at capacity", [who])
+    : s.kind === "locked" ? tx("{0}: conversation open elsewhere", [who])
+    : s.kind === "error" ? tx("{0}: agent stopped on an error", [who])
+    : s.kind === "setup" ? tx("{0}: check agent startup", [who])
+    : s.kind === "send_prompt" ? tx("{0}: send the first message", [who]) : tx("{0} is waiting for you", [who]);
   const n = new Notification({ title, body: [s.title, s.text].filter(Boolean).join("\n"), icon: ICON_PNG });
   notifications.add(n);
   n.on("click", () => showWindow(`${ORIGIN}/sessions?s=${encodeURIComponent(s.id)}`));
@@ -629,9 +657,9 @@ function notifyAttention(s) {
 function notify(s) {
   if (!Notification.isSupported()) return;
   const who = s.key ?? "A session";
-  const asks = s.questions ? ` · ${s.questions === 1 ? "1 question" : `${s.questions} questions`} for you` : "";
+  const asks = s.questions ? tx(" · {0} for you", [s.questions === 1 ? tx("1 question") : tx("{0} questions", [s.questions])]) : "";
   const n = new Notification({
-    title: s.outcome === "blocked" ? `${who} is blocked${asks}` : s.outcome === "partial" ? `${who} is partly done${asks}` : `${who} is finished${asks}`,
+    title: s.outcome === "blocked" ? tx("{0} is blocked{1}", [who, asks]) : s.outcome === "partial" ? tx("{0} is partly done{1}", [who, asks]) : tx("{0} is finished{1}", [who, asks]),
     body: [s.title, s.note].filter(Boolean).join("\n"),
     icon: ICON_PNG,
   });
@@ -648,6 +676,7 @@ async function boot() {
     await startServer();
     // The window's key, as a cookie only this app's window has; it's gone when the app quits.
     await session.defaultSession.cookies.set({ url: ORIGIN, name: UI_COOKIE, value: UI_KEY, httpOnly: true, sameSite: "strict" });
+    await session.defaultSession.cookies.set({ url: ORIGIN, name: "pm_language", value: activeLanguage, sameSite: "lax", expirationDate: Date.now() / 1000 + 31536000 });
     serverReady = true;
     taskWindows.reload();
     if (win) {
@@ -660,9 +689,9 @@ async function boot() {
     const { response } = await dialog.showMessageBox({
       type: "error",
       title: "PacedMind",
-      message: "PacedMind could not start.",
-      detail: `${e.message}\n\nIs something else using port ${PORT}? Details are in ${logFile()}`,
-      buttons: ["Try again", "Open log", "Quit"],
+      message: tx("PacedMind could not start."),
+      detail: tx("{0}\n\nIs something else using port {1}? Details are in {2}", [e.message, PORT, logFile()]),
+      buttons: [tx("Try again"), tx("Open log"), tx("Quit")],
       defaultId: 0,
     });
     if (response === 0) return boot();
@@ -683,7 +712,7 @@ function writeShortcuts() {
   const options = {
     target: process.execPath,
     cwd: path.dirname(process.execPath),
-    description: "Tasks, time blocks and agent sessions",
+    description: tx("Tasks, time blocks and agent sessions"),
     icon: shortcutIcon,
     iconIndex: 0,
     appUserModelId: APP_ID, // Needed for Windows notifications.
@@ -691,7 +720,7 @@ function writeShortcuts() {
   const programs = path.join(app.getPath("appData"), "Microsoft", "Windows", "Start Menu", "Programs");
   for (const folder of [programs, app.getPath("desktop")]) {
     const shortcut = path.join(folder, "PacedMind.lnk");
-    if (!shell.writeShortcutLink(shortcut, "create", options)) throw new Error(`Could not create ${shortcut}`);
+    if (!shell.writeShortcutLink(shortcut, "create", options)) throw new Error(tx("Could not create {0}", [shortcut]));
   }
   // Keep existing pins and their arguments; update only pins targeting this app.
   const pinned = path.join(app.getPath("appData"), "Microsoft", "Internet Explorer", "Quick Launch", "User Pinned", "TaskBar");
@@ -758,8 +787,8 @@ if (process.argv.includes("--install")) {
     dialog.showMessageBoxSync({
       type: "warning",
       title: "PacedMind",
-      message: "Open PacedMind from the Start Menu.",
-      detail: `It was started from inside ${sandbox}, which keeps its own copy of AppData for the programs it starts. PacedMind would open a separate database there.`,
+      message: tx("Open PacedMind from the Start Menu."),
+      detail: tx("It was started from inside {0}, which keeps its own copy of AppData for the programs it starts. PacedMind would open a separate database there.", [sandbox]),
     });
     app.exit(1);
   });

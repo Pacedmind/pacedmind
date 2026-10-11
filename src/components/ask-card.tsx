@@ -1,7 +1,8 @@
 "use client";
+import { useTranslation } from "@/components/language";
 
 import { useState } from "react";
-import { format } from "date-fns";
+
 import { answerAskAction, withdrawAskAction } from "@/app/actions";
 import { AGENT_LABEL, type AgentId, type AskView } from "@/lib/types";
 import { pollLaunchState, useClock, useLaunchState } from "./request-status";
@@ -21,13 +22,14 @@ export function AskCard({ sessionId, agent }: { sessionId: string; agent: AgentI
 }
 
 function AskBody({ ask, agent, codeFreshUntil }: { ask: AskView; agent: AgentId; codeFreshUntil: number | null }) {
+  const tx = useTranslation();
   const { run, pending } = useAction();
   const now = useClock(5_000);
   const [text, setText] = useState("");
   const [code, setCode] = useState("");
   const [needCode, setNeedCode] = useState(false);
   const [sent, setSent] = useState(false);
-  const who = AGENT_LABEL[agent];
+  const who = tx(AGENT_LABEL[agent]);
   const showCode = !ask.here && (needCode || !codeFreshUntil || codeFreshUntil <= now + 5_000);
   if (sent || ask.expiresAt <= now) return null;
 
@@ -47,44 +49,41 @@ function AskBody({ ask, agent, codeFreshUntil }: { ask: AskView; agent: AgentId;
     <div className="flex flex-col gap-2.5 rounded-md border border-line-strong bg-raised p-3 max-md:wrap-break-word">
       <div className="flex items-baseline gap-2 text-[12.5px] font-medium text-fg">
         <span className="h-[7px] w-[7px] shrink-0 translate-y-[-1px] rounded-full bg-accent" />
-        <span className="min-w-0 flex-1">{ask.kind === "permission" ? `${who} wants to use ${ask.tool}` : `${who} asks you`}</span>
-        <span className="shrink-0 text-[11.5px] font-normal text-mut2" suppressHydrationWarning>waits until {format(ask.expiresAt, "HH:mm")}</span>
+        <span className="min-w-0 flex-1">{ask.kind === "permission" ? tx("{0} wants to use {1}", [who, ask.tool]) : tx("{0} asks you", [who])}</span>
+        <span className="shrink-0 text-[11.5px] font-normal text-mut2" suppressHydrationWarning>{tx("waits until")}{" "}{tx.date(ask.expiresAt, "HH:mm")}</span>
       </div>
       {ask.kind === "permission"
         ? <pre className="max-h-40 overflow-auto whitespace-pre-wrap rounded bg-input px-2.5 py-2 font-mono text-[11.5px] leading-[1.5] text-fg2">{ask.text}</pre>
         : <p className="whitespace-pre-wrap text-[12.5px] leading-[1.55] text-fg2">{ask.text}</p>}
       {!ask.here && !ask.remoteOk ? (
         <p className="text-[12px] leading-snug text-mut2">
-          Answer it on the computer the session runs on: that computer takes answers only there (Answer from elsewhere, in its Settings).
-        </p>
+          {tx("Answer it on the computer the session runs on: that computer takes answers only there (Answer from elsewhere, in its Settings).")}</p>
       ) : (
         <>
           {ask.kind === "question" && (
-            <textarea value={text} onChange={(e) => setText(e.target.value)} rows={2} aria-label="Your answer" placeholder="Your answer"
+            <textarea value={text} onChange={(e) => setText(e.target.value)} rows={2} aria-label={tx("Your answer")} placeholder={tx("Your answer")}
               onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && text.trim()) { e.preventDefault(); answer(text); } }}
               className={cx(box, "field-sizing-content min-h-[52px] resize-none leading-[1.55] max-md:text-[16px]")} />
           )}
           {showCode && (
             <label className="flex items-center gap-2 text-[12px] text-mut">
-              Two-factor code
-              <input value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))} inputMode="numeric" autoComplete="one-time-code"
-                aria-label="Two-factor code" placeholder="123456" className={cx(box, "w-[92px] font-mono tracking-widest max-md:text-[16px]")} />
+              {tx("Two-factor code")}<input value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))} inputMode="numeric" autoComplete="one-time-code"
+                aria-label={tx("Two-factor code")} placeholder="123456" className={cx(box, "w-[92px] font-mono tracking-widest max-md:text-[16px]")} />
             </label>
           )}
           <div className="flex flex-wrap items-center gap-2">
             {ask.kind === "permission" ? (
               <>
-                <Button variant="primary" disabled={pending || (showCode && code.length !== 6)} onClick={() => answer("allow")}>Allow</Button>
-                <Button disabled={pending || (showCode && code.length !== 6)} onClick={() => answer("deny")}>Refuse</Button>
+                <Button variant="primary" disabled={pending || (showCode && code.length !== 6)} onClick={() => answer("allow")}>{tx("Allow")}</Button>
+                <Button disabled={pending || (showCode && code.length !== 6)} onClick={() => answer("deny")}>{tx("Refuse")}</Button>
               </>
             ) : (
-              <Button variant="primary" disabled={pending || !text.trim() || (showCode && code.length !== 6)} onClick={() => answer(text)}>Send answer</Button>
+              <Button variant="primary" disabled={pending || !text.trim() || (showCode && code.length !== 6)} onClick={() => answer(text)}>{tx("Send answer")}</Button>
             )}
             {ask.here && ask.kind === "permission" && (
-              <Button variant="ghost" disabled={pending} title="Its terminal asks too: PacedMind stops asking"
+              <Button variant="ghost" disabled={pending} title={tx("Its terminal asks too: PacedMind stops asking")}
                 onClick={() => run(async () => { const r = await withdrawAskAction(ask.id); if (r.ok) setSent(true); return r; })}>
-                Answer in the terminal
-              </Button>
+                {tx("Answer in the terminal")}</Button>
             )}
           </div>
         </>

@@ -1,8 +1,10 @@
 "use client";
+import { useTranslation } from "@/components/language";
+import { type Translator } from "@/lib/i18n";
 
 import Link from "next/link";
 import { useEffect, useOptimistic, useRef, useState, type DragEvent, type KeyboardEvent, type MouseEvent } from "react";
-import { format } from "date-fns";
+
 import { deleteTaskAction, updateTaskAction } from "@/app/actions";
 import { projectColor } from "@/lib/colors";
 import { dateOnly, fmtDay, fmtTime, parseLocal, timeOf } from "@/lib/dates";
@@ -17,17 +19,17 @@ import { Dot, cx, useAction } from "../ui";
 import { AddButton, PeriodNav, ViewHeader, ViewSwitch, areaColor, isOpenTask, useAddOnClick, useSelection } from "./calendar-parts";
 
 const DRAG_TYPE = "application/x-organizer-task";
-const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const WEEKDAYS = (tx: Translator) => ([tx("Mon"), tx("Tue"), tx("Wed"), tx("Thu"), tx("Fri"), tx("Sat"), tx("Sun")]);
 const MAX_ITEMS = 3;
 
 type Filter = "due" | "event" | "plan" | "target";
 
-const FILTERS: { value: Filter; label: string }[] = [
-  { value: "due", label: "Deadlines" },
-  { value: "event", label: "Activities" },
-  { value: "plan", label: "Planned" },
-  { value: "target", label: "Project targets" },
-];
+const FILTERS = (tx: Translator): { value: Filter; label: string }[] => ([
+  { value: "due", label: tx("Deadlines") },
+  { value: "event", label: tx("Activities") },
+  { value: "plan", label: tx("Planned") },
+  { value: "target", label: tx("Project targets") },
+]);
 
 type Item = { filter: Filter; sort: string } & (
   | { kind: "due" | "plan" | "done"; task: Task; time: string | null; overdue: boolean }
@@ -116,6 +118,7 @@ export function MonthView({
   nav: { prev: string; next: string; month: string; week: string };
   initialKey: string | null;
 }) {
+  const tx = useTranslation();
   const today = now.slice(0, 10);
   const weeks = days.length / 7;
   const { run } = useAction();
@@ -173,15 +176,15 @@ export function MonthView({
 
   const moveTo = (t: Task, kind: DateKind, day: string, asDeadline = false, time?: string | null) => {
     const patch = movePatch(t, kind, day, asDeadline, time);
-    save(t, patch, patch.dueDate ? `${t.key} is now due ${fmtDay(day)}` : `Planned ${t.key} for ${fmtDay(day)}`);
+    save(t, patch, patch.dueDate ? tx("{0} is now due {1}", [t.key, fmtDay(day, tx.language)]) : tx("Planned {0} for {1}", [t.key, fmtDay(day, tx.language)]));
   };
 
   const clearDate = (t: Task, kind: DateKind) => {
     if (kind === "none") return;
     const patch = clearPatch(t, kind);
     const left = { ...t, ...patch };
-    save(t, patch, !left.dueDate && !left.plannedDate ? `${t.key} has no date now`
-      : kind === "due" ? `Removed the due date of ${t.key}` : `Removed the planned date of ${t.key}`);
+    save(t, patch, !left.dueDate && !left.plannedDate ? tx("{0} has no date now", [t.key])
+      : kind === "due" ? tx("Removed the due date of {0}", [t.key]) : tx("Removed the planned date of {0}", [t.key]));
   };
 
   const remove = (t: Task) => {
@@ -189,7 +192,7 @@ export function MonthView({
     run(() => {
       patchTask({ id: t.id, patch: null });
       return deleteTaskAction(t.id);
-    }, `Deleted ${t.key}`);
+    }, tx("Deleted {0}", [t.key]));
   };
 
   const openMenu = (el: Element, chip: Chip) => setMenu({ chip, anchor: anchorOf(el) });
@@ -294,7 +297,7 @@ export function MonthView({
     if (it.kind === "target") {
       const p = it.project;
       return (
-        <Link key={`p${p.id}`} href={`/project/${p.id}`} title={`${p.name} target date`} className={cx(pill, "border-line2 bg-hover text-fg2 hover:bg-sel")}>
+        <Link key={`p${p.id}`} href={`/project/${p.id}`} title={tx("{0} target date", [p.name])} className={cx(pill, "border-line2 bg-hover text-fg2 hover:bg-sel")}>
           <Diamond color={projectColor(p, ctx.areas)} size={10} />
           <span className="truncate">{p.name}</span>
         </Link>
@@ -319,11 +322,11 @@ export function MonthView({
 
   return (
     <div className="flex min-w-0 flex-1">
-      <section aria-label="Calendar" className="flex min-w-0 flex-1 flex-col">
+      <section aria-label={tx("Calendar")} className="flex min-w-0 flex-1 flex-col">
         {/* On a phone the month's name is short, so it fits beside the buttons. */}
-        <ViewHeader icon="calendar" title="Calendar" phoneSubtitleOnly subtitle={<>
+        <ViewHeader icon="calendar" title={tx("Calendar")} phoneSubtitleOnly subtitle={<>
           <span className="max-sm:hidden">{title}</span>
-          <span className="sm:hidden">{format(parseLocal(`${month}-01`), "MMM yyyy")}</span>
+          <span className="sm:hidden">{tx.date(parseLocal(`${month}-01`), "MMM yyyy")}</span>
         </>}>
           <PeriodNav unit="month" prev={nav.prev} next={nav.next} today="/calendar" />
           <span className="flex-1" />
@@ -331,7 +334,7 @@ export function MonthView({
         </ViewHeader>
 
         <div className="flex h-10 shrink-0 items-center gap-1.5 border-b border-line px-5 text-[12px] max-md:overflow-x-auto max-md:px-3">
-          {FILTERS.map((f) => (
+          {FILTERS(tx).map((f) => (
             <button key={f.value} type="button" aria-pressed={show[f.value]} onClick={() => setShow((s) => ({ ...s, [f.value]: !s[f.value] }))}
               className={cx("flex h-[26px] shrink-0 items-center gap-1.5 rounded-[13px] border px-[9px] hover:bg-hover", show[f.value] ? "border-ctl text-fg2" : "border-line text-dim")}>
               <span className={cx("flex items-center", !show[f.value] && "opacity-50")}>
@@ -350,7 +353,7 @@ export function MonthView({
         <div className="flex min-h-0 flex-1">
           <div className="flex min-w-0 flex-1 flex-col">
             <div className="grid h-8 shrink-0 grid-cols-7 border-b border-line">
-              {WEEKDAYS.map((w) => <div key={w} className="flex items-center px-3 text-[11.5px] text-mut2">{w}</div>)}
+              {WEEKDAYS(tx).map((w) => <div key={w} className="flex items-center px-3 text-[11.5px] text-mut2">{w}</div>)}
             </div>
             <div ref={gridRef} className={cx("grid min-h-0 flex-1 grid-cols-7", weeks === 6 ? "grid-rows-6" : "grid-rows-5")}>
               {days.map((day, i) => {
@@ -364,42 +367,40 @@ export function MonthView({
                 const col = i % 7;
                 // A click on the day's empty space, or its "+", adds a task planned for it.
                 return (
-                  <div key={day} role="group" aria-label={format(parseLocal(day), "EEEE d MMMM")} {...dropTarget(day)}
+                  <div key={day} role="group" aria-label={tx.date(parseLocal(day), "EEEE d MMMM")} {...dropTarget(day)}
                     {...addOnClick(() => ({ plannedDate: day }))}
                     className={cx("group/day relative flex min-h-0 min-w-0 flex-col gap-[3px] border-b border-line p-1.5",
                       col < 6 && "border-r", expanded === day ? "z-20" : "overflow-hidden",
                       isOver ? "bg-accent/[0.07] ring-1 ring-inset ring-accent/55" : isToday ? "bg-raised" : out && "bg-input")}>
                     <div className="flex h-6 shrink-0 items-center gap-1 px-0.5">
-                      <Link href={`/calendar/week?w=${day}`} title="Open this week"
+                      <Link href={`/calendar/week?w=${day}`} title={tx("Open this week")}
                         className={cx("inline-flex h-[22px] min-w-[22px] items-center justify-center rounded-full px-1.5 text-[12px]",
                           isToday ? "bg-accent font-semibold text-bg" : cx("font-medium hover:bg-hover", out ? "text-faint" : day < today ? "text-mut2" : "text-fg2"))}>
-                        {day.endsWith("-01") ? format(parseLocal(day), "d MMM") : Number(day.slice(8))}
+                        {day.endsWith("-01") ? tx.date(parseLocal(day), "d MMM") : Number(day.slice(8))}
                       </Link>
                       {/* A deadline moves wherever it's dropped; anything else can become one here. */}
                       {isOver && drag && drag.kind !== "due" && (
-                        <span data-flag title="Drop here to make it the due date"
+                        <span data-flag title={tx("Drop here to make it the due date")}
                           className={cx("ml-auto flex h-5 items-center gap-1 rounded-[5px] border px-1.5 text-[11px]",
                             over.flag ? "border-accent/60 bg-accent/15 text-accent-fg" : "border-line2 bg-panel text-mut")}>
-                          <Icon name="flag" size={10} strokeWidth={2.4} />Due
-                        </span>
+                          <Icon name="flag" size={10} strokeWidth={2.4} />{tx("Due")}</span>
                       )}
-                      {!drag && <AddButton label={fmtDay(day)} onAdd={() => openAdd({ plannedDate: day })} className="ml-auto max-md:hidden" />}
+                      {!drag && <AddButton label={fmtDay(day, tx.language)} onAdd={() => openAdd({ plannedDate: day })} className="ml-auto max-md:hidden" />}
                     </div>
                     {visible.map(renderItem)}
                     {hidden > 0 && (
                       <button type="button" onClick={() => setExpanded(day)}
                         className="h-5 shrink-0 rounded-[5px] px-1.5 text-left text-[11.5px] text-mut2 hover:bg-hover">
-                        +{hidden} more
-                      </button>
+                        +{hidden} {tx("more")}</button>
                     )}
                     {expanded === day && (
-                      <div ref={popRef} role="dialog" aria-label={format(parseLocal(day), "EEEE d MMMM")}
+                      <div ref={popRef} role="dialog" aria-label={tx.date(parseLocal(day), "EEEE d MMMM")}
                         className={cx("absolute z-30 flex max-h-[320px] w-[calc(100%+2px)] min-w-[240px] flex-col gap-[3px] overflow-y-auto rounded-lg border border-line2 bg-raised p-1.5 shadow-[var(--shadow-popover)]",
                           row >= weeks / 2 ? "-bottom-px" : "-top-px", col === 6 ? "-right-px" : "-left-px")}>
                         <div className="flex h-6 shrink-0 items-center gap-0.5 px-1 text-[12px] font-medium text-fg2">
-                          <span className="flex-1">{format(parseLocal(day), "EEE d MMM")}</span>
-                          <AddButton label={fmtDay(day)} shown onAdd={() => { setExpanded(null); openAdd({ plannedDate: day }); }} />
-                          <button type="button" aria-label="Close" onClick={() => setExpanded(null)}
+                          <span className="flex-1">{tx.date(parseLocal(day), "EEE d MMM")}</span>
+                          <AddButton label={fmtDay(day, tx.language)} shown onAdd={() => { setExpanded(null); openAdd({ plannedDate: day }); }} />
+                          <button type="button" aria-label={tx("Close")} onClick={() => setExpanded(null)}
                             className="flex h-5 w-5 items-center justify-center rounded text-mut2 hover:bg-hover">
                             <Icon name="x" size={12} />
                           </button>
@@ -415,23 +416,21 @@ export function MonthView({
 
           {/* Dragging tasks onto days needs a mouse: on a phone the month gets the whole width. */}
           {(!selected || dragDated) && (
-            <aside aria-label="Tasks without a date" inert={!panelOpen} {...clearTarget}
+            <aside aria-label={tx("Tasks without a date")} inert={!panelOpen} {...clearTarget}
               className={cx("shrink-0 overflow-hidden transition-[width] duration-200 ease-out motion-reduce:transition-none max-md:hidden",
                 panelOpen ? "w-[280px] border-l border-line" : "w-0")}>
               <div className={cx("flex h-full w-[280px] flex-col", overClear && "bg-accent/[0.04]")}>
                 <div className="flex h-11 shrink-0 items-center gap-2 border-b border-line px-4">
-                  <h2 className="text-[12.5px] font-medium text-fg2">No date</h2>
+                  <h2 className="text-[12.5px] font-medium text-fg2">{tx("No date")}</h2>
                   {undatedLeft > 0 && <span className="text-[12px] text-mut2">{undatedLeft}</span>}
                 </div>
                 {dragDated ? (
                   <div className={cx("mx-2.5 mb-1 mt-3 flex h-16 shrink-0 items-center justify-center gap-2 rounded-lg border border-dashed text-[12.5px]",
                     overClear ? "border-accent/60 bg-accent/[0.07] text-accent-fg" : "border-ctl text-mut")}>
-                    <Icon name="x" size={13} strokeWidth={2} />Drop here to remove the date
-                  </div>
+                    <Icon name="x" size={13} strokeWidth={2} />{tx("Drop here to remove the date")}</div>
                 ) : (
                   <p className="px-4 pb-2 pt-3 text-[12px] leading-normal text-mut2">
-                    Drag a task onto a day to plan it. Drop it on the deadline flag to set a due date instead.
-                  </p>
+                    {tx("Drag a task onto a day to plan it. Drop it on the deadline flag to set a due date instead.")}</p>
                 )}
                 <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-2.5 pb-3 pt-1">
                   {noDate.map((t) => (
@@ -445,7 +444,7 @@ export function MonthView({
                     </div>
                   ))}
                   {undatedCount > undated.length && (
-                    <div className="px-1.5 py-1 text-[12px] text-mut2">and {undatedCount - undated.length} more</div>
+                    <div className="px-1.5 py-1 text-[12px] text-mut2">{tx("and")}{" "}{undatedCount - undated.length} {" "}{tx("more")}</div>
                   )}
                 </div>
               </div>
@@ -480,6 +479,7 @@ function TaskMenu({ chip, anchor, onClose, onOpen, onDate, onClear, onDelete }: 
   onClear: () => void;
   onDelete: () => void;
 }) {
+  const tx = useTranslation();
   const { task: t, kind } = chip;
   const value = kind === "due" ? t.dueDate : kind === "plan" ? t.plannedDate : null;
   const withTime = kind === "due";
@@ -493,10 +493,10 @@ function TaskMenu({ chip, anchor, onClose, onOpen, onDate, onClear, onDelete }: 
         <span className="shrink-0 font-mono text-[11px] text-mut2">{t.key}</span>
         <span className="truncate text-[12px] text-fg2">{t.title}</span>
       </div>
-      <PopoverItem icon={<Icon name="arrowRight" size={13} />} onClick={onOpen}>Open task</PopoverItem>
+      <PopoverItem icon={<Icon name="arrowRight" size={13} />} onClick={onOpen}>{tx("Open task")}</PopoverItem>
       {kind !== "done" && (
         <PopoverItem icon={<Icon name="calendar" size={13} />} onClick={() => setPicking((p) => !p)}>
-          {kind === "none" ? "Plan for a day" : "Change date"}
+          {kind === "none" ? tx("Plan for a day") : tx("Change date")}
         </PopoverItem>
       )}
       {picking && (
@@ -507,11 +507,11 @@ function TaskMenu({ chip, anchor, onClose, onOpen, onDate, onClear, onDelete }: 
         </div>
       )}
       {(kind === "due" || kind === "plan") && (
-        <PopoverItem icon={<Icon name="x" size={13} />} onClick={onClear}>{kind === "due" ? "Remove due date" : "Remove planned date"}</PopoverItem>
+        <PopoverItem icon={<Icon name="x" size={13} />} onClick={onClear}>{kind === "due" ? tx("Remove due date") : tx("Remove planned date")}</PopoverItem>
       )}
       <PopoverSeparator />
       <PopoverItem danger icon={<Icon name="trash" size={13} />} onClick={() => (confirming ? onDelete() : setConfirming(true))}>
-        {confirming ? `Delete ${t.key}? Click again` : "Delete task"}
+        {confirming ? tx("Delete {0}? Click again", [t.key]) : tx("Delete task")}
       </PopoverItem>
     </Popover>
   );

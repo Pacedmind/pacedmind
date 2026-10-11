@@ -1,3 +1,5 @@
+import { getTranslation } from "@/server/i18n";
+import { createTranslator, type Translator } from "@/lib/i18n";
 import type { ReactNode } from "react";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
@@ -25,12 +27,12 @@ import type { DeviceSettings, ProjectAgentsView } from "@/lib/types";
 
 type Auth = NonNullable<Awaited<ReturnType<typeof authState>>>;
 
-function accountView(state: Auth): AccountView {
+function accountView(state: Auth, tx: Translator = createTranslator("en")): AccountView {
   return {
     email: state.user.email ?? null,
     mfaEnabled: state.mfaEnabled,
     factors: state.factors.filter((f) => f.factor_type === "totp").map((f, i) => ({
-      id: f.id, name: f.friendly_name?.replace(/\s·.*$/, "") || `Authenticator ${i + 1}`, added: f.created_at.slice(0, 10),
+      id: f.id, name: f.friendly_name?.replace(/\s·.*$/, "") || tx("Authenticator {0}", [i + 1]), added: f.created_at.slice(0, 10),
     })),
     backupCodes: state.hasRecoveryCodes,
   };
@@ -47,16 +49,17 @@ function deviceSettings(): DeviceSettings {
 
 /** A Settings page, reading only what it shows. The menu (settingsMenu) says which pages there are here. */
 export default async function SettingsSectionPage(props: PageProps<"/settings/[section]">) {
+  const tx = await getTranslation();
   const { section } = await props.params;
   const [state, plan] = await Promise.all([authState(), readPlan()]);
   const desktop = MODE === "desktop";
-  const page = settingsMenu({ account: !!state, plan: !!plan?.enforced, desktop }).flatMap((g) => g.pages).find((p) => p.id === section);
+  const page = settingsMenu({ account: !!state, plan: !!plan?.enforced, desktop }, tx).flatMap((g) => g.pages).find((p) => p.id === section);
   // Not a page here (signed out since, or the web app): the menu opens its first.
   if (!page) redirect("/settings");
-  return <SettingsContent title={page.label} hint={page.hint}>{await body(page.id, state, desktop)}</SettingsContent>;
+  return <SettingsContent title={page.label} hint={page.hint}>{await body(page.id, state, desktop, tx)}</SettingsContent>;
 }
 
-async function body(section: SettingsSection, state: Auth | null, desktop: boolean): Promise<ReactNode> {
+async function body(section: SettingsSection, state: Auth | null, desktop: boolean, tx: Translator = createTranslator("en")): Promise<ReactNode> {
   switch (section) {
     case "account": {
       if (!state) return <AccountSettings account={null} devices={[]} thisDeviceId={null} />;
@@ -64,14 +67,14 @@ async function body(section: SettingsSection, state: Auth | null, desktop: boole
       // This computer first, once it joined the account's list; then the other computers signed in.
       const here = me?.id ? [me] : [];
       const devices = [...here, ...all.filter((x) => !x.revokedAt && x.id !== me?.id)];
-      return <AccountSettings account={accountView(state)} devices={devices} thisDeviceId={here.length ? me!.id : null} />;
+      return <AccountSettings account={accountView(state, tx)} devices={devices} thisDeviceId={here.length ? me!.id : null} />;
     }
     case "plan": {
       const plan = await readPlan();
       return plan && <PlanSettings plan={plan} nativeCompanion={!desktop && isNativeCompanion((await headers()).get("user-agent"))} />;
     }
     case "security":
-      return state && <SecuritySettings account={accountView(state)} />;
+      return state && <SecuritySettings account={accountView(state, tx)} />;
     case "computers":
       return <ComputersSettings />;
     case "data": {

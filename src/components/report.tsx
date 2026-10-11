@@ -1,9 +1,11 @@
 "use client";
+import { useTranslation } from "@/components/language";
+import { createTranslator, type Translator } from "@/lib/i18n";
 
 import Link from "next/link";
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { format } from "date-fns";
+
 import { parseLocal, type PlanStep } from "@/lib/dates";
 import {
   AGENT_LABEL, ANSWERS_HEADING, OUTCOME_LABEL, isAnswers, VERDICT_LABEL, type AgentId, type Attachment, type DiffFileStatus, type Report,
@@ -21,9 +23,9 @@ const norm = (x: string) => x.toLowerCase().replace(/\s+/g, " ").trim();
 
 export const imageUrl = (a: Attachment) => `/api/attachments/${a.id}`;
 
-export function criteriaCount(criteria: ReportCriterion[]): string {
+export function criteriaCount(criteria: ReportCriterion[], tx: Translator = createTranslator("en")): string {
   const met = criteria.filter((c) => c.verdict === "met").length;
-  return `${met} of ${criteria.length} met`;
+  return tx("{0} of {1} met", [met, criteria.length]);
 }
 
 function Section({ title, aside, children }: { title: string; aside?: ReactNode; children: ReactNode }) {
@@ -40,9 +42,10 @@ function Section({ title, aside, children }: { title: string; aside?: ReactNode;
 
 /** The plan an agent reported while it works (report_progress), with the steps it finished ticked off. */
 export function SessionPlan({ plan }: { plan: { steps: PlanStep[]; at: string } }) {
+  const tx = useTranslation();
   const done = plan.steps.filter((s) => s.done).length;
   return (
-    <Section title="Plan" aside={`${done} of ${plan.steps.length} done · ${format(parseLocal(plan.at), "HH:mm")}`}>
+    <Section title={tx("Plan")} aside={tx("{0} of {1} done · {2}", [done, plan.steps.length, tx.date(parseLocal(plan.at), "HH:mm")])}>
       <div className="flex flex-col">
         {plan.steps.map((s, i) => (
           <div key={i} className="flex items-start gap-2.5 py-[3px]">
@@ -57,15 +60,16 @@ export function SessionPlan({ plan }: { plan: { steps: PlanStep[]; at: string } 
 
 /** One "Done when" item with the agent's answer and note. */
 export function CriterionRow({ c }: { c: ReportCriterion }) {
+  const tx = useTranslation();
   return (
     <div className="flex items-start gap-2.5 py-[3px]">
-      <span className="mt-[3px] shrink-0" title={c.verdict ? VERDICT_LABEL[c.verdict] : "Not answered"}>
+      <span className="mt-[3px] shrink-0" title={c.verdict ? tx(VERDICT_LABEL[c.verdict]) : tx("Not answered")}>
         <VerdictIcon verdict={c.verdict ?? "unanswered"} />
       </span>
       <div className="min-w-0 flex-1">
         <div className={cx("text-[12.5px] leading-[1.5]", c.verdict === "met" ? "text-fg2" : "text-fg3")}>{c.text}</div>
         {(c.note || !c.verdict) && (
-          <div className="text-[12px] leading-[1.5] text-mut2">{c.note ? <InlineMarkdown text={c.note} /> : "Not answered"}</div>
+          <div className="text-[12px] leading-[1.5] text-mut2">{c.note ? <InlineMarkdown text={c.note} /> : tx("Not answered")}</div>
         )}
       </div>
     </div>
@@ -74,14 +78,15 @@ export function CriterionRow({ c }: { c: ReportCriterion }) {
 
 /** What the user asked to change after reading a report, or their answers to its questions. */
 export function ChangesNote({ report }: { report: Report }) {
+  const tx = useTranslation();
   if (!report.changes) return null;
   const answers = isAnswers(report.changes);
   return (
     <div className="flex flex-col gap-1 border-l-2 border-line-strong pl-3 max-md:wrap-break-word">
       <div className="flex items-center gap-1.5 text-[12px] font-medium text-fg3">
         <Icon name="user" size={12} className="text-mut2" />
-        {answers ? "You answered its questions" : "You asked for changes"}
-        {report.changesAt && <span className="font-normal text-mut2">· {format(parseLocal(report.changesAt), "d MMM HH:mm")}</span>}
+        {answers ? tx("You answered its questions") : tx("You asked for changes")}
+        {report.changesAt && <span className="font-normal text-mut2">· {tx.date(parseLocal(report.changesAt), "d MMM HH:mm")}</span>}
       </div>
       <p className="whitespace-pre-wrap text-[12.5px] leading-[1.55] text-fg2">{answers ? report.changes.slice(ANSWERS_HEADING.length).trim() : report.changes}</p>
     </div>
@@ -93,6 +98,7 @@ export function ChangesNote({ report }: { report: Report }) {
  * changes come first and the report they answer folds away.
  */
 export function SessionReport({ report, criteria, working }: { report: Report; criteria: ReportCriterion[]; working: boolean }) {
+  const tx = useTranslation();
   const [open, setOpen] = useState(false);
   if (!working) return <ReportBody report={report} criteria={criteria} />;
   return (
@@ -101,7 +107,7 @@ export function SessionReport({ report, criteria, working }: { report: Report; c
       <button type="button" aria-expanded={open} onClick={() => setOpen((o) => !o)}
         className="flex items-center gap-1.5 self-start text-[12px] text-mut2 hover:text-fg2">
         <Icon name={open ? "chevronDown" : "chevronRight"} size={12} strokeWidth={2.2} />
-        The report from {format(parseLocal(report.createdAt), "d MMM HH:mm")}
+        {tx("The report from")}{tx.date(parseLocal(report.createdAt), "d MMM HH:mm")}
       </button>
       {open && <ReportBody report={report} criteria={criteria} hideChanges />}
     </div>
@@ -118,24 +124,24 @@ export function RequestChangesForm({ agent, pending, onSend, onCancel }: {
   onSend: (changes: string) => void;
   onCancel: () => void;
 }) {
+  const tx = useTranslation();
   const [text, setText] = useState("");
   const send = () => { if (text.trim() && !pending) onSend(text.trim()); };
   return (
     <div className="flex flex-col gap-2 rounded-md border border-line2 bg-raised p-2.5">
-      <textarea autoFocus value={text} onChange={(e) => setText(e.target.value)} aria-label="What should change"
-        placeholder="What should change? Be as specific as you'd be with a colleague."
+      <textarea autoFocus value={text} onChange={(e) => setText(e.target.value)} aria-label={tx("What should change")}
+        placeholder={tx("What should change? Be as specific as you'd be with a colleague.")}
         onKeyDown={(e) => {
           if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); send(); }
           if (e.key === "Escape") { e.preventDefault(); onCancel(); }
         }}
         className="field-sizing-content min-h-[76px] w-full resize-none bg-transparent text-[12.5px] leading-[1.55] text-fg2 outline-none placeholder:text-mut2" />
       <div className="text-[11.5px] leading-[1.45] text-mut2">
-        {AGENT_LABEL[agent]} starts again in a new terminal, with its last report and your changes.
-      </div>
+        {tx(AGENT_LABEL[agent])} {tx("starts again in a new terminal, with its last report and your changes.")}</div>
       <div className="flex items-center justify-end gap-2">
-        <Button variant="ghost" onClick={onCancel}>Cancel</Button>
+        <Button variant="ghost" onClick={onCancel}>{tx("Cancel")}</Button>
         <Button variant="primary" disabled={!text.trim() || pending} onClick={send}>
-          Send to {AGENT_LABEL[agent]} <span className="rounded bg-ink/15 px-1.5 font-mono text-[10.5px] max-md:hidden">Ctrl ↵</span>
+          {tx("Send to")}{tx(AGENT_LABEL[agent])} <span className="rounded bg-ink/15 px-1.5 font-mono text-[10.5px] max-md:hidden">Ctrl ↵</span>
         </Button>
       </div>
     </div>
@@ -159,6 +165,7 @@ export function AnswerForm({ agent, questions, pending, onSend, onCancel }: {
   onSend: (text: string) => void;
   onCancel: () => void;
 }) {
+  const tx = useTranslation();
   const [answers, setAnswers] = useState<string[]>(() => questions.map(() => ""));
   const [more, setMore] = useState("");
   const ready = answers.some((a) => a.trim()) && !pending;
@@ -173,19 +180,18 @@ export function AnswerForm({ agent, questions, pending, onSend, onCancel }: {
       {questions.map((q, i) => (
         <label key={i} className="flex flex-col gap-1.5">
           <span className="text-[12px] leading-[1.45] text-fg3"><InlineMarkdown text={q} /></span>
-          <textarea autoFocus={i === 0} value={answers[i]} aria-label={`Answer to question ${i + 1}`} placeholder="Your answer"
+          <textarea autoFocus={i === 0} value={answers[i]} aria-label={tx("Answer to question {0}", [i + 1])} placeholder={tx("Your answer")}
             onChange={(e) => setAnswers((a) => a.map((x, k) => (k === i ? e.target.value : x)))} onKeyDown={keys} className={field} />
         </label>
       ))}
-      <textarea value={more} aria-label="Anything else" placeholder="Anything else it should know (optional)"
+      <textarea value={more} aria-label={tx("Anything else")} placeholder={tx("Anything else it should know (optional)")}
         onChange={(e) => setMore(e.target.value)} onKeyDown={keys} className={field} />
       <div className="text-[11.5px] leading-[1.45] text-mut2">
-        {AGENT_LABEL[agent]} starts again in a new terminal, with its last report and your answers.
-      </div>
+        {tx(AGENT_LABEL[agent])} {tx("starts again in a new terminal, with its last report and your answers.")}</div>
       <div className="flex items-center justify-end gap-2">
-        <Button variant="ghost" onClick={onCancel}>Cancel</Button>
+        <Button variant="ghost" onClick={onCancel}>{tx("Cancel")}</Button>
         <Button variant="primary" disabled={!ready} onClick={send}>
-          Send to {AGENT_LABEL[agent]} <span className="rounded bg-ink/15 px-1.5 font-mono text-[10.5px] max-md:hidden">Ctrl ↵</span>
+          {tx("Send to")}{tx(AGENT_LABEL[agent])} <span className="rounded bg-ink/15 px-1.5 font-mono text-[10.5px] max-md:hidden">Ctrl ↵</span>
         </Button>
       </div>
     </div>
@@ -198,6 +204,7 @@ export function AnswerForm({ agent, questions, pending, onSend, onCancel }: {
  * the user asked for after reading it.
  */
 export function ReportBody({ report, criteria, hideChanges }: { report: Report; criteria: ReportCriterion[]; hideChanges?: boolean }) {
+  const tx = useTranslation();
   const long = report.details.length > 600 || report.details.split("\n").length > 10;
   const [open, setOpen] = useState(false);
   const clipped = long && !open;
@@ -208,14 +215,14 @@ export function ReportBody({ report, criteria, hideChanges }: { report: Report; 
       <p className="text-[13px] leading-[1.6] text-fg2">
         {report.outcome !== "done" && (
           <span className="mr-2 inline-flex h-5 translate-y-[-1px] items-center rounded-full border border-line-strong px-2 align-middle text-[11.5px] font-medium text-fg3">
-            {OUTCOME_LABEL[report.outcome]}
+            {tx(OUTCOME_LABEL[report.outcome])}
           </span>
         )}
         {report.summary}
       </p>
 
       {criteria.length > 0 && (
-        <Section title="Done when" aside={criteriaCount(criteria)}>
+        <Section title={tx("Done when")} aside={criteriaCount(criteria, tx)}>
           <div className="flex flex-col">{criteria.map((c, i) => <CriterionRow key={i} c={c} />)}</div>
         </Section>
       )}
@@ -223,7 +230,7 @@ export function ReportBody({ report, criteria, hideChanges }: { report: Report; 
       {report.images.length > 0 && <Gallery images={report.images} />}
 
       {report.questions.length > 0 && (
-        <Section title={report.questions.length === 1 ? "Question for you" : "Questions for you"}>
+        <Section title={report.questions.length === 1 ? tx("Question for you") : tx("Questions for you")}>
           <ul className="flex flex-col gap-1.5">
             {report.questions.map((q, i) => (
               <li key={i} className="flex items-start gap-2.5 text-[12.5px] leading-[1.5] text-fg2">
@@ -236,7 +243,7 @@ export function ReportBody({ report, criteria, hideChanges }: { report: Report; 
       )}
 
       {report.verify.length > 0 && (
-        <Section title="How to check it">
+        <Section title={tx("How to check it")}>
           <ol className="flex flex-col gap-1">
             {report.verify.map((v, i) => (
               <li key={i} className="flex items-baseline gap-2.5 text-[12.5px] leading-[1.5] text-mut">
@@ -251,14 +258,14 @@ export function ReportBody({ report, criteria, hideChanges }: { report: Report; 
       {report.diff && <DiffSection diff={report.diff} />}
 
       {report.details && (
-        <Section title="Details">
+        <Section title={tx("Details")}>
           <div className={cx("relative", clipped && "max-h-[150px] overflow-hidden")}>
             <Markdown text={report.details} />
             {clipped && <div className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-linear-to-t from-panel to-transparent" />}
           </div>
           {long && (
             <button type="button" onClick={() => setOpen((o) => !o)} className="self-start text-[12px] text-mut2 hover:text-fg2">
-              {open ? "Show less" : "Show all"}
+              {open ? tx("Show less") : tx("Show all")}
             </button>
           )}
         </Section>
@@ -294,9 +301,9 @@ export function ReportBody({ report, criteria, hideChanges }: { report: Report; 
 }
 
 const FILE_MARK: Record<DiffFileStatus, string> = { added: "A", modified: "M", deleted: "D", renamed: "R", untracked: "N" };
-const FILE_STATUS: Record<DiffFileStatus, string> = {
-  added: "Added", modified: "Changed", deleted: "Deleted", renamed: "Renamed", untracked: "New, not tracked by git",
-};
+const FILE_STATUS = (tx: Translator): Record<DiffFileStatus, string> => ({
+  added: tx("Added"), modified: tx("Changed"), deleted: tx("Deleted"), renamed: tx("Renamed"), untracked: tx("New, not tracked by git"),
+});
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n.toLocaleString("en")} ${n === 1 ? one : many}`;
 
@@ -311,6 +318,7 @@ export function diffCount(d: ReportDiff): string {
 
 /** The lines of a diff: file headers stand out, added lines are raised, removed ones dimmed. Grayscale, like all state. */
 function DiffView({ text }: { text: string }) {
+  const tx = useTranslation();
   const MAX = 5000;
   const lines = text.split("\n");
   if (lines[lines.length - 1] === "") lines.pop();
@@ -326,7 +334,7 @@ function DiffView({ text }: { text: string }) {
       <pre className="max-h-[420px] overflow-auto rounded-md border border-line bg-raised px-2.5 py-2 font-mono text-[11px] leading-[17px]">
         {lines.slice(0, MAX).map((l, i) => <div key={i} className={cx("whitespace-pre px-1", kind(l))}>{l || " "}</div>)}
       </pre>
-      {lines.length > MAX && <p className="text-[11.5px] text-mut2">Showing the first {MAX.toLocaleString("en")} of {lines.length.toLocaleString("en")} lines.</p>}
+      {lines.length > MAX && <p className="text-[11.5px] text-mut2">{tx("Showing the first")}{" "}{MAX.toLocaleString("en")} {" "}{tx("of")}{" "}{lines.length.toLocaleString("en")} {" "}{tx("lines.")}</p>}
     </div>
   );
 }
@@ -337,15 +345,16 @@ function DiffView({ text }: { text: string }) {
  * the session ran on.
  */
 export function DiffSection({ diff }: { diff: ReportDiff }) {
+  const tx = useTranslation();
   const [all, setAll] = useState(false);
   const [patch, setPatch] = useState<{ state: "closed" | "loading" | "elsewhere" } | { state: "open"; text: string }>({ state: "closed" });
   if (diff.skipped) {
     return (
-      <Section title="Files changed">
+      <Section title={tx("Files changed")}>
         <p className="text-[12.5px] leading-[1.5] text-mut2">
           {diff.skipped === "asks"
-            ? "No diff: PacedMind doesn't read folders in Desktop, Documents, Downloads or a cloud drive, where macOS asks first."
-            : "No diff: git wasn't there to compare the folder with."}
+            ? tx("No diff: PacedMind doesn't read folders in Desktop, Documents, Downloads or a cloud drive, where macOS asks first.")
+            : tx("No diff: git wasn't there to compare the folder with.")}
         </p>
       </Section>
     );
@@ -359,10 +368,10 @@ export function DiffSection({ diff }: { diff: ReportDiff }) {
     setPatch(res?.ok ? { state: "open", text: await res.text() } : { state: "elsewhere" });
   };
   return (
-    <Section title="Files changed" aside={nothing ? undefined : `since the session started · ${diffCount(diff)}`}>
-      {nothing && <p className="text-[12.5px] leading-[1.5] text-mut2">Nothing changed in git since the session started.</p>}
+    <Section title={tx("Files changed")} aside={nothing ? undefined : tx("since the session started · {0}", [diffCount(diff)])}>
+      {nothing && <p className="text-[12.5px] leading-[1.5] text-mut2">{tx("Nothing changed in git since the session started.")}</p>}
       {diff.dirtyAtStart && (
-        <p className="text-[12px] leading-[1.5] text-mut2">The folder already had changes that weren&apos;t committed when the session started: they count here too.</p>
+        <p className="text-[12px] leading-[1.5] text-mut2">{tx("The folder already had changes that weren't committed when the session started: they count here too.")}</p>
       )}
       {diff.commits.length > 0 && (
         <ul className="flex flex-col gap-0.5">
@@ -372,14 +381,14 @@ export function DiffSection({ diff }: { diff: ReportDiff }) {
               <span className="min-w-0 truncate text-fg2" title={c.subject}>{c.subject}</span>
             </li>
           ))}
-          {diff.moreCommits > 0 && <li className="text-[12px] text-mut2">and {plural(diff.moreCommits, "older commit")}</li>}
+          {diff.moreCommits > 0 && <li className="text-[12px] text-mut2">{tx("and")}{" "}{plural(diff.moreCommits, tx("older commit"))}</li>}
         </ul>
       )}
       {diff.files.length > 0 && (
         <ul className="flex flex-col">
           {shown.map((f) => (
             <li key={f.path} className="flex h-6 items-center gap-2.5 text-[12px]">
-              <span title={FILE_STATUS[f.status]} className="w-3 shrink-0 text-center font-mono text-[11px] text-dim">{FILE_MARK[f.status]}</span>
+              <span title={FILE_STATUS(tx)[f.status]} className="w-3 shrink-0 text-center font-mono text-[11px] text-dim">{FILE_MARK[f.status]}</span>
               <span className="min-w-0 flex-1 truncate font-mono text-[11.5px] text-fg2" title={f.from ? `${f.from} → ${f.path}` : f.path}>
                 {f.from ? `${f.from} → ${f.path}` : f.path}
               </span>
@@ -393,23 +402,23 @@ export function DiffSection({ diff }: { diff: ReportDiff }) {
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         {diff.files.length > 8 && (
           <button type="button" onClick={() => setAll((a) => !a)} className="text-[12px] text-mut2 hover:text-fg2">
-            {all ? "Show fewer" : `Show all ${diff.files.length} files`}
+            {all ? tx("Show fewer") : tx("Show all {0} files", [diff.files.length])}
           </button>
         )}
-        {diff.moreFiles > 0 && all && <span className="text-[12px] text-mut2">and {plural(diff.moreFiles, "more file")}</span>}
+        {diff.moreFiles > 0 && all && <span className="text-[12px] text-mut2">{tx("and")}{" "}{plural(diff.moreFiles, tx("more file"))}</span>}
         {diff.patchId && (patch.state === "open"
-          ? <button type="button" onClick={() => setPatch({ state: "closed" })} className="text-[12px] text-mut2 hover:text-fg2">Hide the diff</button>
+          ? <button type="button" onClick={() => setPatch({ state: "closed" })} className="text-[12px] text-mut2 hover:text-fg2">{tx("Hide the diff")}</button>
           : patch.state !== "elsewhere" && (
             <button type="button" disabled={patch.state === "loading"} onClick={() => void open()} className="text-[12px] text-mut2 hover:text-fg2">
-              {patch.state === "loading" ? "Loading the diff…" : "Show the diff"}
+              {patch.state === "loading" ? tx("Loading the diff…") : tx("Show the diff")}
             </button>
           ))}
       </div>
-      {patch.state === "elsewhere" && <p className="text-[12px] leading-[1.5] text-mut2">The diff itself stays on the computer the session ran on. Open PacedMind there to see it.</p>}
+      {patch.state === "elsewhere" && <p className="text-[12px] leading-[1.5] text-mut2">{tx("The diff itself stays on the computer the session ran on. Open PacedMind there to see it.")}</p>}
       {patch.state === "open" && (
         <>
           <DiffView text={patch.text} />
-          {diff.truncated && <p className="text-[11.5px] text-mut2">The diff was longer than PacedMind keeps (1 MB), so it&apos;s cut short.</p>}
+          {diff.truncated && <p className="text-[11.5px] text-mut2">{tx("The diff was longer than PacedMind keeps (1 MB), so it's cut short.")}</p>}
         </>
       )}
     </Section>
@@ -418,16 +427,17 @@ export function DiffSection({ diff }: { diff: ReportDiff }) {
 
 /** Thumbnails; an odd count gives the first image the full width. Clicking one opens the viewer. */
 export function Gallery({ images }: { images: Attachment[] }) {
+  const tx = useTranslation();
   const [shown, setShown] = useState<number | null>(null);
   return (
     <>
       <div className="grid grid-cols-2 gap-2">
         {images.map((a, i) => (
-          <button key={a.id} type="button" onClick={() => setShown(i)} title={a.caption || "Open image"}
+          <button key={a.id} type="button" onClick={() => setShown(i)} title={a.caption || tx("Open image")}
             className={cx("group flex min-w-0 flex-col gap-1 text-left", images.length % 2 === 1 && i === 0 && "col-span-2")}>
             <span className="block aspect-[16/10] w-full overflow-hidden rounded-md border border-line2 bg-raised group-hover:border-line-strong">
               {/* eslint-disable-next-line @next/next/no-img-element -- served from disk by /api/attachments, nothing to optimize */}
-              <img src={imageUrl(a)} alt={a.caption || "Screenshot"} loading="lazy" decoding="async" className="h-full w-full object-cover object-top" />
+              <img src={imageUrl(a)} alt={a.caption || tx("Screenshot")} loading="lazy" decoding="async" className="h-full w-full object-cover object-top" />
             </span>
             {a.caption && <span className="line-clamp-2 text-[11.5px] leading-[1.45] text-mut2">{a.caption}</span>}
           </button>
@@ -440,6 +450,7 @@ export function Gallery({ images }: { images: Attachment[] }) {
 
 /** Full-size images, one at a time. ← and → move, Escape closes, a click on the image shows it at its own size. */
 export function Lightbox({ images, start, onClose }: { images: Attachment[]; start: number; onClose: () => void }) {
+  const tx = useTranslation();
   const [i, setI] = useState(start);
   const [actual, setActual] = useState(false);
   const box = useRef<HTMLDivElement>(null);
@@ -449,7 +460,7 @@ export function Lightbox({ images, start, onClose }: { images: Attachment[]; sta
   useEffect(() => { box.current?.focus(); }, []);
 
   return createPortal(
-    <div ref={box} role="dialog" aria-modal="true" aria-label="Image viewer" tabIndex={-1}
+    <div ref={box} role="dialog" aria-modal="true" aria-label={tx("Image viewer")} tabIndex={-1}
       className="fixed inset-0 z-[80] flex flex-col bg-bg/95 outline-none"
       onKeyDown={(e) => {
         if (e.key === "Escape") { e.stopPropagation(); onClose(); }
@@ -460,13 +471,12 @@ export function Lightbox({ images, start, onClose }: { images: Attachment[]; sta
         {images.length > 1 && <span className="font-mono text-[11.5px] text-mut2">{i + 1} / {images.length}</span>}
         <span className="min-w-0 flex-1 truncate text-fg2">{a.caption}</span>
         <span className="hidden font-mono text-[11px] text-dim sm:inline">
-          {a.width && a.height ? `${a.width}×${a.height} · ` : ""}{format(parseLocal(a.createdAt), "d MMM HH:mm")}
+          {a.width && a.height ? `${a.width}×${a.height} · ` : ""}{tx.date(parseLocal(a.createdAt), "d MMM HH:mm")}
         </span>
         {/* Saved, not opened: only PacedMind's own window may load it (proxy.ts), so a browser would be refused. */}
         <a href={imageUrl(a)} download className="inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-mut hover:bg-hover hover:text-fg2">
-          <Icon name="download" size={13} />Save
-        </a>
-        <button type="button" aria-label="Close (Esc)" title="Close (Esc)" onClick={onClose}
+          <Icon name="download" size={13} />{tx("Save")}</a>
+        <button type="button" aria-label={tx("Close (Esc)")} title={tx("Close (Esc)")} onClick={onClose}
           className="inline-flex h-7 w-7 items-center justify-center rounded-md text-mut hover:bg-hover hover:text-fg2">
           <Icon name="x" size={16} />
         </button>
@@ -475,15 +485,15 @@ export function Lightbox({ images, start, onClose }: { images: Attachment[]; sta
       <div className={cx("relative flex min-h-0 flex-1", actual ? "overflow-auto" : "items-center justify-center px-14 pb-8 max-md:px-3 max-md:pb-3")}
         onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
         {/* eslint-disable-next-line @next/next/no-img-element -- served from disk by /api/attachments, nothing to optimize */}
-        <img key={a.id} src={imageUrl(a)} alt={a.caption || "Screenshot"} onClick={() => setActual((x) => !x)}
+        <img key={a.id} src={imageUrl(a)} alt={a.caption || tx("Screenshot")} onClick={() => setActual((x) => !x)}
           className={cx("rounded-md border border-line2", actual ? "m-auto max-w-none cursor-zoom-out" : "max-h-full max-w-full cursor-zoom-in object-contain")} />
         {images.length > 1 && !actual && (
           <>
-            <button type="button" aria-label="Previous image" onClick={() => go(-1)}
+            <button type="button" aria-label={tx("Previous image")} onClick={() => go(-1)}
               className="absolute left-3 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-line2 bg-raised text-mut hover:text-fg2">
               <Icon name="chevronLeft" size={16} />
             </button>
-            <button type="button" aria-label="Next image" onClick={() => go(1)}
+            <button type="button" aria-label={tx("Next image")} onClick={() => go(1)}
               className="absolute right-3 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-line2 bg-raised text-mut hover:text-fg2">
               <Icon name="chevronRight" size={16} />
             </button>

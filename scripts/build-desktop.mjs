@@ -121,9 +121,10 @@ const traced = fs.readdirSync(standalone).filter((entry) => !keep.includes(entry
 if (traced.length) console.log(`  Left out what file tracing added: ${traced.join(", ")}`);
 fs.cpSync(path.join(root, ".next", "static"), path.join(server, ".next", "static"), { recursive: true });
 if (fs.existsSync(path.join(root, "public"))) fs.cpSync(path.join(root, "public"), path.join(server, "public"), { recursive: true });
-for (const file of ["main.mjs", "task-windows.mjs", "task-note-controls.mjs", "task-note-opener.mjs", "task-note-layout.mjs", "task-note-workspace.mjs", "task-note-motion.mjs", "preload.cjs", "icon.ico", "icon.png", "trayTemplate.png", "trayTemplate@2x.png"]) {
+for (const file of ["main.mjs", "localization.mjs", "node-executable.mjs", "task-windows.mjs", "task-note-controls.mjs", "task-note-opener.mjs", "task-note-layout.mjs", "task-note-workspace.mjs", "task-note-motion.mjs", "preload.cjs", "icon.ico", "icon.png", "trayTemplate.png", "trayTemplate@2x.png"]) {
   fs.copyFileSync(path.join(root, "desktop", file), path.join(stage, file));
 }
+fs.copyFileSync(path.join(root, "src", "lib", "messages.pl.json"), path.join(stage, "messages.pl.json"));
 fs.writeFileSync(path.join(stage, "package.json"), JSON.stringify({
   name: "organizer",
   productName: "PacedMind",

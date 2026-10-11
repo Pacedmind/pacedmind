@@ -1,4 +1,5 @@
-import { addMonths, endOfMonth, format, getDaysInMonth } from "date-fns";
+import { getTranslation } from "@/server/i18n";
+import { addMonths, endOfMonth, getDaysInMonth } from "date-fns";
 import { MonthView } from "@/components/views/month";
 import * as repo from "@/server/repo";
 import { isOpen, taskContext } from "@/server/views";
@@ -10,6 +11,7 @@ const byUrgency = (a: Task, b: Task) =>
   (STATUS_RANK[a.status] ?? 9) - (STATUS_RANK[b.status] ?? 9) || (a.priority || 5) - (b.priority || 5) || a.sortOrder - b.sortOrder || a.id - b.id;
 
 export default async function CalendarPage(props: PageProps<"/calendar">) {
+  const tx = await getTranslation();
   const sp = await props.searchParams;
   const now = new Date();
   const today = toDateStr(now);
@@ -31,21 +33,21 @@ export default async function CalendarPage(props: PageProps<"/calendar">) {
   const isCurrent = month === today.slice(0, 7);
   const openDue = (from: string, to: string) =>
     all.filter((t) => isOpen(t) && t.dueDate && dateOnly(t.dueDate) >= from && dateOnly(t.dueDate) <= to).length;
-  const name = format(first, "MMMM");
-  const plural = (n: number) => `${n || "No"} deadline${n === 1 ? "" : "s"}`;
+  const name = tx.date(first, "MMMM");
+  const plural = (n: number) => tx("{0} deadline{1}", [n || tx("No"), n === 1 ? "" : "s"]);
   let summary: { text: string; danger?: boolean };
   if (monthEnd < today) {
     const n = openDue(monthStart, monthEnd);
-    summary = n ? { text: `${n} overdue from ${name}`, danger: true } : { text: `Nothing left open from ${name}` };
+    summary = n ? { text: tx("{0} overdue from {1}", [n, name]), danger: true } : { text: tx("Nothing left open from {0}", [name]) };
   } else if (isCurrent) {
-    summary = { text: `${plural(openDue(today, monthEnd))} left this month` };
+    summary = { text: tx("{0} left this month", [plural(openDue(today, monthEnd))]) };
   } else {
-    summary = { text: `${plural(openDue(monthStart, monthEnd))} in ${name}` };
+    summary = { text: tx("{0} in {1}", [plural(openDue(monthStart, monthEnd)), name]) };
   }
 
   return (
     <MonthView
-      title={format(first, "MMMM yyyy")}
+      title={tx.date(first, "MMMM yyyy")}
       month={month}
       days={days}
       now={toDateTimeStr(now)}
@@ -56,8 +58,8 @@ export default async function CalendarPage(props: PageProps<"/calendar">) {
       ctx={await taskContext([...dated, ...shown])}
       summary={summary}
       nav={{
-        prev: `/calendar?m=${format(addMonths(first, -1), "yyyy-MM")}`,
-        next: `/calendar?m=${format(addMonths(first, 1), "yyyy-MM")}`,
+        prev: `/calendar?m=${tx.date(addMonths(first, -1), "yyyy-MM")}`,
+        next: `/calendar?m=${tx.date(addMonths(first, 1), "yyyy-MM")}`,
         month: isCurrent ? "/calendar" : `/calendar?m=${month}`,
         week: isCurrent ? "/calendar/week" : `/calendar/week?w=${monthStart}`,
       }}

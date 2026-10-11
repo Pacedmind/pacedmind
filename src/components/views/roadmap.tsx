@@ -1,9 +1,11 @@
 "use client";
+import { useTranslation } from "@/components/language";
+import { createTranslator, type Translator } from "@/lib/i18n";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Fragment, useEffect, useLayoutEffect, useOptimistic, useRef, useState, type ReactNode } from "react";
-import { format } from "date-fns";
+
 import { linkFoundFolderAction, setCodexEnvAction, updateProjectAction } from "@/app/actions";
 import { reorderTasksAction, setNextProjectAction } from "@/app/(app)/roadmap/actions";
 import { projectColor } from "@/lib/colors";
@@ -40,7 +42,7 @@ const pv = "flex h-7 max-w-full items-center gap-2 rounded-md px-2 text-left tex
 const NOW_LINE = "color-mix(in srgb, var(--color-accent) 70%, transparent)";
 
 /** Each project's bar: its days from `from` (the end is exclusive), whether it waits to start, and what it says. */
-function barsOf(from: string, days: number, today: string, projects: Project[], stats: Record<string, ProjectStats>, colorOf: (p: Project) => string) {
+function barsOf(from: string, days: number, today: string, projects: Project[], stats: Record<string, ProjectStats>, colorOf: (p: Project) => string, tx: Translator = createTranslator("en")) {
   const byId = new Map(projects.map((p) => [p.id, p]));
   return projects.map((p, i) => {
     const st = stats[p.id] ?? EMPTY;
@@ -51,8 +53,8 @@ function barsOf(from: string, days: number, today: string, projects: Project[], 
     const waiting = !st.started && !!p.startDate && p.startDate > today;
     const after = p.afterProjectId ? byId.get(p.afterProjectId) : undefined;
     const label = waiting
-      ? after ? `Starts after ${after.name}` : `Starts ${fmtShort(p.startDate!)}`
-      : st.total ? `${st.done} of ${st.total} ${st.total === 1 ? "task" : "tasks"}` : "No tasks yet";
+      ? after ? tx("Starts after {0}", [after.name]) : tx("Starts {0}", [fmtShort(p.startDate!, tx.language)])
+      : st.total ? tx("{0} of {1} {2}", [st.done, st.total, tx.count(st.total, "task").replace(/^\d+ /, "")]) : tx("No tasks yet");
     return { p, i, s, e, waiting, after, label, pct: st.total ? (st.done / st.total) * 100 : 0, color: colorOf(p) };
   });
 }
@@ -73,6 +75,7 @@ function ProjectTimeline({ from, days, now, projects, colorOf, markOf, stats, se
   markOf: (p: Project) => ReactNode;
   stats: Record<string, ProjectStats>; selectedId: string | null;
 }) {
+  const tx = useTranslation();
   const [ref, width] = useWidth<HTMLDivElement>(LEFT + 950);
   const dayW = Math.max(5, (width - LEFT) / days);
   const X = (d: number) => Math.round(d * dayW);
@@ -87,14 +90,14 @@ function ProjectTimeline({ from, days, now, projects, colorOf, markOf, stats, se
     const d = parseLocal(addDaysStr(from, i));
     if (d.getDate() === 1) {
       lines.push({ x: X(i), strong: true });
-      months.push({ x: X(i), label: format(d, "MMMM") });
+      months.push({ x: X(i), label: tx.date(d, "MMMM") });
     } else if (i % 7 === 0) {
       lines.push({ x: X(i), strong: false });
     }
   }
-  if (!months.length || months[0].x > 90) months.unshift({ x: 0, label: format(parseLocal(from), "MMMM") });
+  if (!months.length || months[0].x > 90) months.unshift({ x: 0, label: tx.date(parseLocal(from), "MMMM") });
 
-  const bars = barsOf(from, days, today, projects, stats, colorOf);
+  const bars = barsOf(from, days, today, projects, stats, colorOf, tx);
   // Where today's date sits over the months, kept inside the grid.
   const pill = nowPos >= 0 && nowPos <= days ? Math.min(Math.max(X(nowPos), 26), gridW - 26) : null;
 
@@ -117,8 +120,7 @@ function ProjectTimeline({ from, days, now, projects, colorOf, markOf, stats, se
       <div style={{ width: LEFT + gridW }}>
         <div className="sticky top-0 z-20 flex border-b border-line bg-panel" style={{ height: HEAD }}>
           <div className="sticky left-0 z-10 flex shrink-0 items-center border-r border-line bg-panel px-5 text-[11.5px] text-mut2" style={{ width: LEFT }}>
-            Projects
-          </div>
+            {tx("Projects")}</div>
           <div className="relative shrink-0 overflow-hidden" style={{ width: gridW }}>
             {months.map((m) => {
               // Today's date covers the name of a month that starts next to it: one that starts under it or after it is
@@ -134,7 +136,7 @@ function ProjectTimeline({ from, days, now, projects, colorOf, markOf, stats, se
             {pill !== null && (
               <span className="absolute top-[7px] flex h-[18px] -translate-x-1/2 items-center whitespace-nowrap rounded bg-accent-strong px-1.5 text-[11px] font-medium text-white"
                 style={{ left: pill }}>
-                {fmtShort(today)}
+                {fmtShort(today, tx.language)}
               </span>
             )}
           </div>
@@ -178,16 +180,16 @@ function ProjectTimeline({ from, days, now, projects, colorOf, markOf, stats, se
                     </span>
                   )}
                   {target !== null && (
-                    <span title={`Target date · ${fmtDay(p.targetDate!)}`} className="absolute flex" style={{ left: target - 6, top: 14 }}>
+                    <span title={tx("Target date · {0}", [fmtDay(p.targetDate!, tx.language)])} className="absolute flex" style={{ left: target - 6, top: 14 }}>
                       <Diamond color={color} size={12} hollow />
                     </span>
                   )}
                   {!visible && s !== null && e !== null && (
                     <span className={cx("absolute top-3 whitespace-nowrap text-[11px] leading-4 text-dim", e <= 0 ? "left-2" : "right-2")}>
-                      {e <= 0 ? `‹ ${fmtShort(p.targetDate ?? addDaysStr(from, e - 1))}` : `${fmtShort(p.startDate ?? addDaysStr(from, s))} ›`}
+                      {e <= 0 ? `‹ ${fmtShort(p.targetDate ?? addDaysStr(from, e - 1), tx.language)}` : `${fmtShort(p.startDate ?? addDaysStr(from, s), tx.language)} ›`}
                     </span>
                   )}
-                  {s === null && <span className="absolute left-2 top-3 text-[11px] leading-4 text-dim">No dates yet</span>}
+                  {s === null && <span className="absolute left-2 top-3 text-[11px] leading-4 text-dim">{tx("No dates yet")}</span>}
                 </div>
               </Link>
             );
@@ -225,6 +227,7 @@ function PhoneProjects({ from, days, now, projects, colorOf, markOf, stats, sele
   markOf: (p: Project) => ReactNode;
   stats: Record<string, ProjectStats>; selectedId: string; children: ReactNode;
 }) {
+  const tx = useTranslation();
   const ref = useRef<HTMLDivElement>(null);
   const today = dateOnly(now);
   const nowPos = dayPos(from, now);
@@ -234,9 +237,9 @@ function PhoneProjects({ from, days, now, projects, colorOf, markOf, stats, sele
   const months: { day: number; label: string }[] = [];
   for (let i = 1; i < days; i++) {
     const d = parseLocal(addDaysStr(from, i));
-    if (d.getDate() === 1) months.push({ day: i, label: format(d, "MMM") });
+    if (d.getDate() === 1) months.push({ day: i, label: tx.date(d, "MMM") });
   }
-  if (!months.length || months[0].day > 10) months.unshift({ day: 0, label: format(parseLocal(from), "MMM") });
+  if (!months.length || months[0].day > 10) months.unshift({ day: 0, label: tx.date(parseLocal(from), "MMM") });
   const pill = `clamp(24px, ${at(nowPos)}%, calc(100% - 24px))`;
 
   // Opening a project closes the one open above it, which would pull the new one up out of sight: bring it to the top.
@@ -264,13 +267,13 @@ function PhoneProjects({ from, days, now, projects, colorOf, markOf, stats, sele
           {showNow && (
             <span className="absolute top-[7px] flex h-[18px] -translate-x-1/2 items-center whitespace-nowrap rounded bg-accent-strong px-1.5 text-[11px] font-medium text-white"
               style={{ left: pill }}>
-              {fmtShort(today)}
+              {fmtShort(today, tx.language)}
             </span>
           )}
         </div>
       </div>
 
-      {barsOf(from, days, today, projects, stats, colorOf).map(({ p, s, e, waiting, after, label, pct, color }) => {
+      {barsOf(from, days, today, projects, stats, colorOf, tx).map(({ p, s, e, waiting, after, label, pct, color }) => {
         const selected = p.id === selectedId;
         const visible = s !== null && e !== null && e > 0 && s < days;
         const target = p.targetDate && e !== null && e >= 0 && e <= days ? at(e) : null;
@@ -282,7 +285,7 @@ function PhoneProjects({ from, days, now, projects, colorOf, markOf, stats, sele
                 {markOf(p)}
                 <span className="min-w-0 flex-1 truncate text-fg">{p.name}</span>
                 {p.agent && <AgentChip agent={p.agent} />}
-                <span className="max-w-[55%] shrink-0 truncate text-[12px] text-mut2">{after && !waiting ? `${label}, after ${after.name}` : label}</span>
+                <span className="max-w-[55%] shrink-0 truncate text-[12px] text-mut2">{after && !waiting ? tx("{0}, after {1}", [label, after.name]) : label}</span>
               </span>
               <span className="relative h-4">
                 {months.map((m) => m.day > 0 && <span key={m.day} className="absolute inset-y-0 w-px bg-line2" style={{ left: `${at(m.day)}%` }} />)}
@@ -297,13 +300,13 @@ function PhoneProjects({ from, days, now, projects, colorOf, markOf, stats, sele
                 )}
                 {!visible && s !== null && e !== null && (
                   <span className={cx("absolute top-0 whitespace-nowrap text-[11px] leading-4 text-dim", e <= 0 ? "left-1" : "right-1")}>
-                    {e <= 0 ? `‹ ${fmtShort(p.targetDate ?? addDaysStr(from, e - 1))}` : `${fmtShort(p.startDate ?? addDaysStr(from, s))} ›`}
+                    {e <= 0 ? `‹ ${fmtShort(p.targetDate ?? addDaysStr(from, e - 1), tx.language)}` : `${fmtShort(p.startDate ?? addDaysStr(from, s), tx.language)} ›`}
                   </span>
                 )}
-                {s === null && <span className="absolute left-1 top-0 text-[11px] leading-4 text-dim">No dates yet</span>}
+                {s === null && <span className="absolute left-1 top-0 text-[11px] leading-4 text-dim">{tx("No dates yet")}</span>}
                 {showNow && <span className="absolute -inset-y-1 w-px" style={{ left: `${at(nowPos)}%`, background: NOW_LINE }} />}
               </span>
-              <span className="text-right text-[11.5px] leading-4 text-mut">{p.targetDate && fmtShort(p.targetDate)}</span>
+              <span className="text-right text-[11.5px] leading-4 text-mut">{p.targetDate && fmtShort(p.targetDate, tx.language)}</span>
             </Link>
             {selected && <div className="border-b border-line">{children}</div>}
           </Fragment>
@@ -317,15 +320,16 @@ function PhoneProjects({ from, days, now, projects, colorOf, markOf, stats, sele
 function PhoneTasks({ project, items, next, stats, onSelect }: {
   project: Project; items: RoadmapItem[]; next: Project[]; stats: Record<string, ProjectStats>; onSelect: (key: string) => void;
 }) {
+  const tx = useTranslation();
   return (
-    <section aria-label="Task order" className="pb-2">
+    <section aria-label={tx("Task order")} className="pb-2">
       <div className="flex h-11 items-center gap-2 pl-4 pr-3">
-        <h2 className="text-[12.5px] font-medium text-fg2">Task order</h2>
+        <h2 className="text-[12.5px] font-medium text-fg2">{tx("Task order")}</h2>
         <span className="text-[12px] text-mut2">{items.length} {items.length === 1 ? "task" : "tasks"}</span>
       </div>
       {items.map((it, i) => {
         const t = it.task;
-        const after = afterOf(it);
+        const after = afterOf(it, tx);
         return (
           <div key={t.id} onClick={() => onSelect(t.key)} className="flex cursor-pointer items-center gap-2.5 border-t border-hover py-2 pl-4 pr-3 hover:bg-hover">
             <span className="w-4 shrink-0 self-start font-mono text-[11px] leading-[18px] text-dim">{i + 1}</span>
@@ -343,8 +347,7 @@ function PhoneTasks({ project, items, next, stats, onSelect }: {
             {canOpen(it) && (
               <Link href={`/sessions?s=${it.session!.id}`} onClick={(e) => e.stopPropagation()}
                 className="inline-flex h-7 shrink-0 items-center rounded-md border border-ctl px-2 text-[12px] text-fg2 hover:bg-sel">
-                Open session
-              </Link>
+                {tx("Open session")}</Link>
             )}
           </div>
         );
@@ -357,27 +360,27 @@ function PhoneTasks({ project, items, next, stats, onSelect }: {
 
 /* ---------- task order ---------- */
 
-const afterOf = (it: RoadmapItem) =>
-  it.after.length ? `After ${it.after.join(", ")}` : it.task.agent === "human" ? "Done by you" : "";
+const afterOf = (it: RoadmapItem, tx: Translator = createTranslator("en")) =>
+  it.after.length ? tx("After {0}", [it.after.join(", ")]) : it.task.agent === "human" ? tx("Done by you") : "";
 const canOpen = (it: RoadmapItem) => it.state.tone === "waiting" && !!it.session;
 
 function NoTasks({ project }: { project: Project }) {
+  const tx = useTranslation();
   return (
     <div className="flex flex-col items-center gap-3 px-8 py-16 text-center max-md:py-8">
-      <div className="text-[14px] text-fg2">No tasks in {project.name} yet</div>
+      <div className="text-[14px] text-fg2">{tx("No tasks in")}{" "}{project.name} {" "}{tx("yet")}</div>
       <div className="text-[12.5px] text-mut2 max-md:hidden">
-        Press <span className="rounded border border-ctl px-1.5 font-mono text-[11px]">C</span> anywhere to add a task.
-      </div>
+        {tx("Press")}<span className="rounded border border-ctl px-1.5 font-mono text-[11px]">C</span> {tx("anywhere to add a task.")}</div>
       {/* A phone has no C key. */}
       <Button className="md:hidden" onClick={() => openAdd({ projectId: project.id, areaId: project.areaId })}>
-        <Icon name="plus" size={13} />Add a task
-      </Button>
+        <Icon name="plus" size={13} />{tx("Add a task")}</Button>
     </div>
   );
 }
 
 /** The projects that start once this one is done. */
 function NextProjects({ project, next, stats }: { project: Project; next: Project[]; stats: Record<string, ProjectStats> }) {
+  const tx = useTranslation();
   return next.map((q) => {
     const n = (stats[q.id] ?? EMPTY).total;
     return (
@@ -386,9 +389,8 @@ function NextProjects({ project, next, stats }: { project: Project; next: Projec
         <Icon name="arrowRight" size={14} strokeWidth={2} />
         {/* A phone wraps the sentence rather than cutting it off. */}
         <span className="min-w-0 flex-1 truncate max-md:whitespace-normal">
-          Then {q.name}, {n ? `${n} ${n === 1 ? "task" : "tasks"}` : "no tasks yet"}, once {project.name} is done
-        </span>
-        {q.startDate && <span className="shrink-0 text-[12px] text-mut2">Est. {fmtShort(q.startDate)}</span>}
+          {tx("Then")}{q.name}, {n ? tx.count(n, "task") : tx("no tasks yet")}{tx(", once")}{" "}{project.name} {tx("is done")}</span>
+        {q.startDate && <span className="shrink-0 text-[12px] text-mut2">{tx("Est.")}{" "}{fmtShort(q.startDate, tx.language)}</span>}
       </Link>
     );
   });
@@ -398,6 +400,7 @@ function TaskOrder({ project, items, next, stats, sel, onSelect }: {
   project: Project; items: RoadmapItem[]; next: Project[]; stats: Record<string, ProjectStats>;
   sel: string | null; onSelect: (key: string) => void;
 }) {
+  const tx = useTranslation();
   const { run } = useAction();
   const [list, setList] = useOptimistic(items);
   const move = (i: number, dir: -1 | 1) => {
@@ -415,9 +418,9 @@ function TaskOrder({ project, items, next, stats, sel, onSelect }: {
   const actions = list.some(canOpen);
 
   return (
-    <section aria-label="Task order" className="flex min-w-0 flex-1 flex-col max-md:hidden">
+    <section aria-label={tx("Task order")} className="flex min-w-0 flex-1 flex-col max-md:hidden">
       <div className="flex h-11 shrink-0 items-center gap-2 border-b border-line px-5">
-        <h2 className="mr-1 text-[12.5px] font-medium text-fg2">Task order</h2>
+        <h2 className="mr-1 text-[12.5px] font-medium text-fg2">{tx("Task order")}</h2>
         <span className="truncate text-[12px] text-mut2">{project.name} · {list.length} {list.length === 1 ? "task" : "tasks"}</span>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto pb-4">
@@ -425,7 +428,7 @@ function TaskOrder({ project, items, next, stats, sel, onSelect }: {
           const t = it.task;
           const done = t.status === "done";
           const waiting = it.state.tone === "waiting";
-          const after = afterOf(it);
+          const after = afterOf(it, tx);
           return (
             <div key={t.id} onClick={() => onSelect(t.key)}
               className={cx("group flex h-[38px] cursor-pointer items-center gap-2.5 border-b border-hover pl-5 pr-3", t.key === sel ? "bg-sel" : "hover:bg-hover")}>
@@ -443,17 +446,16 @@ function TaskOrder({ project, items, next, stats, sel, onSelect }: {
                   {canOpen(it) && (
                     <Link href={`/sessions?s=${it.session!.id}`} onClick={(e) => e.stopPropagation()}
                       className="inline-flex h-6 items-center rounded-md border border-ctl px-2 text-[12px] text-fg2 hover:bg-sel">
-                      Open session
-                    </Link>
+                      {tx("Open session")}</Link>
                   )}
                 </span>
               )}
               <span className="flex shrink-0 items-center opacity-0 group-hover:opacity-100 focus-within:opacity-100">
-                <button type="button" aria-label={`Move ${t.key} up`} title="Move up" disabled={i === 0} className={arrow}
+                <button type="button" aria-label={tx("Move {0} up", [t.key])} title={tx("Move up")} disabled={i === 0} className={arrow}
                   onClick={(e) => { e.stopPropagation(); move(i, -1); }}>
                   <Icon name="chevronDown" size={13} strokeWidth={2.2} className="rotate-180" />
                 </button>
-                <button type="button" aria-label={`Move ${t.key} down`} title="Move down" disabled={i === list.length - 1} className={arrow}
+                <button type="button" aria-label={tx("Move {0} down", [t.key])} title={tx("Move down")} disabled={i === list.length - 1} className={arrow}
                   onClick={(e) => { e.stopPropagation(); move(i, 1); }}>
                   <Icon name="chevronDown" size={13} strokeWidth={2.2} />
                 </button>
@@ -483,10 +485,11 @@ function Setting({ label, children }: { label: string; children: ReactNode }) {
 type SettingsProps = { project: Project; projects: Project[]; markOf: (p: Project) => ReactNode; terminal: string; areaFolder: string | null };
 
 function SessionPanel(props: SettingsProps) {
+  const tx = useTranslation();
   return (
-    <aside aria-label="Session settings" className="flex w-[380px] shrink-0 flex-col border-l border-line max-md:hidden">
+    <aside aria-label={tx("Session settings")} className="flex w-[380px] shrink-0 flex-col border-l border-line max-md:hidden">
       <div className="flex h-11 shrink-0 items-center border-b border-line px-5">
-        <h2 className="truncate text-[12.5px] font-medium text-fg2">Sessions · {props.project.name}</h2>
+        <h2 className="truncate text-[12.5px] font-medium text-fg2">{tx("Sessions ·")}{" "}{props.project.name}</h2>
       </div>
       <SessionSettings {...props} />
     </aside>
@@ -495,13 +498,14 @@ function SessionPanel(props: SettingsProps) {
 
 /** A phone keeps the project's session settings folded away under its tasks. */
 function PhoneSessionSettings(props: SettingsProps) {
+  const tx = useTranslation();
   return (
     // Unfolded near the bottom of the screen, they would open out of sight.
     <details className="group/settings border-t border-hover"
       onToggle={(e) => { if (e.currentTarget.open) e.currentTarget.scrollIntoView({ block: "nearest", behavior: "smooth" }); }}>
       <summary className="flex h-11 cursor-pointer list-none items-center gap-2 px-4 text-[12.5px] hover:bg-hover [&::-webkit-details-marker]:hidden">
         <Icon name="chevronRight" size={13} strokeWidth={2} className="shrink-0 text-mut2 group-open/settings:rotate-90" />
-        <span className="font-medium text-fg2">Session settings</span>
+        <span className="font-medium text-fg2">{tx("Session settings")}</span>
       </summary>
       <SessionSettings key={`${props.project.id}:${props.project.folder ?? ""}`} {...props} />
     </details>
@@ -509,6 +513,7 @@ function PhoneSessionSettings(props: SettingsProps) {
 }
 
 function SessionSettings({ project, projects, markOf, terminal, areaFolder }: SettingsProps) {
+  const tx = useTranslation();
   const { run } = useAction();
   const found = useExecution().folders?.projects[project.id] ?? [];
   const byId = new Map(projects.map((p) => [p.id, p]));
@@ -531,59 +536,58 @@ function SessionSettings({ project, projects, markOf, terminal, areaFolder }: Se
   return (
     <>
       <div className="flex flex-col gap-0.5 px-3 py-2.5 max-md:px-2 max-md:pt-0">
-        <Setting label="Default agent">
+        <Setting label={tx("Default agent")}>
           <Menu className="min-w-0" width={200}
             trigger={<button type="button" className={pv}>
-              <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: AGENT_DOT[agent] }} />{AGENT_LABEL[agent]}
+              <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: AGENT_DOT[agent] }} />{tx(AGENT_LABEL[agent])}
             </button>}
             items={(Object.keys(AGENT_LABEL) as AgentId[]).map((a) => ({
-              value: a, label: AGENT_LABEL[a], icon: <span className="h-1.5 w-1.5 rounded-full" style={{ background: AGENT_DOT[a] }} />,
+              value: a, label: tx(AGENT_LABEL[a]), icon: <span className="h-1.5 w-1.5 rounded-full" style={{ background: AGENT_DOT[a] }} />,
             }))}
             onSelect={(v) => save({ agent: v })} />
         </Setting>
-        <Setting label="Opens in">
+        <Setting label={tx("Opens in")}>
           <span className="truncate px-2 text-fg2">{terminal}</span>
         </Setting>
-        <Setting label="Folder">
+        <Setting label={tx("Folder")}>
           <div className="min-w-0 flex-1">
-            <FolderField variant="row" label={`Folder for ${project.name}`} value={project.folder} own=""
-              inherited={areaFolder ? { folder: areaFolder, from: "area's" } : null} empty="PacedMind's folder per task"
+            <FolderField variant="row" label={tx("Folder for {0}", [project.name])} value={project.folder} own=""
+              inherited={areaFolder ? { folder: areaFolder, from: tx("area's") } : null} empty={tx("PacedMind's folder per task")}
               emptyTitle="No folder: PacedMind makes an empty folder for each task, in its data folder"
-              clear={areaFolder ? "Use the area's workspace again" : "Remove its folder"} found={found}
+              clear={areaFolder ? tx("Use the area's workspace again") : tx("Remove its folder")} found={found}
               onUse={(folder) => run(() => linkFoundFolderAction(project.id, folder))} onChange={(folder) => save({ folder })} />
           </div>
         </Setting>
         {/* Where its tasks run when they go to Codex cloud: the environment's label or id. */}
-        <Setting label="Codex cloud">
-          <input key={project.codexEnv ?? ""} defaultValue={project.codexEnv ?? ""} placeholder="Environment label or id" aria-label="Codex cloud environment"
-            title="Its label or id at chatgpt.com/codex/settings/environments, for tasks that run in Codex cloud"
+        <Setting label={tx("Codex cloud")}>
+          <input key={project.codexEnv ?? ""} defaultValue={project.codexEnv ?? ""} placeholder={tx("Environment label or id")} aria-label={tx("Codex cloud environment")}
+            title={tx("Its label or id at chatgpt.com/codex/settings/environments, for tasks that run in Codex cloud")}
             onBlur={(e) => { if ((e.target.value.trim() || null) !== project.codexEnv) run(() => setCodexEnvAction(project.id, e.target.value)); }}
             onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
             className="h-7 min-w-0 flex-1 rounded-md bg-transparent px-2 font-mono text-[12px] text-fg2 outline-none placeholder:font-sans placeholder:text-mut2 hover:bg-hover focus:bg-input" />
         </Setting>
-        <Setting label="Starts after">
+        <Setting label={tx("Starts after")}>
           <Menu className="min-w-0" width={240}
             trigger={<button type="button" className={cx(pv, !startsAfter && "text-mut2")}>
               {startsAfter && markOf(startsAfter)}
-              <span className="truncate">{startsAfter?.name ?? "Nothing, starts any time"}</span>
+              <span className="truncate">{startsAfter?.name ?? tx("Nothing, starts any time")}</span>
             </button>}
-            items={[{ value: null as string | null, label: "Nothing, starts any time" }, ...others.filter((p) => !waitsFor(p, project.id)).map(item)]}
+            items={[{ value: null as string | null, label: tx("Nothing, starts any time") }, ...others.filter((p) => !waitsFor(p, project.id)).map(item)]}
             onSelect={(v) => save({ afterProjectId: v })} />
         </Setting>
-        <Setting label="After this project">
+        <Setting label={tx("After this project")}>
           <Menu className="min-w-0" width={240}
             trigger={<button type="button" className={cx(pv, !next.length && "text-mut2")}>
               <span className="truncate">
-                {next.length ? next.map((p) => (p.agent ? `${p.name}, in ${AGENT_LABEL[p.agent]}` : p.name)).join("; ") : "Nothing"}
+                {next.length ? next.map((p) => (p.agent ? tx("{0}, in {1}", [p.name, tx(AGENT_LABEL[p.agent])]) : p.name)).join("; ") : tx("Nothing")}
               </span>
             </button>}
-            items={[{ value: null as string | null, label: "Nothing" }, ...others.filter((p) => !waitsFor(project, p.id)).map(item)]}
+            items={[{ value: null as string | null, label: tx("Nothing") }, ...others.filter((p) => !waitsFor(project, p.id)).map(item)]}
             onSelect={(v) => run(() => setNextProjectAction(project.id, v))} />
         </Setting>
       </div>
       <p className="px-5 py-1.5 text-[12px] leading-[1.55] text-mut2 max-md:px-4 max-md:pb-3">
-        PacedMind only tracks state. You work with the agent in its own terminal, and it tells PacedMind when it starts and when it’s finished.
-      </p>
+        {tx("PacedMind only tracks state. You work with the agent in its own terminal, and it tells PacedMind when it starts and when it’s finished.")}</p>
     </>
   );
 }
@@ -608,6 +612,7 @@ export function Roadmap(props: {
   ctx: TaskContext;
   initialKey: string | null;
 }) {
+  const tx = useTranslation();
   const { from, days, areas, projects, stats, items, ctx } = props;
   const router = useRouter();
   const [sel, setSel] = useState<string | null>(props.initialKey);
@@ -635,8 +640,8 @@ export function Roadmap(props: {
 
   const first = parseLocal(from);
   const last = parseLocal(addDaysStr(from, days - 1));
-  const range = `${format(first, first.getFullYear() === last.getFullYear() ? "MMM" : "MMM yyyy")} to ${format(last, "MMM yyyy")}`;
-  const waitingText = props.waiting === 1 ? "1 finished session waiting for you" : `${props.waiting} finished sessions waiting for you`;
+  const range = tx("{0} to {1}", [tx.date(first, first.getFullYear() === last.getFullYear() ? "MMM" : "MMM yyyy"), tx.date(last, "MMM yyyy")]);
+  const waitingText = props.waiting === 1 ? tx("1 finished session waiting for you") : tx("{0} finished sessions waiting for you", [props.waiting]);
   const next = project ? projects.filter((p) => p.afterProjectId === project.id) : [];
 
   return (
@@ -645,7 +650,7 @@ export function Roadmap(props: {
           of projects is the project picker. */}
       <div className="flex h-[52px] shrink-0 items-center gap-2.5 border-b border-line pl-5 pr-4">
         <Icon name="roadmap" className="text-mut" />
-        <h1 className="text-[14px] font-semibold text-strong">Roadmap</h1>
+        <h1 className="text-[14px] font-semibold text-strong">{tx("Roadmap")}</h1>
         <span className="text-mut2 max-md:hidden">{range}</span>
         <span className="flex-1" />
         {props.waiting > 0 && (
@@ -657,7 +662,7 @@ export function Roadmap(props: {
         )}
         {project && (
           <Menu align="right" width={240} className="max-md:hidden"
-            trigger={<button type="button" aria-label="Project"
+            trigger={<button type="button" aria-label={tx("Project")}
               className="flex h-7 max-w-[240px] items-center gap-2 rounded-md border border-ctl px-2.5 text-[12.5px] text-fg2 hover:bg-hover">
               {markOf(project)}
               <span className="truncate">{project.name}</span>
@@ -688,8 +693,8 @@ export function Roadmap(props: {
         </>
       ) : (
         <div className="flex flex-col items-center gap-3 px-8 py-24 text-center">
-          <div className="text-[14px] text-fg2">No projects yet</div>
-          <div className="text-[12.5px] text-mut2">Projects and their target dates show up here once you add one.</div>
+          <div className="text-[14px] text-fg2">{tx("No projects yet")}</div>
+          <div className="text-[12.5px] text-mut2">{tx("Projects and their target dates show up here once you add one.")}</div>
         </div>
       )}
     </div>

@@ -1,4 +1,5 @@
 "use client";
+import { useTranslation } from "@/components/language";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -29,6 +30,7 @@ export function ProjectsView({ areas, projects, usage, today, desktop }: {
   today: string;
   desktop: boolean;
 }) {
+  const tx = useTranslation();
   const router = useRouter();
   const { run } = useAction();
   const [menu, setMenu] = useState<OpenMenu>(null);
@@ -58,28 +60,28 @@ export function ProjectsView({ areas, projects, usage, today, desktop }: {
   const menuProject = menu?.kind === "project" ? projects.find((p) => p.id === menu.id) : undefined;
 
   return (
-    <section aria-label="Projects" className="flex min-w-0 flex-1 flex-col">
-      <ViewHeader icon="box" title="Projects" subtitle={`${areas.length} ${areas.length === 1 ? "area" : "areas"} · ${projects.length} ${projects.length === 1 ? "project" : "projects"}`}>
+    <section aria-label={tx("Projects")} className="flex min-w-0 flex-1 flex-col">
+      <ViewHeader icon="box" title={tx("Projects")} subtitle={`${tx.count(areas.length, "area")} · ${tx.count(projects.length, "project")}`}>
         <span className="flex-1" />
-        <Button onClick={() => setDraft({ kind: "area" })}><Icon name="plus" size={13} />New area</Button>
+        <Button onClick={() => setDraft({ kind: "area" })}><Icon name="plus" size={13} />{tx("New area")}</Button>
         {areas.length > 0 && (
           <Menu align="right" width={200} onSelect={startProject}
-            trigger={<Button><Icon name="plus" size={13} />New project</Button>}
+            trigger={<Button><Icon name="plus" size={13} />{tx("New project")}</Button>}
             items={areas.map((a) => ({ value: a.id, label: a.name, icon: <AreaMark area={a} dot={8} /> }))} />
         )}
       </ViewHeader>
 
       {areas.length === 0 && draft?.kind !== "area" ? (
         <div className="flex flex-col items-center gap-3 px-8 py-24 text-center">
-          <div className="text-[14px] text-fg2">No areas yet</div>
-          <div className="max-w-sm text-[12.5px] leading-relaxed text-mut2">Areas group your projects and tasks, like Work, Personal or Health. Each one gets a key for its task numbers.</div>
-          <Button variant="primary" onClick={() => setDraft({ kind: "area" })}><Icon name="plus" size={13} />New area</Button>
+          <div className="text-[14px] text-fg2">{tx("No areas yet")}</div>
+          <div className="max-w-sm text-[12.5px] leading-relaxed text-mut2">{tx("Areas group your projects and tasks, like Work, Personal or Health. Each one gets a key for its task numbers.")}</div>
+          <Button variant="primary" onClick={() => setDraft({ kind: "area" })}><Icon name="plus" size={13} />{tx("New area")}</Button>
         </div>
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto">
           <div className={cx(COLS, "h-8 border-b border-line pl-5 pr-3 text-[11.5px] text-mut2")}>
-            <span>Name</span><span className={WIDE}>Progress</span><span className={WIDE}>Open</span><span>Target</span>
-            <span className={WIDE}>Agent</span><span className={WIDE}>Folder</span><span />
+            <span>{tx("Name")}</span><span className={WIDE}>{tx("Progress")}</span><span className={WIDE}>{tx("Open")}</span><span>{tx("Target")}</span>
+            <span className={WIDE}>{tx("Agent")}</span><span className={WIDE}>{tx("Folder")}</span><span />
           </div>
 
           {areas.map((a) => {
@@ -90,28 +92,28 @@ export function ProjectsView({ areas, projects, usage, today, desktop }: {
               <div key={a.id}>
                 <div className="group flex h-[38px] items-center gap-2 border-b border-line bg-raised pl-5 pr-3"
                   onContextMenu={(e) => { e.preventDefault(); setMenu({ kind: "area", id: a.id, anchor: atPointer(e) }); }}>
-                  <button type="button" aria-expanded={!shut} aria-label={shut ? `Expand ${a.name}` : `Collapse ${a.name}`}
+                  <button type="button" aria-expanded={!shut} aria-label={shut ? tx("Expand {0}", [a.name]) : tx("Collapse {0}", [a.name])}
                     onClick={() => setCollapsed((c) => ({ ...c, [a.id]: !shut }))}
                     className="-ml-1 flex h-5 w-5 items-center justify-center rounded text-mut2 hover:bg-hover">
                     <Icon name={shut ? "chevronRight" : "chevronDown"} size={12} strokeWidth={2.4} />
                   </button>
                   <AreaMark area={a} dot={8} />
                   {renaming === `area:${a.id}` ? (
-                    <InlineName initial={a.name} placeholder="Area name" className="max-w-60 flex-none" onCancel={() => setRenaming(null)}
+                    <InlineName initial={a.name} placeholder={tx("Area name")} className="max-w-60 flex-none" onCancel={() => setRenaming(null)}
                       onSave={(name) => { setRenaming(null); run(() => updateAreaAction(a.id, { name })); }} />
                   ) : (
                     <Link href={`/area/${a.id}`} className="truncate text-[13px] font-medium text-fg hover:text-strong">{a.name}</Link>
                   )}
                   <span className="font-mono text-[11px] text-mut2">{a.key}</span>
                   <span className="truncate text-[12px] text-mut2">
-                    {au.projects} {au.projects === 1 ? "project" : "projects"} · {au.open} open {au.open === 1 ? "task" : "tasks"}
+                    {tx.count(au.projects, "project")} · {tx("Open tasks: {0}", [au.open])}
                   </span>
                   <span className="flex-1" />
-                  <button type="button" aria-label={`New project in ${a.name}`} title={`New project in ${a.name}`} onClick={() => startProject(a.id)}
+                  <button type="button" aria-label={tx("New project in {0}", [a.name])} title={tx("New project in {0}", [a.name])} onClick={() => startProject(a.id)}
                     className="flex h-6 w-6 items-center justify-center rounded text-mut opacity-0 hover:bg-hover hover:text-fg2 focus-visible:opacity-100 group-hover:opacity-100 pointer-coarse:opacity-100">
                     <Icon name="plus" size={13} strokeWidth={2} />
                   </button>
-                  <MoreButton label={`${a.name} options`} open={menu?.kind === "area" && menu.id === a.id} onClose={closeMenu} className="pointer-coarse:opacity-100"
+                  <MoreButton label={tx("{0} options", [a.name])} open={menu?.kind === "area" && menu.id === a.id} onClose={closeMenu} className="pointer-coarse:opacity-100"
                     onOpen={(anchor) => setMenu({ kind: "area", id: a.id, anchor })} />
                 </div>
 
@@ -127,7 +129,7 @@ export function ProjectsView({ areas, projects, usage, today, desktop }: {
                         <div className="flex min-w-0 items-center gap-2.5 pl-6">
                           <ProgressRing pct={u.pct} color={color} size={16} />
                           {renaming === `project:${p.id}` ? (
-                            <InlineName initial={p.name} placeholder="Project name" onCancel={() => setRenaming(null)}
+                            <InlineName initial={p.name} placeholder={tx("Project name")} onCancel={() => setRenaming(null)}
                               onSave={(name) => { setRenaming(null); run(() => updateProjectAction(p.id, { name })); }} />
                           ) : (
                             <Link href={`/project/${p.id}`} className="truncate text-[13px] text-fg hover:text-strong">{p.name}</Link>
@@ -143,14 +145,14 @@ export function ProjectsView({ areas, projects, usage, today, desktop }: {
                         <DateField value={p.targetDate} withTime={false}
                           onChange={(v) => run(() => updateProjectAction(p.id, { targetDate: v }))}
                           trigger={
-                            <button type="button" aria-label={`Target date for ${p.name}`}
+                            <button type="button" aria-label={tx("Target date for {0}", [p.name])}
                               className={cx("h-6 rounded px-1.5 -ml-1.5 text-[12px] hover:bg-hover", late ? "text-danger" : p.targetDate ? "text-fg3" : "text-dim group-hover:text-mut2")}>
-                              {p.targetDate ? fmtShort(p.targetDate) : "Set date"}
+                              {p.targetDate ? fmtShort(p.targetDate, tx.language) : tx("Set date")}
                             </button>
                           } />
-                        <span className={cx("truncate text-[12px] text-mut", WIDE)}>{p.agent ? AGENT_LABEL[p.agent] : "–"}</span>
+                        <span className={cx("truncate text-[12px] text-mut", WIDE)}>{p.agent ? tx(AGENT_LABEL[p.agent]) : "–"}</span>
                         <span className={cx("truncate font-mono text-[11px] text-mut2", WIDE)} title={p.folder ?? undefined}>{p.folder ?? "–"}</span>
-                        <MoreButton label={`${p.name} options`} open={open} onClose={closeMenu} className="pointer-coarse:opacity-100"
+                        <MoreButton label={tx("{0} options", [p.name])} open={open} onClose={closeMenu} className="pointer-coarse:opacity-100"
                           onOpen={(anchor) => setMenu({ kind: "project", id: p.id, anchor })} />
                       </div>
                     </div>
@@ -160,13 +162,13 @@ export function ProjectsView({ areas, projects, usage, today, desktop }: {
                 {!shut && (draft?.kind === "project" && draft.areaId === a.id ? (
                   <div className="flex h-[42px] items-center gap-2.5 border-b border-hover bg-hover pl-11 pr-3">
                     <ProgressRing pct={0} color={a.color} size={16} />
-                    <InlineName initial="" placeholder={`Project in ${a.name}`} className="max-w-80" onCancel={() => setDraft(null)}
+                    <InlineName initial="" placeholder={tx("Project in {0}", [a.name])} className="max-w-80" onCancel={() => setDraft(null)}
                       onSave={(name) => createProject(name, a.id)} />
                   </div>
                 ) : !list.length && (
                   <button type="button" onClick={() => startProject(a.id)}
                     className="flex h-[38px] w-full items-center gap-2 border-b border-hover pl-11 text-left text-[12.5px] text-mut2 hover:bg-hover hover:text-fg3">
-                    <Icon name="plus" size={13} />New project in {a.name}
+                    <Icon name="plus" size={13} />{tx("New project in")}{" "}{a.name}
                   </button>
                 ))}
               </div>
@@ -176,14 +178,12 @@ export function ProjectsView({ areas, projects, usage, today, desktop }: {
           {draft?.kind === "area" && (
             <div className="flex h-[38px] items-center gap-2 border-b border-line bg-raised pl-11 pr-3">
               <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: nextColor(areas.map((a) => a.color)) }} />
-              <InlineName initial="" placeholder="Area name, like Work or Health" className="max-w-80" onSave={createArea} onCancel={() => setDraft(null)} />
+              <InlineName initial="" placeholder={tx("Area name, like Work or Health")} className="max-w-80" onSave={createArea} onCancel={() => setDraft(null)} />
             </div>
           )}
 
           <p className="px-5 py-4 text-[12px] leading-relaxed text-mut2">
-            Right-click an area or project, or use its <Icon name="more" size={13} className="inline-block align-[-2px]" /> menu, to rename it, change its color or delete it.
-            Deleting keeps the tasks: a project&apos;s tasks stay in its area, an area&apos;s tasks move to the Inbox.
-          </p>
+            {tx("Right-click an area or project, or use its")}<Icon name="more" size={13} className="inline-block align-[-2px]" /> {tx("menu, to rename it, change its color or delete it. Deleting keeps the tasks: a project's tasks stay in its area, an area's tasks move to the Inbox.")}</p>
         </div>
       )}
 

@@ -3,6 +3,14 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("pacedMindDesktop", {
+  setLanguage(language) {
+    if (language === "en" || language === "pl") ipcRenderer.send("pacedmind:set-language", language);
+  },
+  onLanguageChanged(listener) {
+    const receive = (_event, language) => { if (language === "en" || language === "pl") listener(language); };
+    ipcRenderer.on("pacedmind:language-changed", receive);
+    return () => ipcRenderer.removeListener("pacedmind:language-changed", receive);
+  },
   initialTheme: process.argv.includes("--pacedmind-theme=light") ? "light" : "dark",
   setTheme(theme, preference) {
     if (theme === "dark" || theme === "light") ipcRenderer.send("pacedmind:set-theme", theme, preference === "system" ? "system" : theme);

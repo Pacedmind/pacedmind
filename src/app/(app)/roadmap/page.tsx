@@ -1,3 +1,4 @@
+import { getTranslation } from "@/server/i18n";
 import { Roadmap, type RoadmapItem } from "@/components/views/roadmap";
 import * as repo from "@/server/repo";
 import { taskContext } from "@/server/views";
@@ -12,6 +13,7 @@ import { terminalFor } from "@/lib/terminals";
 const WEEKS = 14;
 
 export default async function RoadmapPage(props: PageProps<"/roadmap">) {
+  const tx = await getTranslation();
   const sp = await props.searchParams;
   const now = new Date();
   const [projects, tasks, edges, all, areas] = await Promise.all([
@@ -47,7 +49,7 @@ export default async function RoadmapPage(props: PageProps<"/roadmap">) {
       stats={projectStats(projects, tasks)}
       selectedId={project?.id ?? null}
       items={items}
-      terminal={MODE !== "desktop" ? "a terminal on your computer" : terminalFor(deviceConfig().terminal, process.platform).label}
+      terminal={MODE !== "desktop" ? tx("a terminal on your computer") : terminalFor(deviceConfig().terminal, process.platform).label}
       waiting={all.filter((s) => s.status === "finished").length}
       ctx={await taskContext(own)}
       initialKey={typeof sp.task === "string" ? sp.task : null}

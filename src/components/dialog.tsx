@@ -1,4 +1,5 @@
 "use client";
+import { useTranslation } from "@/components/language";
 
 import { useEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
@@ -17,6 +18,7 @@ export function ConfirmDialog({ title, children, confirmLabel, danger, typed, on
   onConfirm: () => void;
   onCancel: () => void;
 }) {
+  const tx = useTranslation();
   const [text, setText] = useState("");
   const ready = !typed || text.trim().toLowerCase() === typed.toLowerCase();
   useEffect(() => {
@@ -37,13 +39,13 @@ export function ConfirmDialog({ title, children, confirmLabel, danger, typed, on
         <div className="text-[13px] leading-relaxed text-mut">{children}</div>
         {typed && (
           <label className="flex flex-col gap-1.5 text-[12.5px] text-mut">
-            <span>Type <span className="font-semibold text-fg2">{typed}</span> to confirm</span>
+            <span>{tx("Type")} <span className="font-semibold text-fg2">{typed}</span> {tx("to confirm")}</span>
             <input autoFocus value={text} onChange={(e) => setText(e.target.value)} spellCheck={false} autoComplete="off"
               className="h-8 rounded-md border border-line2 bg-input px-2.5 text-[13px] text-fg2 outline-none focus:border-line-strong" />
           </label>
         )}
         <div className="mt-2 flex justify-end gap-2">
-          <Button variant="ghost" onClick={onCancel}>Cancel</Button>
+          <Button variant="ghost" onClick={onCancel}>{tx("Cancel")}</Button>
           <Button onClick={onConfirm} autoFocus={!typed} disabled={!ready}
             className={danger ? "border-danger-line bg-danger-bg text-danger-fg hover:bg-danger-hover" : "border-transparent bg-accent-strong text-white hover:brightness-110"}>
             {confirmLabel}

@@ -1,9 +1,11 @@
 "use client";
+import { useTranslation } from "@/components/language";
+import { type Translator } from "@/lib/i18n";
 
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { commonmarkLanguage, markdown } from "@codemirror/lang-markdown";
 import { HighlightStyle, syntaxHighlighting, syntaxTree } from "@codemirror/language";
-import { EditorSelection, EditorState, type Range, type StateCommand } from "@codemirror/state";
+import { Compartment, EditorSelection, EditorState, type Range, type StateCommand } from "@codemirror/state";
 import {
   Decoration, EditorView, ViewPlugin, WidgetType, keymap, placeholder as placeholderText, type DecorationSet, type ViewUpdate,
 } from "@codemirror/view";
@@ -32,11 +34,11 @@ class Bullet extends WidgetType {
 const hide = Decoration.replace({});
 const bullet = Decoration.replace({ widget: new Bullet() });
 const inlineCode = Decoration.mark({ class: "cm-md-icode" });
-const link = Decoration.mark({ class: "cm-md-link", attributes: { title: "Ctrl+click to open" } });
+const link = (tx: Translator) => (Decoration.mark({ class: "cm-md-link", attributes: { title: tx("Ctrl+click to open") } }));
 const quoteLine = Decoration.line({ class: "cm-md-quote" });
 const fenceLine = Decoration.line({ class: "cm-md-fence" });
 
-function decorations(view: EditorView): DecorationSet {
+function decorations(view: EditorView, tx: Translator): DecorationSet {
   const { state } = view;
   const doc = state.doc;
   // The lines with the cursor or the selection show their marks, while the editor has focus.
@@ -81,14 +83,14 @@ function decorations(view: EditorView): DecorationSet {
             if (parent === "ListItem" && node.node.parent?.parent?.name === "BulletList" && !shown(node.from)) out.push(bullet.range(node.from, node.to));
             break;
           case "Link":
-            out.push(link.range(node.from, node.to));
+            out.push(link(tx).range(node.from, node.to));
             break;
           case "LinkMark": case "LinkTitle":
             if (parent === "Link" && !shown(node.from)) out.push(hide.range(node.from, node.to));
             break;
           case "URL":
             if (parent === "Link") { if (!shown(node.from)) out.push(hide.range(node.from, node.to)); }
-            else out.push(link.range(node.from, node.to));
+            else out.push(link(tx).range(node.from, node.to));
             break;
         }
       },
@@ -97,11 +99,11 @@ function decorations(view: EditorView): DecorationSet {
   return Decoration.set(out, true);
 }
 
-const livePreview = ViewPlugin.fromClass(class {
+const livePreview = (tx: Translator) => ViewPlugin.fromClass(class {
   decorations: DecorationSet;
-  constructor(view: EditorView) { this.decorations = decorations(view); }
+  constructor(view: EditorView) { this.decorations = decorations(view, tx); }
   update(u: ViewUpdate) {
-    if (u.docChanged || u.selectionSet || u.viewportChanged || u.focusChanged) this.decorations = decorations(u.view);
+    if (u.docChanged || u.selectionSet || u.viewportChanged || u.focusChanged) this.decorations = decorations(u.view, tx);
   }
 }, { decorations: (v) => v.decorations });
 
@@ -164,8 +166,10 @@ export function MarkdownEditor({ value, onChange, onBlur, placeholder, label, au
   /** The text's size and color, and its height limits. */
   className?: string;
 }) {
+  const tx = useTranslation();
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
+  const languageConfig = useRef(new Compartment());
   // The latest callbacks, so the editor made once always calls them.
   const handlers = useRef({ onChange, onBlur });
   useEffect(() => { handlers.current = { onChange, onBlur }; });
@@ -180,11 +184,9 @@ export function MarkdownEditor({ value, onChange, onBlur, placeholder, label, au
           keymap.of([{ key: "Mod-b", run: wrap("**") }, { key: "Mod-i", run: wrap("*") }, ...historyKeymap, ...keys]),
           markdown({ base: commonmarkLanguage, extensions: [Autolink] }),
           syntaxHighlighting(style),
-          livePreview,
+          languageConfig.current.of([livePreview(tx), EditorView.contentAttributes.of({ "aria-label": label, "aria-multiline": "true" }), placeholder ? placeholderText(placeholder) : []]),
           theme,
           EditorView.lineWrapping,
-          EditorView.contentAttributes.of({ "aria-label": label, "aria-multiline": "true" }),
-          placeholder ? placeholderText(placeholder) : [],
           EditorView.domEventHandlers({
             mousedown(e, v) {
               if (!(e.ctrlKey || e.metaKey)) return false;
@@ -209,6 +211,10 @@ export function MarkdownEditor({ value, onChange, onBlur, placeholder, label, au
     // Made once; later values come in through the effect below.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    view.current?.dispatch({ effects: languageConfig.current.reconfigure([livePreview(tx), EditorView.contentAttributes.of({ "aria-label": label, "aria-multiline": "true" }), placeholder ? placeholderText(placeholder) : []]) });
+  }, [tx, label, placeholder]);
 
   // A value changed from outside (quick add cleared for the next task, say).
   useEffect(() => {

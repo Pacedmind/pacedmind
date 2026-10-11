@@ -1,4 +1,6 @@
 "use client";
+import { useTranslation } from "@/components/language";
+import { type Translator } from "@/lib/i18n";
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -16,16 +18,16 @@ import { SIDEBAR_DEFAULT, SIDEBAR_MIN, clampWidth, setSidebarLayout, toggleSideb
 import { cx, useAction } from "./ui";
 import { ThemeToggle } from "./theme";
 
-const NAV: { href: string; label: string; icon: IconName; count?: "inbox" | "today" | "sessions" }[] = [
-  { href: "/inbox", label: "Inbox", icon: "inbox", count: "inbox" },
-  { href: "/today", label: "Today", icon: "sun", count: "today" },
-  { href: "/upcoming", label: "Upcoming", icon: "clock" },
-  { href: "/calendar", label: "Calendar", icon: "calendar" },
-  { href: "/timeline", label: "Timeline", icon: "timeline" },
-  { href: "/projects", label: "Projects", icon: "box" },
-  { href: "/roadmap", label: "Roadmap", icon: "roadmap" },
-  { href: "/sessions", label: "Sessions", icon: "terminal", count: "sessions" },
-];
+const NAV = (tx: Translator): { href: string; label: string; icon: IconName; count?: "inbox" | "today" | "sessions" }[] => ([
+  { href: "/inbox", label: tx("Inbox"), icon: "inbox", count: "inbox" },
+  { href: "/today", label: tx("Today"), icon: "sun", count: "today" },
+  { href: "/upcoming", label: tx("Upcoming"), icon: "clock" },
+  { href: "/calendar", label: tx("Calendar"), icon: "calendar" },
+  { href: "/timeline", label: tx("Timeline"), icon: "timeline" },
+  { href: "/projects", label: tx("Projects"), icon: "box" },
+  { href: "/roadmap", label: tx("Roadmap"), icon: "roadmap" },
+  { href: "/sessions", label: tx("Sessions"), icon: "terminal", count: "sessions" },
+]);
 
 export function openQuickAdd() {
   window.dispatchEvent(new CustomEvent("organizer:new"));
@@ -48,9 +50,10 @@ function AreaDot({ area }: { area: Pick<Area, "id" | "color" | "icon" | "picture
 }
 
 function SectionHeader({ label, addLabel, onAdd }: { label: string; addLabel: string; onAdd: (a: Anchor) => void }) {
+  const tx = useTranslation();
   return (
     <div className="group flex h-[26px] items-center pl-2 pr-1">
-      <Link href="/projects" title="All areas and projects" className="mr-auto text-[12px] font-medium text-mut2 hover:text-fg3">{label}</Link>
+      <Link href="/projects" title={tx("All areas and projects")} className="mr-auto text-[12px] font-medium text-mut2 hover:text-fg3">{label}</Link>
       <button type="button" aria-label={addLabel} title={addLabel} onMouseDown={(e) => e.stopPropagation()} onClick={(e) => onAdd(anchorOf(e.currentTarget))}
         className="flex h-5 w-5 items-center justify-center rounded text-mut opacity-0 hover:bg-hover hover:text-fg2 focus-visible:opacity-100 group-hover:opacity-100 pointer-coarse:opacity-100">
         <Icon name="plus" size={13} />
@@ -86,6 +89,7 @@ function MenuRow({ href, active, open, selected, dragged, drop, label, onMenu, o
   children: ReactNode; trailing?: ReactNode;
   group?: { expanded: boolean; onToggle: () => void; onAdd: () => void };
 }) {
+  const tx = useTranslation();
   const onContextMenu = (e: MouseEvent) => { e.preventDefault(); onMenu({ x: e.clientX, y: e.clientY }); };
   // With Ctrl, ⌘ or Shift the browser would open the page in a new tab or window.
   const onClick = (e: MouseEvent) => {
@@ -98,22 +102,22 @@ function MenuRow({ href, active, open, selected, dragged, drop, label, onMenu, o
   };
   return (
     <div className={cx("group relative", group && "flex items-center", dragged && "opacity-40")} onContextMenu={onContextMenu} draggable {...drag}>
-      {group && <button type="button" aria-label={`${group.expanded ? "Collapse" : "Expand"} ${label}`} aria-expanded={group.expanded}
+      {group && <button type="button" aria-label={`${group.expanded ? tx("Collapse") : tx("Expand")} ${label}`} aria-expanded={group.expanded}
         onClick={group.onToggle} className="flex h-6 w-5 shrink-0 items-center justify-center rounded text-mut2 hover:bg-hover hover:text-fg2">
         <Icon name={group.expanded ? "chevronDown" : "chevronRight"} size={12} />
       </button>}
-      <Link href={href} draggable onClick={onClick} title={group ? `${label} · Drag to reorder area` : label}
+      <Link href={href} draggable onClick={onClick} title={group ? tx("{0} · Drag to reorder area", [label]) : label}
         className={cx(item, group && "min-w-0 flex-1 gap-2 px-1 text-[12px] font-medium", active && "bg-sel text-strong", open && "bg-hover", selected && "bg-accent/[0.17] text-strong hover:bg-accent/[0.22]")}>
         {children}
         {trailing && <span className={cx("group-hover:opacity-0 group-has-[:focus-visible]:opacity-0 pointer-coarse:mr-7 pointer-coarse:opacity-100", open && "opacity-0")}>{trailing}</span>}
       </Link>
-      {group && <button type="button" aria-label={`New project in ${label}`} title={`New project in ${label}`} onClick={group.onAdd}
+      {group && <button type="button" aria-label={tx("New project in {0}", [label])} title={tx("New project in {0}", [label])} onClick={group.onAdd}
         // Like the "…", only while the row is hovered or its menu is open; a touch screen always shows it.
         className={cx("flex h-6 w-6 shrink-0 items-center justify-center rounded text-mut2 opacity-0 hover:bg-hover hover:text-fg2 focus-visible:opacity-100 group-hover:opacity-100 pointer-coarse:opacity-100",
           open && "opacity-100")}>
         <Icon name="plus" size={13} />
       </button>}
-      <MoreButton label={`${label} options`} open={open} onOpen={onMenu} onClose={onClose}
+      <MoreButton label={tx("{0} options", [label])} open={open} onOpen={onMenu} onClose={onClose}
         className={cx(!group && "absolute right-1 top-[3px]", "pointer-coarse:opacity-100")} />
       {drop && <span aria-hidden className={cx("pointer-events-none absolute inset-x-1 h-0.5 rounded-full bg-accent", drop === "before" ? "-top-px" : "-bottom-px")} />}
     </div>
@@ -129,6 +133,7 @@ export function Sidebar({ areas: savedAreas, projects: savedProjects, counts, us
   usage: Usage;
   desktop: boolean;
 }) {
+  const tx = useTranslation();
   const path = usePathname();
   const router = useRouter();
   const { run } = useAction();
@@ -393,7 +398,7 @@ export function Sidebar({ areas: savedAreas, projects: savedProjects, counts, us
         onMouseEnter={() => { if (layout.hidden) setPeek(true); }}
         // Out of the strip and the sidebar over the page, a peek goes back, unless one of its menus is open.
         onMouseLeave={() => { if (!menu && !bulk) setPeek(false); }}>
-      <nav ref={nav} aria-label="Main"
+      <nav ref={nav} aria-label={tx("Main")}
         // A link opens its page and ends the selection; on a phone the panel gets out of the way. A click with
         // Ctrl, ⌘ or Shift selected a row instead.
         onClick={(e) => {
@@ -409,20 +414,20 @@ export function Sidebar({ areas: savedAreas, projects: savedProjects, counts, us
           layout.hidden && "md:absolute md:inset-y-0 md:left-0 md:z-50 md:rounded-r-[10px] md:border md:border-l-0 md:border-line md:bg-bg md:shadow-[var(--shadow-popover)] md:transition-[transform,visibility] md:duration-150",
           layout.hidden && !peek && "md:invisible md:-translate-x-full")}>
         <div className="flex items-center gap-1.5">
-          <button type="button" onClick={() => { setDrawer(false); window.dispatchEvent(new CustomEvent("organizer:palette")); }} aria-label="Search (Ctrl+K)" title="Search (Ctrl+K)"
+          <button type="button" onClick={() => { setDrawer(false); window.dispatchEvent(new CustomEvent("organizer:palette")); }} aria-label={tx("Search (Ctrl+K)")} title={tx("Search (Ctrl+K)")}
             className="flex h-[30px] flex-1 items-center gap-2 rounded-md px-2 text-mut hover:bg-hover">
             <Icon name="search" size={14} />
-            <span className="text-[12px]">Search</span>
+            <span className="text-[12px]">{tx("Search")}</span>
             <kbd className="ml-auto text-[10px] text-dim max-md:hidden">Ctrl K</kbd>
           </button>
-          <button type="button" onClick={() => { setDrawer(false); openQuickAdd(); }} aria-label="New task (C)" title="New task (C)"
+          <button type="button" onClick={() => { setDrawer(false); openQuickAdd(); }} aria-label={tx("New task (C)")} title={tx("New task (C)")}
             className="flex h-[30px] w-[30px] items-center justify-center rounded-md border border-line2 bg-raised text-fg2 hover:bg-hover">
             <Icon name="pen" size={15} />
           </button>
         </div>
 
         <div className="flex flex-col gap-px">
-          {NAV.map((n) => (
+          {NAV(tx).map((n) => (
             <Link key={n.href} href={n.href} className={cx(item, active(n.href) && "bg-sel text-strong")}>
               <Icon name={n.icon} />
               <span className="flex-1">{n.label}</span>
@@ -432,19 +437,19 @@ export function Sidebar({ areas: savedAreas, projects: savedProjects, counts, us
         </div>
 
         <div className="flex flex-col gap-px" {...listDrop("area")}>
-          <SectionHeader label="Areas & projects" addLabel="New area" onAdd={() => setDraft({ kind: "area" })} />
+          <SectionHeader label={tx("Areas & projects")} addLabel={tx("New area")} onAdd={() => setDraft({ kind: "area" })} />
           {areas.map((a, index) => {
             const list = projects.filter((p) => p.areaId === a.id);
             const shut = collapsed[a.id];
             const state = rowState("area", a.id);
             return (
-              <section key={a.id} aria-label={`${a.name} projects`}
+              <section key={a.id} aria-label={tx("{0} projects", [a.name])}
                 className={cx("relative pb-1", index > 0 && "mt-1 border-t border-line pt-2", state.dragged && "opacity-40", dropArea === a.id && "rounded-md bg-accent/10 ring-1 ring-inset ring-accent/40")}
                 onDrop={(e) => dropProjects(e, a.id)} onDragOver={(e) => rowDrag("area", a.id).onDragOver(e)}>
                 {renaming === `area:${a.id}` ? (
                   <div className={cx(editing, "pl-6")}>
                     <AreaDot area={a} />
-                    <InlineName initial={a.name} placeholder="Area name" onCancel={() => setRenaming(null)}
+                    <InlineName initial={a.name} placeholder={tx("Area name")} onCancel={() => setRenaming(null)}
                       onSave={(name) => { setRenaming(null); run(() => updateAreaAction(a.id, { name })); }} />
                   </div>
                 ) : (
@@ -456,21 +461,21 @@ export function Sidebar({ areas: savedAreas, projects: savedProjects, counts, us
                 )}
                 {!shut && <div className="ml-7 flex flex-col gap-px border-l border-line pl-2" {...listDrop("project", a.id)}>
                   {/* The area's own tasks, outside its projects: small things like replying to an email or logging hours. */}
-                  <Link href={`/area/${a.id}/todos`} title={`Tasks in ${a.name} outside its projects`}
+                  <Link href={`/area/${a.id}/todos`} title={tx("Tasks in {0} outside its projects", [a.name])}
                     className={cx(item, active(`/area/${a.id}/todos`) && "bg-sel text-strong")}>
                     <Icon name="check" size={15} className="shrink-0 text-mut2" />
-                    <span className="flex-1 truncate">To-dos</span>
+                    <span className="flex-1 truncate">{tx("To-dos")}</span>
                     {(usage.areas[a.id]?.loose ?? 0) > 0 && <span className="text-[11.5px] text-mut2">{usage.areas[a.id].loose}</span>}
                   </Link>
                   {list.map((p) => renaming === `project:${p.id}` ? (
                     <div key={p.id} className={editing}>
                       <ProgressRing pct={usage.projects[p.id]?.pct ?? 0} color={projectColor(p, areas)} size={16} />
-                      <InlineName initial={p.name} placeholder="Project name" onCancel={() => setRenaming(null)}
+                      <InlineName initial={p.name} placeholder={tx("Project name")} onCancel={() => setRenaming(null)}
                         onSave={(name) => { setRenaming(null); run(() => updateProjectAction(p.id, { name })); }} />
                     </div>
                   ) : (
                     <MenuRow key={p.id} href={`/project/${p.id}`} active={active(`/project/${p.id}`)} label={p.name} {...rowState("project", p.id)} drag={rowDrag("project", p.id)}
-                      trailing={p.targetDate && <span className="text-[11.5px] text-mut2">{fmtShort(p.targetDate)}</span>}>
+                      trailing={p.targetDate && <span className="text-[11.5px] text-mut2">{fmtShort(p.targetDate, tx.language)}</span>}>
                       <ProgressRing pct={usage.projects[p.id]?.pct ?? 0} color={projectColor(p, areas)} size={16} />
                       <span className="flex-1 truncate">{p.name}</span>
                     </MenuRow>
@@ -478,13 +483,12 @@ export function Sidebar({ areas: savedAreas, projects: savedProjects, counts, us
                   {draft?.kind === "project" && draft.areaId === a.id ? (
                     <div className={editing}>
                       <ProgressRing pct={0} color={a.color} size={16} />
-                      <InlineName initial="" placeholder={`Project in ${a.name}`} onCancel={() => setDraft(null)}
+                      <InlineName initial="" placeholder={tx("Project in {0}", [a.name])} onCancel={() => setDraft(null)}
                         onSave={(name) => createProject(name, a.id)} />
                     </div>
                   ) : !list.length && (
                     <button type="button" onClick={() => newProject(a.id)} className={cx(item, "text-[12px] text-mut2")}>
-                      <Icon name="plus" size={13} />New project
-                    </button>
+                      <Icon name="plus" size={13} />{tx("New project")}</button>
                   )}
                 </div>}
                 {state.drop && <span aria-hidden className={cx("pointer-events-none absolute inset-x-1 h-0.5 rounded-full bg-accent", state.drop === "before" ? "-top-px" : "-bottom-px")} />}
@@ -494,12 +498,11 @@ export function Sidebar({ areas: savedAreas, projects: savedProjects, counts, us
           {draft?.kind === "area" ? (
             <div className={editing}>
               <AreaDot area={{ id: "new", color: nextColor(areas.map((a) => a.color)), icon: null, picture: null }} />
-              <InlineName initial="" placeholder="Area name" onSave={createArea} onCancel={() => setDraft(null)} />
+              <InlineName initial="" placeholder={tx("Area name")} onSave={createArea} onCancel={() => setDraft(null)} />
             </div>
           ) : !areas.length && (
             <button type="button" onClick={() => setDraft({ kind: "area" })} className={cx(item, "text-mut")}>
-              <Icon name="plus" size={14} />New area
-            </button>
+              <Icon name="plus" size={14} />{tx("New area")}</button>
           )}
         </div>
 
@@ -507,7 +510,7 @@ export function Sidebar({ areas: savedAreas, projects: savedProjects, counts, us
         <div className="flex items-center gap-1.5">
           <Link href="/settings" className={cx(item, "flex-1 text-mut", active("/settings") && "bg-sel text-strong")}>
             <Icon name="settings" />
-            <span className="flex-1">Settings</span>
+            <span className="flex-1">{tx("Settings")}</span>
           </Link>
           <ThemeToggle />
         </div>
@@ -532,8 +535,8 @@ export function Sidebar({ areas: savedAreas, projects: savedProjects, counts, us
         )}
       </nav>
       {!layout.hidden && (
-        <div role="separator" aria-orientation="vertical" aria-label="Sidebar width" aria-valuenow={width} tabIndex={0}
-          title="Drag to resize, double-click to reset. Ctrl+B hides the sidebar."
+        <div role="separator" aria-orientation="vertical" aria-label={tx("Sidebar width")} aria-valuenow={width} tabIndex={0}
+          title={tx("Drag to resize, double-click to reset. Ctrl+B hides the sidebar.")}
           onPointerDown={startResize} onDoubleClick={() => setSidebarLayout({ width: SIDEBAR_DEFAULT })}
           onKeyDown={(e) => {
             const step = e.key === "ArrowLeft" ? -16 : e.key === "ArrowRight" ? 16 : 0;

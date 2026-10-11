@@ -1,4 +1,5 @@
 import type { Session, SessionUsage, TokenCounts } from "./types";
+import { createTranslator, type Language } from "./i18n";
 
 /*
  * What agents used, as their usage metrics report it (the usage route): tokens per session and how long it worked,
@@ -27,12 +28,13 @@ export function fmtTokens(n: number): string {
 }
 
 /** "1.2M tokens, 1.1M of them from cache, 12k output" for a session's usage. */
-export function tokensLine(t: TokenCounts): string {
+export function tokensLine(t: TokenCounts, language: Language = "en"): string {
+  const tx = createTranslator(language);
   const total = tokenTotal(t);
-  if (!total) return "no tokens yet";
-  const parts = [`${fmtTokens(total)} tokens`];
-  if (t.cacheRead) parts.push(`${fmtTokens(t.cacheRead)} of them from cache`);
-  parts.push(`${fmtTokens(t.output)} output`);
+  if (!total) return tx("no tokens yet");
+  const parts = [tx("{0} tokens", [fmtTokens(total)])];
+  if (t.cacheRead) parts.push(tx("{0} of them from cache", [fmtTokens(t.cacheRead)]));
+  parts.push(tx("{0} output", [fmtTokens(t.output)]));
   return parts.join(", ");
 }
 
@@ -64,14 +66,19 @@ export const sessionUse = (s: Session): AgentUse => ({
 export const hasUse = (u: AgentUse | undefined): u is AgentUse => !!u && (u.tokens > 0 || u.ms > 0);
 
 /** "1.2M tokens · 42 min working"; empty when nothing was reported. */
-export const usageText = (u: AgentUse) =>
-  [u.tokens ? `${fmtTokens(u.tokens)} tokens` : null, u.ms ? `${fmtSpan(u.ms)} working` : null].filter(Boolean).join(" · ");
+export const usageText = (u: AgentUse, language: Language = "en") => {
+  const tx = createTranslator(language);
+  return [u.tokens ? tx("{0} tokens", [fmtTokens(u.tokens)]) : null, u.ms ? tx("{0} working", [fmtSpan(u.ms)]) : null].filter(Boolean).join(" · ");
+};
 
 /** "1.2M tokens · 42 min working · 2 sessions". */
-export const agentUseLine = (u: AgentUse) => [usageText(u), `${u.sessions} ${u.sessions === 1 ? "session" : "sessions"}`].filter(Boolean).join(" · ");
+export const agentUseLine = (u: AgentUse, language: Language = "en") => [usageText(u, language), createTranslator(language).count(u.sessions, "session")].filter(Boolean).join(" · ");
 
 /** "agents: 1.2M tokens" (or their working time, without tokens), for a header. */
-export const agentUseShort = (u: AgentUse) => `agents: ${u.tokens ? `${fmtTokens(u.tokens)} tokens` : fmtSpan(u.ms)}`;
+export const agentUseShort = (u: AgentUse, language: Language = "en") => {
+  const tx = createTranslator(language);
+  return tx("agents: {0}", [u.tokens ? tx("{0} tokens", [fmtTokens(u.tokens)]) : fmtSpan(u.ms)]);
+};
 
 export const addUse = (a: AgentUse, b: AgentUse): AgentUse => ({
   sessions: a.sessions + b.sessions, tokens: a.tokens + b.tokens, ms: a.ms + b.ms,

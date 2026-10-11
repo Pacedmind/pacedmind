@@ -1,8 +1,9 @@
 "use client";
+import { useTranslation } from "@/components/language";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
-import { addMinutes, format } from "date-fns";
+import { addMinutes} from "date-fns";
 import { createEventAction, createTaskAction } from "@/app/actions";
 import { parseQuickAdd } from "@/lib/parse";
 import { hhmm, parseLocal, timeOf, toDateTimeStr, dateOnly } from "@/lib/dates";
@@ -50,6 +51,7 @@ const HIGHLIGHT: Record<string, string> = {
 };
 
 export function QuickAdd({ areas, projects }: { areas: Area[]; projects: Project[] }) {
+  const tx = useTranslation();
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<"task" | "activity">("task");
   const [text, setText] = useState("");
@@ -118,7 +120,7 @@ export function QuickAdd({ areas, projects }: { areas: Area[]; projects: Project
   const agent = agentOf({ agent: doer }, project?.agent);
   const runIn = agent ? (ov.runIn !== undefined ? ov.runIn : defaults.runIn ?? null) : null;
   const modelSettings = agent && ov.modelSettings?.agent === agent && ov.modelProject === projectId ? ov.modelSettings : null;
-  const doerLabel = DOER_LABEL[doer ?? agent!];
+  const doerLabel = tx(DOER_LABEL[doer ?? agent!]);
   // Where its sessions go: the task's computer, else its project's, else the one PacedMind picks.
   const runsOn = deviceId ?? project?.deviceId ?? null;
   const { device } = useTaskDevice(runsOn, agent ?? "claude", needs);
@@ -157,7 +159,7 @@ export function QuickAdd({ areas, projects }: { areas: Area[]; projects: Project
 
   const submit = () => {
     const title = parsed.title || text.trim();
-    if (!title) { toast("Give it a title first", "error"); return; }
+    if (!title) { toast(tx("Give it a title first"), "error"); return; }
     if (mode === "task") {
       run(async () => {
         const r = await createTaskAction({
@@ -166,7 +168,7 @@ export function QuickAdd({ areas, projects }: { areas: Area[]; projects: Project
           labels: parsed.labels, estimateMin: parsed.durationMin ?? undefined, doneWhen: doneItems,
           agent: doer, runIn, modelSettings, deviceId: agent ? deviceId : null, needs: agent ? needs : [],
         });
-        if (r.ok) toast(`Created ${r.key}`);
+        if (r.ok) toast(tx("Created {0}", [r.key]));
         return r.ok ? undefined : r;
       });
     } else {
@@ -176,7 +178,7 @@ export function QuickAdd({ areas, projects }: { areas: Area[]; projects: Project
         const r = await createEventAction({
           title, areaId, start: toDateTimeStr(s), end: toDateTimeStr(addMinutes(s, duration)), recurrence: weekly ? "weekly" : null,
         });
-        if (r.ok) toast(`Added ${title} to the calendar`);
+        if (r.ok) toast(tx("Added {0} to the calendar", [title]));
         return r.ok ? undefined : r;
       });
     }
@@ -196,22 +198,22 @@ export function QuickAdd({ areas, projects }: { areas: Area[]; projects: Project
   segments.push({ text: text.slice(pos) });
 
   const summary = mode === "task"
-    ? [due && `due ${format(parseLocal(due), timeOf(due) ? "EEE d MMM 'at' HH:mm" : "EEE d MMM")}`,
-      priority ? `${PRIORITY_LABEL[priority].toLowerCase()} priority` : null,
-      parsed.labels.length ? `label ${parsed.labels.join(", ")}` : null,
-      project && `in ${project.name}`,
-      parsed.durationMin && `about ${parsed.durationMin} min`].filter(Boolean).join(", ")
-    : [start ? format(parseLocal(start), "EEE d MMM, HH:mm") : "Starts now", `${duration} min`, weekly && "repeats weekly"].filter(Boolean).join(", ");
+    ? [due && tx("due {0}", [tx.date(parseLocal(due), timeOf(due) ? "EEE d MMM 'at' HH:mm" : "EEE d MMM")]),
+      priority ? tx("{0} priority", [tx(PRIORITY_LABEL[priority]).toLowerCase()]) : null,
+      parsed.labels.length ? tx("label {0}", [parsed.labels.join(", ")]) : null,
+      project && tx("in {0}", [project.name]),
+      parsed.durationMin && tx("about {0} min", [parsed.durationMin])].filter(Boolean).join(", ")
+    : [start ? tx.date(parseLocal(start), "EEE d MMM, HH:mm") : tx("Starts now"), `${duration} min`, weekly && tx("repeats weekly")].filter(Boolean).join(", ");
 
   const chip = "flex h-7 items-center gap-1.5 rounded-md border border-ctl bg-hover px-2 text-[12.5px] text-fg3 hover:bg-sel";
   // For values that can be long (computer, servers, model): they shorten instead of taking the row.
   const wide = cx(chip, "max-w-[220px]");
-  const placeLabel = (surface: Surface) => surface === "desktop" ? APP_LABEL[agent!] : surface === "cloud" ? "Cloud" : "Terminal";
+  const placeLabel = (surface: Surface) => surface === "desktop" ? tx(APP_LABEL[agent!]) : surface === "cloud" ? tx("Cloud") : tx("Terminal");
   const found = "border-accent/45 bg-accent/10 text-accent-fg";
 
   return (
     <div className="fixed inset-0 z-50 flex justify-center bg-overlay pt-24 max-md:px-3 max-md:pt-3" onMouseDown={(e) => { if (e.target === e.currentTarget) close(); }}>
-      <div role="dialog" aria-label={mode === "task" ? "New task" : "New activity"}
+      <div role="dialog" aria-label={mode === "task" ? tx("New task") : tx("New activity")}
         className="flex h-fit max-h-[calc(100dvh-7rem)] w-[640px] max-w-full flex-col rounded-xl border border-line2 bg-raised shadow-[var(--shadow-popover)] max-md:max-h-[calc(100dvh-1.5rem)]"
         onKeyDown={(e) => {
           if (e.key === "Escape") close();
@@ -219,16 +221,16 @@ export function QuickAdd({ areas, projects }: { areas: Area[]; projects: Project
         }}>
         <div className="flex h-12 shrink-0 items-center gap-2 pl-4 pr-3">
           <Menu
-            trigger={<button type="button" className={chip}>{area ? <AreaMark area={area} size={13} /> : <Icon name="inbox" size={13} />}{area?.name ?? "Inbox"}<Icon name="chevronDown" size={12} /></button>}
-            items={[{ value: null as string | null, label: "Inbox, no area", icon: <Icon name="inbox" size={13} /> },
+            trigger={<button type="button" className={chip}>{area ? <AreaMark area={area} size={13} /> : <Icon name="inbox" size={13} />}{area?.name ?? tx("Inbox")}<Icon name="chevronDown" size={12} /></button>}
+            items={[{ value: null as string | null, label: tx("Inbox, no area"), icon: <Icon name="inbox" size={13} /> },
               ...areas.map((a) => ({ value: a.id as string | null, label: a.name, icon: <AreaMark area={a} size={13} /> }))]}
             onSelect={(v) => setOv((o) => ({ ...o, areaId: v, projectId: project?.areaId !== v ? null : o.projectId }))}
           />
           <span className="text-faint">›</span>
-          <span className="text-[12.5px] text-mut">{mode === "task" ? "New task" : "New activity"}</span>
+          <span className="text-[12.5px] text-mut">{mode === "task" ? tx("New task") : tx("New activity")}</span>
           <span className="flex-1" />
-          <Segmented value={mode} onChange={setMode} options={[{ value: "task", label: "Task" }, { value: "activity", label: "Activity" }]} />
-          <button type="button" aria-label="Close" onClick={close} className="flex h-7 w-7 items-center justify-center rounded-md text-mut hover:bg-hover">
+          <Segmented value={mode} onChange={setMode} options={[{ value: "task", label: tx("Task") }, { value: "activity", label: tx("Activity") }]} />
+          <button type="button" aria-label={tx("Close")} onClick={close} className="flex h-7 w-7 items-center justify-center rounded-md text-mut hover:bg-hover">
             <Icon name="x" size={15} />
           </button>
         </div>
@@ -246,90 +248,90 @@ export function QuickAdd({ areas, projects }: { areas: Area[]; projects: Project
               onKeyUp={(e) => setScroll(e.currentTarget.scrollLeft)}
               onScroll={(e) => setScroll(e.currentTarget.scrollLeft)}
               onKeyDown={(e) => { if (e.key === "Enter" && !e.ctrlKey && !e.metaKey) { e.preventDefault(); submit(); } }}
-              aria-label={mode === "task" ? "Task title" : "Activity title"}
-              placeholder={mode === "task" ? "Send invoice to Acme friday 10:00 !high #finance" : "Climbing with Tomek friday 18:00 for 2h every week"}
+              aria-label={mode === "task" ? tx("Task title") : tx("Activity title")}
+              placeholder={mode === "task" ? tx("Send invoice to Acme friday 10:00 !high #finance") : tx("Climbing with Tomek friday 18:00 for 2h every week")}
               className="relative w-full bg-transparent text-[18px] font-medium leading-7 text-transparent caret-strong outline-none placeholder:text-dim"
             />
           </div>
-          <MarkdownEditor label="Description" value={desc} onChange={setDesc} placeholder="Add description… Markdown works"
+          <MarkdownEditor label={tx("Description")} value={desc} onChange={setDesc} placeholder={tx("Add description… Markdown works")}
             className="max-h-[40vh] min-h-[44px] overflow-y-auto text-[13.5px] text-fg3" />
           {mode === "task" && doneWhen !== null && (
             <div className="flex flex-col gap-1 border-t border-line pb-1 pt-2.5">
-              <span className="text-[12px] font-medium text-fg3">Done when</span>
-              <textarea aria-label="Done when" value={doneWhen} onChange={(e) => setDoneWhen(e.target.value)} rows={3} autoFocus
-                placeholder={"One per line, e.g.\nThe export downloads the rows for the current filters\nA screenshot of the new button"}
+              <span className="text-[12px] font-medium text-fg3">{tx("Done when")}</span>
+              <textarea aria-label={tx("Done when")} value={doneWhen} onChange={(e) => setDoneWhen(e.target.value)} rows={3} autoFocus
+                placeholder={tx("One per line, e.g.\nThe export downloads the rows for the current filters\nA screenshot of the new button")}
                 className="field-sizing-content min-h-[60px] w-full resize-none bg-transparent text-[13px] leading-relaxed text-fg3 outline-none placeholder:text-dim" />
             </div>
           )}
         </div>
 
-        {mode === "task" && <h3 className="px-5 pb-2 text-[12px] font-medium text-fg2">General</h3>}
+        {mode === "task" && <h3 className="px-5 pb-2 text-[12px] font-medium text-fg2">{tx("General")}</h3>}
         <div className="flex flex-wrap gap-1.5 px-5 pb-3.5">
           {mode === "task" ? (
             <>
-              <Menu trigger={<button type="button" className={chip}><StatusIcon status={status} size={13} />{STATUS_LABEL[status]}</button>}
-                items={(["backlog", "todo", "progress"] as Status[]).map((s) => ({ value: s, label: STATUS_LABEL[s], icon: <StatusIcon status={s} size={13} /> }))}
+              <Menu trigger={<button type="button" className={chip}><StatusIcon status={status} size={13} />{tx(STATUS_LABEL[status])}</button>}
+                items={(["backlog", "todo", "progress"] as Status[]).map((s) => ({ value: s, label: tx(STATUS_LABEL[s]), icon: <StatusIcon status={s} size={13} /> }))}
                 onSelect={(v) => setOv((o) => ({ ...o, status: v }))} />
-              <Menu trigger={<button type="button" className={cx(chip, parsed.priority && ov.priority === undefined && found)}><PriorityIcon priority={priority} size={13} />{PRIORITY_LABEL[priority]}</button>}
-                items={([1, 2, 3, 4, 0] as Priority[]).map((p) => ({ value: p, label: PRIORITY_LABEL[p], icon: <PriorityIcon priority={p} size={13} /> }))}
+              <Menu trigger={<button type="button" className={cx(chip, parsed.priority && ov.priority === undefined && found)}><PriorityIcon priority={priority} size={13} />{tx(PRIORITY_LABEL[priority])}</button>}
+                items={([1, 2, 3, 4, 0] as Priority[]).map((p) => ({ value: p, label: tx(PRIORITY_LABEL[p]), icon: <PriorityIcon priority={p} size={13} /> }))}
                 onSelect={(v) => setOv((o) => ({ ...o, priority: v }))} />
               <DateField value={due} onChange={(v) => setOv((o) => ({ ...o, due: v }))}
-                trigger={<button type="button" className={cx(chip, parsed.date && ov.due === undefined && found)}><Icon name="flag" size={13} />{due ? format(parseLocal(due), timeOf(due) ? "EEE d MMM, HH:mm" : "EEE d MMM") : "Due date"}</button>} />
+                trigger={<button type="button" className={cx(chip, parsed.date && ov.due === undefined && found)}><Icon name="flag" size={13} />{due ? tx.date(parseLocal(due), timeOf(due) ? "EEE d MMM, HH:mm" : "EEE d MMM") : tx("Due date")}</button>} />
               <DateField value={planned} withTime={false} onChange={(v) => setOv((o) => ({ ...o, planned: v ? dateOnly(v) : null }))}
-                trigger={<button type="button" className={chip}><Icon name="calendarCheck" size={13} />{planned ? `Planned ${format(parseLocal(planned), "EEE d MMM")}` : "Plan for a day"}</button>} />
-              <Menu trigger={<button type="button" className={cx(chip, projectFromText && ov.projectId === undefined && found)}><Icon name="layers" size={13} />{project?.name ?? "Project"}</button>}
-                items={[{ value: null as string | null, label: "No project" },
+                trigger={<button type="button" className={chip}><Icon name="calendarCheck" size={13} />{planned ? tx("Planned {0}", [tx.date(parseLocal(planned), "EEE d MMM")]) : tx("Plan for a day")}</button>} />
+              <Menu trigger={<button type="button" className={cx(chip, projectFromText && ov.projectId === undefined && found)}><Icon name="layers" size={13} />{project?.name ?? tx("Project")}</button>}
+                items={[{ value: null as string | null, label: tx("No project") },
                   ...projects.filter((p) => !areaId || p.areaId === areaId).map((p) => ({ value: p.id as string | null, label: p.name }))]}
                 onSelect={(v) => setOv((o) => ({ ...o, projectId: v, areaId: v ? projects.find((p) => p.id === v)?.areaId ?? o.areaId : o.areaId }))} />
               {!projectId && related && (
-                <button type="button" onClick={() => setOv((o) => ({ ...o, related: null }))} title="About this project, without being part of it. Click to remove"
-                  className={chip}><Icon name="link" size={13} />About {projects.find((p) => p.id === related)?.name ?? "a project"}<Icon name="x" size={11} /></button>
+                <button type="button" onClick={() => setOv((o) => ({ ...o, related: null }))} title={tx("About this project, without being part of it. Click to remove")}
+                  className={chip}><Icon name="link" size={13} />{tx("About")}{" "}{projects.find((p) => p.id === related)?.name ?? tx("a project")}<Icon name="x" size={11} /></button>
               )}
               {parsed.labels.map((l) => (
                 <span key={l} className={cx(chip, found)}><Icon name="tag" size={13} />{l}</span>
               ))}
               <button type="button" aria-pressed={doneWhen !== null} onClick={() => setDoneWhen((d) => (d === null ? "" : d.trim() ? d : null))}
-                title="What must be true when it's done" className={cx(chip, doneItems.length > 0 && found)}>
-                <Icon name="target" size={13} />{doneItems.length ? `Done when · ${doneItems.length}` : "Done when"}
+                title={tx("What must be true when it's done")} className={cx(chip, doneItems.length > 0 && found)}>
+                <Icon name="target" size={13} />{doneItems.length ? tx("Done when · {0}", [doneItems.length]) : tx("Done when")}
               </button>
             </>
           ) : (
             <>
               <DateField value={start} onChange={(v) => setOv((o) => ({ ...o, due: v }))}
-                trigger={<button type="button" className={cx(chip, parsed.date && found)}><Icon name="calendar" size={13} />{start ? format(parseLocal(start), "EEE d MMM, HH:mm") : "When"}</button>} />
+                trigger={<button type="button" className={cx(chip, parsed.date && found)}><Icon name="calendar" size={13} />{start ? tx.date(parseLocal(start), "EEE d MMM, HH:mm") : tx("When")}</button>} />
               <Menu trigger={<button type="button" className={cx(chip, parsed.durationMin && found)}><Icon name="clock" size={13} />{duration} min</button>}
                 items={[15, 30, 45, 60, 90, 120, 180].map((m) => ({ value: m, label: `${m} min` }))}
                 onSelect={(v) => setOv((o) => ({ ...o, duration: v }))} />
               <button type="button" onClick={() => setOv((o) => ({ ...o, weekly: !weekly }))} className={cx(chip, weekly && found)}>
-                <Icon name="repeat" size={13} />{weekly ? "Every week" : "Does not repeat"}
+                <Icon name="repeat" size={13} />{weekly ? tx("Every week") : tx("Does not repeat")}
               </button>
             </>
           )}
         </div>
 
         {/* Who does it and, for an agent, where its sessions run: a section of its own, apart from the general fields. */}
-        {mode === "task" && <section aria-label={agent ? "Agent" : "Done by"} className="mx-5 mb-3.5 border-t border-line pt-3">
-          <h3 className="pb-2 text-[12px] font-medium text-fg2">{agent ? "Agent" : "Done by"}</h3>
+        {mode === "task" && <section aria-label={agent ? tx("Agent") : tx("Done by")} className="mx-5 mb-3.5 border-t border-line pt-3">
+          <h3 className="pb-2 text-[12px] font-medium text-fg2">{agent ? tx("Agent") : tx("Done by")}</h3>
           <div className="flex flex-wrap gap-1.5">
             <Menu width={260}
-              trigger={<button type="button" aria-label={`Done by: ${doerLabel}`} title={doer ? undefined : "The project's default"} className={chip}>
+              trigger={<button type="button" aria-label={tx("Done by: {0}", [doerLabel])} title={doer ? undefined : tx("The project's default")} className={chip}>
                 {agent ? <AgentIcon agent={agent} size={12} /> : <Icon name="user" size={13} />}{doerLabel}
               </button>}
               items={[
-                { value: "human" as Doer | null, label: DOER_LABEL.human, icon: <Icon name="user" size={13} />, hint: "No agent session" },
-                ...(["claude", "codex"] as const).map((a) => ({ value: a as Doer | null, label: DOER_LABEL[a], icon: <AgentIcon agent={a} size={12} /> })),
-                { value: null, label: project?.agent ? `Project default, ${DOER_LABEL[project.agent]}` : "Default, Claude Code", icon: <Icon name="layers" size={13} /> },
+                { value: "human" as Doer | null, label: tx(DOER_LABEL.human), icon: <Icon name="user" size={13} />, hint: tx("No agent session") },
+                ...(["claude", "codex"] as const).map((a) => ({ value: a as Doer | null, label: tx(DOER_LABEL[a]), icon: <AgentIcon agent={a} size={12} /> })),
+                { value: null, label: project?.agent ? tx("Project default, {0}", [tx(DOER_LABEL[project.agent])]) : tx("Default, Claude Code"), icon: <Icon name="layers" size={13} /> },
               ]}
               onSelect={(v) => setOv((o) => ({ ...o, agent: v, modelSettings: null, ...(v === "human" ? { runIn: null } : {}) }))} />
             {agent && <>
               <Menu width={280}
-                trigger={<button type="button" aria-label={`Run in: ${runIn ? placeLabel(runIn) : "Automatic"}`} className={chip}
-                  title={runIn ? undefined : "Picked automatically: the terminal when the CLI is installed, else the app"}>
+                trigger={<button type="button" aria-label={tx("Run in: {0}", [runIn ? placeLabel(runIn) : tx("Automatic")])} className={chip}
+                  title={runIn ? undefined : tx("Picked automatically: the terminal when the CLI is installed, else the app")}>
                   <SurfaceIcon surface={place} size={13} />{placeLabel(place)}{!runIn && <span className="text-[11px] text-mut2">auto</span>}
                 </button>}
                 items={[
-                  { value: null as Surface | null, label: "Automatic", hint: "Terminal, else the app", icon: <Icon name="laptop" size={13} /> },
-                  ...(["terminal", "desktop", "cloud"] as const).map((s) => ({ value: s as Surface | null, label: s === "cloud" ? CLOUD_LABEL[agent] : placeLabel(s), icon: <SurfaceIcon surface={s} size={13} /> })),
+                  { value: null as Surface | null, label: tx("Automatic"), hint: tx("Terminal, else the app"), icon: <Icon name="laptop" size={13} /> },
+                  ...(["terminal", "desktop", "cloud"] as const).map((s) => ({ value: s as Surface | null, label: s === "cloud" ? tx(CLOUD_LABEL[agent]) : placeLabel(s), icon: <SurfaceIcon surface={s} size={13} /> })),
                 ]}
                 onSelect={(v) => setOv((o) => ({ ...o, runIn: v, ...(v && v !== "terminal" ? { modelSettings: null } : {}) }))} />
               {chooseComputer && <ComputerPicker value={deviceId} inherited={project?.deviceId} agent={agent} needs={needs} trigger={wide}
@@ -350,12 +352,12 @@ export function QuickAdd({ areas, projects }: { areas: Area[]; projects: Project
         )}
         </div>
         <div className="flex h-14 shrink-0 items-center gap-2 border-t border-line pl-5 pr-3">
-          <Switch on={more} onChange={setMore} label="Create more" />
-          <span className="text-[12.5px] text-mut">Create more</span>
+          <Switch on={more} onChange={setMore} label={tx("Create more")} />
+          <span className="text-[12.5px] text-mut">{tx("Create more")}</span>
           <span className="flex-1" />
-          <Button variant="ghost" onClick={close}>Cancel</Button>
+          <Button variant="ghost" onClick={close}>{tx("Cancel")}</Button>
           <Button variant="primary" disabled={pending} onClick={submit} className="h-8 px-3">
-            {mode === "task" ? "Create task" : "Add to calendar"} <span className="rounded bg-ink/15 px-1.5 font-mono text-[10.5px] max-md:hidden">Ctrl ↵</span>
+            {mode === "task" ? tx("Create task") : tx("Add to calendar")} <span className="rounded bg-ink/15 px-1.5 font-mono text-[10.5px] max-md:hidden">Ctrl ↵</span>
           </Button>
         </div>
       </div>

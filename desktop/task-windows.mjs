@@ -246,6 +246,7 @@ export function createTaskWindows({ BrowserWindow, screen, origin, preload, them
         skipTaskbar: true, autoHideMenuBar: true, show: false,
         backgroundColor: colors.background,
         ...(platform === "win32" ? { icon } : {}),
+        ...(platform === "darwin" ? { type: "panel" } : {}),
         webPreferences: {
           contextIsolation: true, sandbox: true, nodeIntegration: false,
           backgroundThrottling: false, preload,
@@ -257,12 +258,15 @@ export function createTaskWindows({ BrowserWindow, screen, origin, preload, them
       notes.set(key, note);
       place(note);
       window.setMenuBarVisibility(false);
-      if (platform === "darwin") window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+      // A Mac panel can cover full-screen apps without hiding the planner's Dock icon.
+      if (platform === "darwin") window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true });
       window.once("ready-to-show", () => {
         note.ready = true;
         publish(note);
         reveal(note);
       });
+      // Native restore may reset the window level after restore() returns on macOS.
+      window.on("restore", () => { if (!note.hidden) showOnTop(window); });
       let positionTimer;
       const manual = () => { note.manualMove = true; motion.cancel(note); };
       window.on("will-move", manual); window.on("will-resize", manual);

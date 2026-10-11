@@ -25,6 +25,7 @@
     "stripe:setup": "node scripts/stripe-setup.mjs",
     "lint": "eslint",
     "typecheck": "next typegen && tsc --noEmit",
+    "test:i18n": "node --import tsx --test tests/i18n.test.ts tests/notification-language.test.mjs",
     "plugins": "node scripts/plugins.mjs",
     "directory:tools": "node --conditions=react-server --import tsx scripts/directory-tools.mts"
   },

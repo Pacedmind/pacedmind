@@ -1,4 +1,5 @@
 import * as chrono from "chrono-node";
+import { normalizePolishDates } from "./polish-dates";
 import { toDateStr, toDateTimeStr } from "./dates";
 import type { Priority } from "./types";
 
@@ -27,6 +28,7 @@ export interface ParsedInput {
 
 const PRIORITY_WORDS: Record<string, Priority> = {
   urgent: 1, "1": 1, high: 2, "2": 2, medium: 3, med: 3, "3": 3, low: 4, "4": 4,
+  pilny: 1, pilne: 1, wysoki: 2, średni: 3, sredni: 3, niski: 4,
 };
 
 /**
@@ -49,7 +51,7 @@ export function parseQuickAdd(text: string, ref = new Date()): ParsedInput {
     }
   };
 
-  take(/(?:^|\s)!(urgent|high|medium|med|low|[1-4])\b/gi, "priority", (m) => {
+  take(/(?:^|\s)!(urgent|high|medium|med|low|pilny|pilne|wysoki|średni|sredni|niski|[1-4])\b/gi, "priority", (m) => {
     priority = PRIORITY_WORDS[m[1].toLowerCase()] ?? null;
   });
   take(/(?:^|\s)#([\p{L}\p{N}_-]+)/giu, "label", (m) => {
@@ -58,11 +60,11 @@ export function parseQuickAdd(text: string, ref = new Date()): ParsedInput {
   take(/(?:^|\s)@([\p{L}\p{N}_-]+)/giu, "project", (m) => {
     projectQuery = m[1].toLowerCase();
   });
-  take(/(?:^|\s)for (\d+(?:[.,]\d+)?)\s*(h|hr|hrs|hours?|m|min|mins|minutes?)\b/gi, "duration", (m) => {
+  take(/(?:^|\s)(?:for|przez|na) (\d+(?:[.,]\d+)?)\s*(h|hr|hrs|hours?|godz(?:iny|in|ina|\.)?|g|m|min|mins|minutes?|minut(?:y|a)?)\b/gi, "duration", (m) => {
     const v = parseFloat(m[1].replace(",", "."));
-    durationMin = Math.round(/^h/i.test(m[2]) ? v * 60 : v);
+    durationMin = Math.round(/^(h|g)/i.test(m[2]) ? v * 60 : v);
   });
-  take(/(?:^|\s)(every week|weekly|each week)\b/gi, "repeat", () => {
+  take(/(?:^|\s)(every week|weekly|each week|co tydzień|co tydzien)(?![\p{L}\p{N}])/giu, "repeat", () => {
     weekly = true;
   });
 
@@ -70,15 +72,17 @@ export function parseQuickAdd(text: string, ref = new Date()): ParsedInput {
   let date: string | null = null;
   let hasTime = false;
   let timeOnly = false;
-  const results = chrono.parse(text, ref, { forwardDate: true });
+  const normalized = normalizePolishDates(text);
+  const results = chrono.parse(normalized.text, ref, { forwardDate: true });
   for (const r of results) {
-    const overlaps = tokens.some((t) => r.index < t.index + t.text.length && t.index < r.index + r.text.length);
+    const original = normalized.sourceRange(r.index, r.text.length);
+    const overlaps = tokens.some((t) => original.index < t.index + t.text.length && t.index < original.index + original.text.length);
     if (overlaps) continue;
     const d = r.start.date();
     hasTime = r.start.isCertain("hour");
     timeOnly = hasTime && !(["day", "weekday", "month", "year"] as const).some((c) => r.start.isCertain(c));
     date = hasTime ? toDateTimeStr(d) : toDateStr(d);
-    tokens.push({ kind: "date", text: r.text, index: r.index });
+    tokens.push({ kind: "date", ...original });
     break;
   }
 
@@ -95,7 +99,7 @@ export function parseQuickAdd(text: string, ref = new Date()): ParsedInput {
 /** A date typed on its own, like "fri", "tomorrow 15:00", "in 2 weeks" or "2pm": its day, its time if one was typed,
  *  and whether a day was typed at all (for "2pm" it's today or tomorrow, whichever still has that time ahead). */
 export function parseWhen(text: string, ref = new Date()): { day: string; time: string | null; dayGiven: boolean } | null {
-  const r = chrono.parse(text, ref, { forwardDate: true })[0];
+  const r = chrono.parse(normalizePolishDates(text).text, ref, { forwardDate: true })[0];
   if (!r) return null;
   const d = r.start.date();
   return {

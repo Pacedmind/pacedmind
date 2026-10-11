@@ -339,7 +339,8 @@ test("Mac notes cover workspaces; theme changes and server restarts reach every 
   notes.setBackgroundColor("#f5f5f6");
   notes.reload();
   for (const window of windows) {
-    assert.deepEqual(window.workspaces, [true, { visibleOnFullScreen: true }]);
+    assert.deepEqual(window.workspaces, [true, { visibleOnFullScreen: true, skipTransformProcessType: true }]);
+    assert.equal(window.options.type, "panel");
     assert.equal(window.options.icon, undefined);
     assert.equal(window.background, "#f5f5f6");
     assert.equal(window.reloaded, true);

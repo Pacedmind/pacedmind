@@ -1,3 +1,4 @@
+import { getTranslation } from "@/server/i18n";
 import { getISOWeek } from "date-fns";
 import { WeekView, type SessionBlock } from "@/components/views/week";
 import { planWeek } from "@/server/calendar";
@@ -13,6 +14,7 @@ const byUrgency = (a: Task, b: Task) =>
 const TO_PLACE = 80;
 
 export default async function WeekPage(props: PageProps<"/calendar/week">) {
+  const tx = await getTranslation();
   const sp = await props.searchParams;
   const now = new Date();
   const today = toDateStr(now);
@@ -54,14 +56,14 @@ export default async function WeekPage(props: PageProps<"/calendar/week">) {
   const listed = toPlace.slice(0, TO_PLACE);
   const tasks = [...shown, ...listed.filter((t) => !shown.includes(t))];
 
-  const from = start.slice(0, 7) === end.slice(0, 7) ? String(Number(start.slice(8))) : fmtShort(start);
+  const from = start.slice(0, 7) === end.slice(0, 7) ? String(Number(start.slice(8))) : fmtShort(start, tx.language);
   const month = addDaysStr(start, 3).slice(0, 7);
 
   return (
     <WeekView
       days={days}
       now={toDateTimeStr(now)}
-      subtitle={`${from} to ${fmtShort(end)} · week ${getISOWeek(parseLocal(start))}`}
+      subtitle={tx("{0} to {1} · week {2}", [from, fmtShort(end, tx.language), getISOWeek(parseLocal(start))])}
       current={current}
       events={events}
       plan={plan}

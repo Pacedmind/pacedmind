@@ -1,3 +1,4 @@
+import { getTranslation } from "@/server/i18n";
 import { redirect } from "next/navigation";
 import { AreaMark } from "@/components/icons";
 import { TaskList } from "@/components/task-list";
@@ -9,6 +10,7 @@ import { groupByStatus, isOpen, taskContext } from "@/server/views";
  * One can still be about a project (Task.relatedProjectId) without counting in it.
  */
 export default async function AreaTodosPage(props: PageProps<"/area/[id]/todos">) {
+  const tx = await getTranslation();
   const { id } = await props.params;
   const sp = await props.searchParams;
   const area = (await repo.listAreas()).find((a) => a.id === id);
@@ -19,13 +21,13 @@ export default async function AreaTodosPage(props: PageProps<"/area/[id]/todos">
       key={`${area.id}-todos`}
       icon="check"
       mark={area.picture || area.icon ? <AreaMark area={area} size={16} /> : undefined}
-      title="To-dos"
-      subtitle={`${area.name} · ${tasks.filter(isOpen).length} open`}
+      title={tx("To-dos")}
+      subtitle={tx("{0} · {1} open", [area.name, tasks.filter(isOpen).length])}
       groups={groupByStatus(tasks)}
       ctx={await taskContext(tasks)}
       initialKey={typeof sp.task === "string" ? sp.task : null}
       addDefaults={{ areaId: id }}
-      empty={`Nothing to do in ${area.name} outside its projects. Add small things here, like replying to an email.`}
+      empty={tx("Nothing to do in {0} outside its projects. Add small things here, like replying to an email.", [area.name])}
     />
   );
 }

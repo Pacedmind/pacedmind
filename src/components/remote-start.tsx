@@ -1,4 +1,6 @@
 "use client";
+import { useTranslation } from "@/components/language";
+import { createTranslator, type Translator } from "@/lib/i18n";
 
 import { useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
@@ -74,7 +76,6 @@ export async function startSessionOrAsk(taskId: number, agent?: Doer | null, sur
 /** What the sheet needs of a session to resume it or send it back. */
 type SessionRef = { id: string; taskId: number; agent: AgentId; surface: Surface; cliSessionId: string | null };
 
-
 /**
  * Picks a session up again here (`to` "desktop": in the Claude app). In the web app, and for a session that ran on
  * another computer, the sheet asks the computer it ran on instead.
@@ -98,43 +99,43 @@ export function askForChangesOn(s: SessionRef, deviceId: string, text?: string) 
 
 const AGENTS: AgentId[] = ["claude", "codex"];
 const SURFACES: Surface[] = ["terminal", "desktop", "cloud"];
-const CLI_NAME: Record<AgentId, string> = { claude: "Claude Code CLI", codex: "Codex CLI" };
+const CLI_NAME = (tx: Translator): Record<AgentId, string> => ({ claude: tx("Claude Code CLI"), codex: tx("Codex CLI") });
 const MAKER: Record<AgentId, string> = { claude: "Anthropic", codex: "OpenAI" };
-const SETTING_TITLE: Record<Setting, string> = {
-  off: "Refuses sessions asked for from elsewhere",
-  ask: "Asks you at that computer first",
-  auto: "Acts right away; anything in the agent's cloud still asks",
-};
-const MCP_TEXT = { connected: "Reports to PacedMind", old: "Reports to PacedMind", cloud: "Reports to PacedMind", elsewhere: "Reports elsewhere", missing: "Not connected" } as const;
+const SETTING_TITLE = (tx: Translator): Record<Setting, string> => ({
+  off: tx("Refuses sessions asked for from elsewhere"),
+  ask: tx("Asks you at that computer first"),
+  auto: tx("Acts right away; anything in the agent's cloud still asks"),
+});
+const MCP_TEXT = (tx: Translator) => ({ connected: tx("Reports to PacedMind"), old: tx("Reports to PacedMind"), cloud: tx("Reports to PacedMind"), elsewhere: tx("Reports elsewhere"), missing: tx("Not connected") } as const);
 
-function seen(iso: string | null, now: number): string {
-  if (!iso) return "Never online";
+function seen(iso: string | null, now: number, tx: Translator = createTranslator("en")): string {
+  if (!iso) return tx("Never online");
   const min = Math.round((now - Date.parse(iso)) / 60_000);
-  if (min < 60) return `Seen ${Math.max(min, 1)} min ago`;
-  if (min < 48 * 60) return `Seen ${Math.round(min / 60)} h ago`;
-  return `Seen ${new Date(iso).toLocaleDateString()}`;
+  if (min < 60) return tx("Seen {0} min ago", [Math.max(min, 1)]);
+  if (min < 48 * 60) return tx("Seen {0} h ago", [Math.round(min / 60)]);
+  return tx("Seen {0}", [tx.date(new Date(iso), "d MMM yyyy")]);
 }
 
 const capital = (w: string) => w.charAt(0).toUpperCase() + w.slice(1);
 
 /** Why a computer can't run an agent's session that way, or null (also when it hasn't said what it has). Mirrors src/server/launcher.ts. */
-function surfaceProblem(agent: AgentId, surface: Surface, device: Device | undefined): string | null {
+function surfaceProblem(agent: AgentId, surface: Surface, device: Device | undefined, tx: Translator = createTranslator("en")): string | null {
   const tools = device?.checkedAt ? device.agents[agent] : undefined;
   if (!device || !tools) return null;
-  if (surface === "desktop") return tools.app ? null : `The ${APP_LABEL[agent]} isn't installed on ${device.name}`;
+  if (surface === "desktop") return tools.app ? null : tx("The {0} isn't installed on {1}", [tx(APP_LABEL[agent]), device.name]);
   if (!tools.cli) {
     return surface === "cloud"
-      ? `${CLOUD_LABEL[agent]} starts from the ${CLI_NAME[agent]}, which isn't installed on ${device.name}`
-      : `The ${CLI_NAME[agent]} isn't installed on ${device.name}`;
+      ? tx("{0} starts from the {1}, which isn't installed on {2}", [tx(CLOUD_LABEL[agent]), CLI_NAME(tx)[agent], device.name])
+      : tx("The {0} isn't installed on {1}", [CLI_NAME(tx)[agent], device.name]);
   }
-  if (surface === "cloud" && tools.login.state === "out") return `The ${CLI_NAME[agent]} on ${device.name} isn't signed in, and the cloud starts from it`;
+  if (surface === "cloud" && tools.login.state === "out") return tx("The {0} on {1} isn't signed in, and the cloud starts from it", [CLI_NAME(tx)[agent], device.name]);
   return null;
 }
 
-function surfaceText(agent: AgentId, surface: Surface, tools: AgentTools | undefined): string {
-  if (surface === "terminal") return `${AGENT_LABEL[agent]}${tools?.cli ? ` ${tools.cli.version}` : ""} in a new terminal, connected to PacedMind.`;
-  if (surface === "desktop") return `A new ${agent === "claude" ? "Code session" : "thread"} in the ${APP_LABEL[agent]} with the first message written. You send it there.`;
-  return `Runs on ${MAKER[agent]}'s servers from the project's repository, even while the computer sleeps.`;
+function surfaceText(agent: AgentId, surface: Surface, tools: AgentTools | undefined, tx: Translator = createTranslator("en")): string {
+  if (surface === "terminal") return tx("{0}{1} in a new terminal, connected to PacedMind.", [tx(AGENT_LABEL[agent]), tools?.cli ? ` ${tools.cli.version}` : ""]);
+  if (surface === "desktop") return tx("A new {0} in the {1} with the first message written. You send it there.", [agent === "claude" ? tx("Code session") : tx("thread"), tx(APP_LABEL[agent])]);
+  return tx("Runs on {0}'s servers from the project's repository, even while the computer sleeps.", [MAKER[agent]]);
 }
 
 /** The computer picked last in this window, offered again when nothing else says which. */
@@ -202,6 +203,7 @@ function RunSheet({ ask, devices, task, hereId, onClose }: {
   hereId: string | null;
   onClose: () => void;
 }) {
+  const tx = useTranslation();
   const titleId = useId();
   const { codeFreshUntil } = useLaunchState();
   const now = useClock(10_000);
@@ -246,7 +248,7 @@ function RunSheet({ ask, devices, task, hereId, onClose }: {
   const device = devices.find((d) => d.id === deviceId && !d.revokedAt);
   const who = ask.kind === "start" ? agent : ask.agent;
   const tools = device?.checkedAt && who ? device.agents[who] : undefined;
-  const name = device?.name ?? "its computer";
+  const name = device?.name ?? tx("its computer");
   // Where it runs. A start the caller knew nothing about (undefined) goes where the task says; one whose task doesn't
   // say goes where the computer would put it, which the sheet can tell once the computer said what it has.
   const surface: Surface | null = ask.kind === "start" ? picked ?? (ask.surface === null && tools ? surfaceOf(null, tools) : null)
@@ -254,8 +256,8 @@ function RunSheet({ ask, devices, task, hereId, onClose }: {
   // What that computer can't do: a start shows it on the place it can't run; a session going on there needs its CLI
   // (the Claude app, to move into it), or it would open a terminal that can't find the agent.
   const blocked = !who ? null
-    : ask.kind === "start" ? (surface ? surfaceProblem(who, surface, device) : null)
-      : surfaceProblem(who, ask.kind === "resume" && ask.to === "desktop" ? "desktop" : "terminal", device);
+    : ask.kind === "start" ? (surface ? surfaceProblem(who, surface, device, tx) : null)
+      : surfaceProblem(who, ask.kind === "resume" && ask.to === "desktop" ? "desktop" : "terminal", device, tx);
   const refuses = device?.remoteStart === "off";
   // The computer's setting decides, except that anything in the agent's cloud always waits for you there.
   const asks = !device || device.remoteStart !== "auto" || surface === "cloud";
@@ -265,7 +267,7 @@ function RunSheet({ ask, devices, task, hereId, onClose }: {
   const showCode = needCode || (!fresh && !codeFree);
   const usable = !!device && !refuses && !(ask.kind !== "start" && blocked);
   const ready = usable && !blocked && !busy && !!who && (!showCode || code.length === 6) && (ask.kind !== "changes" || !!text.trim());
-  const agentName = who ? AGENT_LABEL[who] : "the agent";
+  const agentName = who ? tx(AGENT_LABEL[who]) : tx("the agent");
   const lacks = device && who && needs.length ? missingOn(needs, device, who) : [];
   const hereLacks = ask.kind === "start" ? ask.missingHere ?? [] : [];
   const [startingHere, setStartingHere] = useState(false);
@@ -273,23 +275,23 @@ function RunSheet({ ask, devices, task, hereId, onClose }: {
     if (ask.kind !== "start") return;
     setStartingHere(true);
     const r: { ok: boolean; error?: string; message?: string } = await startSessionAction(ask.taskId, who, surface ?? undefined, true)
-      .catch(() => ({ ok: false, error: "That didn't go through. Try again." }));
+      .catch(() => ({ ok: false, error: tx("That didn't go through. Try again.") }));
     setStartingHere(false);
     if (!r.ok) {
-      setError(r.error ?? "That didn't go through. Try again.");
+      setError(r.error ?? tx("That didn't go through. Try again."));
       return;
     }
-    toast(r.message ?? "Session started");
+    toast(r.message ?? tx("Session started"));
     onClose();
   };
 
-  const title = ask.kind === "start" ? "Run on a computer"
-    : ask.kind === "changes" ? `Send ${isAnswers(text) ? "answers" : "changes"} to ${name}`
-      : ask.to === "desktop" ? `Continue in the ${APP_LABEL[ask.agent]} on ${name}`
-        : ask.from === "cloud" ? `Pull into a terminal on ${name}` : `Resume on ${name}`;
-  const action = ask.kind === "start" ? `Send to ${name}`
-    : ask.kind === "changes" ? `Send ${isAnswers(text) ? "answers" : "changes"}`
-      : ask.to === "desktop" ? `Open in the ${APP_LABEL[ask.agent]}` : ask.from === "cloud" ? "Pull it in" : "Resume";
+  const title = ask.kind === "start" ? tx("Run on a computer")
+    : ask.kind === "changes" ? tx("Send {0} to {1}", [isAnswers(text) ? "answers" : "changes", name])
+      : ask.to === "desktop" ? tx("Continue in the {0} on {1}", [tx(APP_LABEL[ask.agent]), name])
+        : ask.from === "cloud" ? tx("Pull into a terminal on {0}", [name]) : tx("Resume on {0}", [name]);
+  const action = ask.kind === "start" ? tx("Send to {0}", [name])
+    : ask.kind === "changes" ? tx("Send {0}", [isAnswers(text) ? "answers" : "changes"])
+      : ask.to === "desktop" ? tx("Open in the {0}", [tx(APP_LABEL[ask.agent])]) : ask.from === "cloud" ? tx("Pull it in") : tx("Resume");
 
   const submit = async (e?: FormEvent) => {
     e?.preventDefault();
@@ -303,11 +305,11 @@ function RunSheet({ ask, devices, task, hereId, onClose }: {
         : ask.kind === "resume" ? await requestResumeAction(ask.sessionId, given, ask.to)
           : await requestChangesRemoteAction(ask.sessionId, text, given);
     } catch (err) {
-      r = { ok: false, error: err instanceof Error ? err.message : "That didn't go through. Try again." };
+      r = { ok: false, error: err instanceof Error ? err.message : tx("That didn't go through. Try again.") };
     }
     setBusy(false);
     if (!r.ok) {
-      setError(r.error ?? "That didn't go through. Try again.");
+      setError(r.error ?? tx("That didn't go through. Try again."));
       if (r.needCode) {
         setNeedCode(true);
         setCode("");
@@ -316,79 +318,79 @@ function RunSheet({ ask, devices, task, hereId, onClose }: {
     }
     if (ask.kind === "start" && !pinned) rememberPick(device.id);
     if (r.requestId) noteSentRequest(sentView(r.requestId, ask, device, task?.key ?? null));
-    toast(r.message ?? `Sent to ${device.name}`);
+    toast(r.message ?? tx("Sent to {0}", [device.name]));
     onClose();
   };
 
   // What will happen, in plain words: who has to be there, and what waits for whom.
   const hints: { icon: IconName; text: string }[] = [];
   // What the task needs from the computer (Task.needs): whether this one and the picked one have it.
-  const key = task?.key ?? "the task";
-  if (hereLacks.length) hints.push({ icon: "help", text: `${agentName} on this computer doesn't have ${needList(hereLacks)}, which ${key} needs.` });
+  const key = task?.key ?? tx("the task");
+  if (hereLacks.length) hints.push({ icon: "help", text: tx("{0} on this computer doesn't have {1}, which {2} needs.", [agentName, needList(hereLacks), key]) });
   if (device && who && needs.length) {
     const said = !!toolsOn(device, who);
     hints.push({
       icon: said && !lacks.length ? "check" : "help",
-      text: !said ? `${device.name} hasn't said which MCP servers ${agentName} has there.`
-        : lacks.length ? `${device.name}'s ${agentName} doesn't have ${needList(lacks)}${hereLacks.length ? " either" : `, which ${key} needs`}.`
-          : `${device.name}'s ${agentName} has what ${key} needs: ${needList(needs)}.`,
+      text: !said ? tx("{0} hasn't said which MCP servers {1} has there.", [device.name, agentName])
+        : lacks.length ? tx("{0}'s {1} doesn't have {2}{3}.", [device.name, agentName, needList(lacks), hereLacks.length ? tx(" either") : tx(", which {0} needs", [key])])
+          : tx("{0}'s {1} has what {2} needs: {3}.", [device.name, agentName, key, needList(needs)]),
     });
   }
   if (usable) {
     if (!deviceOnline(device, now)) {
-      hints.push({ icon: "clock", text: `${device.name} isn't online (${seen(device.lastSeenAt, now).toLowerCase()}). The request waits there for 10 minutes.` });
+      hints.push({ icon: "clock", text: tx("{0} isn't online ({1}). The request waits there for 10 minutes.", [device.name, seen(device.lastSeenAt, now, tx).toLowerCase()]) });
     }
     if (asks) {
       hints.push({
         icon: "user",
         text: device.remoteStart === "auto"
-          ? `Anything in the agent's cloud waits for you at ${device.name}, whatever its setting: allow it in PacedMind there.`
-          : `It waits for you at ${device.name}: allow it in PacedMind there.`,
+          ? tx("Anything in the agent's cloud waits for you at {0}, whatever its setting: allow it in PacedMind there.", [device.name])
+          : tx("It waits for you at {0}: allow it in PacedMind there.", [device.name]),
       });
     } else {
       hints.push({
         icon: "play",
-        text: ask.kind === "start" ? `${device.name} starts it within seconds.`
-          : ask.kind === "resume" ? `${device.name} reopens it within seconds.` : `${device.name} sends it back to ${AGENT_LABEL[ask.agent]} within seconds.`,
+        text: ask.kind === "start" ? tx("{0} starts it within seconds.", [device.name])
+          : ask.kind === "resume" ? tx("{0} reopens it within seconds.", [device.name]) : tx("{0} sends it back to {1} within seconds.", [device.name, tx(AGENT_LABEL[ask.agent])]),
       });
     }
     if (ask.kind === "changes") {
       hints.push({
         icon: "pen",
-        text: `${AGENT_LABEL[ask.agent]} starts again in a new terminal with its last report, and reads your note as you wrote it.`,
+        text: tx("{0} starts again in a new terminal with its last report, and reads your note as you wrote it.", [tx(AGENT_LABEL[ask.agent])]),
       });
     } else if (ask.kind === "resume" && ask.from === "cloud") {
-      hints.push({ icon: "terminal", text: `A terminal on ${device.name} pulls the cloud session and its branch in (claude --teleport).` });
+      hints.push({ icon: "terminal", text: tx("A terminal on {0} pulls the cloud session and its branch in (claude --teleport).", [device.name]) });
     } else if (surface === "desktop" && who) {
       hints.push({
         icon: "appWindow",
-        text: ask.kind === "resume" ? `The conversation opens in the ${APP_LABEL[who]} on ${device.name}. Nothing runs until you write there.`
-          : `The ${APP_LABEL[who]} opens with the first message written. Nothing runs until you send it there.`,
+        text: ask.kind === "resume" ? tx("The conversation opens in the {0} on {1}. Nothing runs until you write there.", [tx(APP_LABEL[who]), device.name])
+          : tx("The {0} opens with the first message written. Nothing runs until you send it there.", [tx(APP_LABEL[who])]),
       });
     }
     if (surface === "terminal" && !(ask.kind === "resume" && ask.from === "cloud")) {
-      hints.push({ icon: "terminal", text: `If ${agentName} stops for a permission in its terminal, it waits for someone at ${device.name}.` });
+      hints.push({ icon: "terminal", text: tx("If {0} stops for a permission in its terminal, it waits for someone at {1}.", [agentName, device.name]) });
       if (who && tools?.login.state === "out") {
-        hints.push({ icon: "user", text: `The ${CLI_NAME[who]} there isn't signed in: it asks for that in its terminal, at the computer.` });
+        hints.push({ icon: "user", text: tx("The {0} there isn't signed in: it asks for that in its terminal, at the computer.", [CLI_NAME(tx)[who]]) });
       }
     }
-    if (!device.checkedAt) hints.push({ icon: "help", text: `${device.name} hasn't said yet what it has installed.` });
+    if (!device.checkedAt) hints.push({ icon: "help", text: tx("{0} hasn't said yet what it has installed.", [device.name]) });
   }
 
   // Why nothing can be sent, when that's so.
   let stop: string | null = null;
   if (!pinned && !listed.length) {
-    stop = "No computer is signed in to your account yet. Install the PacedMind desktop app on a computer and sign in there.";
+    stop = tx("No computer is signed in to your account yet. Install the PacedMind desktop app on a computer and sign in there.");
   } else if (!pinned && listed.every((d) => d.remoteStart === "off")) {
-    stop = "None of your computers takes sessions from elsewhere. At a computer, choose Ask me or Start under Settings → This computer.";
+    stop = tx("None of your computers takes sessions from elsewhere. At a computer, choose Ask me or Start under Settings → This computer.");
   } else if (!device) {
-    stop = !pinned ? "Pick a computer."
-      : ask.kind === "start" ? `${task?.key ?? "This task"} runs on a computer that isn't signed in to PacedMind anymore. Pick another one in its details.`
-        : "The computer it ran on isn't signed in to PacedMind anymore, and a conversation only goes on where it is.";
+    stop = !pinned ? tx("Pick a computer.")
+      : ask.kind === "start" ? tx("{0} runs on a computer that isn't signed in to PacedMind anymore. Pick another one in its details.", [task?.key ?? tx("This task")])
+        : tx("The computer it ran on isn't signed in to PacedMind anymore, and a conversation only goes on where it is.");
   } else if (refuses) {
-    stop = `${device.name} refuses sessions from elsewhere. At that computer, choose Ask me or Start under Settings → This computer.`;
+    stop = tx("{0} refuses sessions from elsewhere. At that computer, choose Ask me or Start under Settings → This computer.", [device.name]);
   } else if (ask.kind !== "start" && blocked) {
-    stop = `${blocked}, so it can't go on there.`;
+    stop = tx("{0}, so it can't go on there.", [blocked]);
   }
 
   return createPortal(
@@ -402,19 +404,19 @@ function RunSheet({ ask, devices, task, hereId, onClose }: {
           <div className="flex min-w-0 flex-1 flex-col gap-1 pt-0.5">
             <h2 id={titleId} className="text-[15px] font-semibold leading-snug text-strong">{title}</h2>
             <p className="text-[12.5px] leading-relaxed text-mut">
-              {task ? <><span className="font-mono text-[11.5px] text-fg2">{task.key}</span> {task.title}</> : "This task"}
-              {ask.kind !== "start" && <span className="text-mut2"> · {AGENT_LABEL[ask.agent]}</span>}
+              {task ? <><span className="font-mono text-[11.5px] text-fg2">{task.key}</span> {task.title}</> : tx("This task")}
+              {ask.kind !== "start" && <span className="text-mut2"> · {tx(AGENT_LABEL[ask.agent])}</span>}
             </p>
           </div>
-          <IconButton type="button" label="Close" onClick={onClose} className="pointer-coarse:h-9 pointer-coarse:w-9"><Icon name="x" size={15} /></IconButton>
+          <IconButton type="button" label={tx("Close")} onClick={onClose} className="pointer-coarse:h-9 pointer-coarse:w-9"><Icon name="x" size={15} /></IconButton>
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain px-5 py-4 max-md:px-4">
           {ask.kind === "changes" && (
             <label className="flex flex-col gap-1.5">
-              <span className="text-[12px] text-mut">What should change</span>
+              <span className="text-[12px] text-mut">{tx("What should change")}</span>
               <textarea value={text} onChange={(e) => setText(e.target.value)} autoFocus={fine} maxLength={20000} rows={5}
-                placeholder="Be as specific as you'd be with a colleague."
+                placeholder={tx("Be as specific as you'd be with a colleague.")}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); void submit(); }
                   // Escape leaves the note first, so a long one isn't lost to a stray key.
@@ -424,11 +426,11 @@ function RunSheet({ ask, devices, task, hereId, onClose }: {
             </label>
           )}
 
-          <Part title="Computer">
+          <Part title={tx("Computer")}>
             {pinned ? (
               device ? <DeviceInfo device={device} agent={who} now={now} here={device.id === hereId} needs={needs} boxed /> : null
             ) : (
-              <div role="radiogroup" aria-label="Computer" className="flex flex-col gap-1.5">
+              <div role="radiogroup" aria-label={tx("Computer")} className="flex flex-col gap-1.5">
                 {listed.map((d) => {
                   // A computer that refuses requests from elsewhere is listed, so you see why, but can't be picked.
                   const off = d.remoteStart === "off";
@@ -447,8 +449,8 @@ function RunSheet({ ask, devices, task, hereId, onClose }: {
             {pinned && device && (
               <p className="text-[12px] leading-relaxed text-mut2">
                 {ask.kind === "start"
-                  ? `${task?.key ?? "This task"} runs only on ${device.name}, as it or its project says.${ask.avoid === device.id ? " Send it there again, or pick another computer in its details." : ""}`
-                  : `The conversation is on ${device.name}, so it goes on there.`}
+                  ? tx("{0} runs only on {1}, as it or its project says.{2}", [task?.key ?? tx("This task"), device.name, ask.avoid === device.id ? tx(" Send it there again, or pick another computer in its details.") : ""])
+                  : tx("The conversation is on {0}, so it goes on there.", [device.name])}
               </p>
             )}
           </Part>
@@ -457,31 +459,31 @@ function RunSheet({ ask, devices, task, hereId, onClose }: {
 
           {ask.kind === "start" && !stop && (
             <>
-              <Part title="Agent">
-                <div role="radiogroup" aria-label="Agent" className="grid grid-cols-2 gap-1.5">
+              <Part title={tx("Agent")}>
+                <div role="radiogroup" aria-label={tx("Agent")} className="grid grid-cols-2 gap-1.5">
                   {AGENTS.map((a) => (
                     <button key={a} type="button" role="radio" aria-checked={agent === a} onClick={() => setAgent(a)}
                       className={cx("flex h-8 items-center justify-center gap-2 rounded-lg border text-[12.5px] max-md:h-10",
                         agent === a ? "border-accent/55 bg-accent/5 text-strong" : "border-line2 text-fg3 hover:bg-hover")}>
-                      <AgentIcon agent={a} size={13} />{AGENT_LABEL[a]}
+                      <AgentIcon agent={a} size={13} />{tx(AGENT_LABEL[a])}
                     </button>
                   ))}
                 </div>
-                {!agent && <p className="text-[12px] leading-relaxed text-mut2">Pick who runs {task?.key ?? "it"}: the task goes to that agent.</p>}
+                {!agent && <p className="text-[12px] leading-relaxed text-mut2">{tx("Pick who runs")}{" "}{task?.key ?? "it"}{tx(": the task goes to that agent.")}</p>}
               </Part>
               {agent && (
-                <Part title="Where it runs">
-                  <div role="radiogroup" aria-label="Where it runs" className="flex flex-col gap-1.5">
+                <Part title={tx("Where it runs")}>
+                  <div role="radiogroup" aria-label={tx("Where it runs")} className="flex flex-col gap-1.5">
                     {SURFACES.map((s) => (
-                      <SurfaceChoice key={s} surface={s} agent={agent} on={surface === s} problem={surfaceProblem(agent, s, device)}
-                        text={surfaceText(agent, s, tools)} onPick={() => setPicked(s)} />
+                      <SurfaceChoice key={s} surface={s} agent={agent} on={surface === s} problem={surfaceProblem(agent, s, device, tx)}
+                        text={surfaceText(agent, s, tools, tx)} onPick={() => setPicked(s)} />
                     ))}
                   </div>
                   {!surface && (
                     <p className="text-[12px] leading-relaxed text-mut2">
                       {ask.surface === null
-                        ? `In a terminal if ${name} has the ${CLI_NAME[agent]}, else in the ${APP_LABEL[agent]}, unless you pick one here.`
-                        : `Where ${task?.key ?? "the task"} says, unless you pick one here.`}
+                        ? tx("In a terminal if {0} has the {1}, else in the {2}, unless you pick one here.", [name, CLI_NAME(tx)[agent], tx(APP_LABEL[agent])])
+                        : tx("Where {0} says, unless you pick one here.", [task?.key ?? tx("the task")])}
                     </p>
                   )}
                 </Part>
@@ -502,35 +504,34 @@ function RunSheet({ ask, devices, task, hereId, onClose }: {
 
           {usable && (showCode ? (
             <label className="flex flex-col gap-1.5">
-              <span className="text-[12px] text-mut">Two-factor code</span>
+              <span className="text-[12px] text-mut">{tx("Two-factor code")}</span>
               {/* A start's choices come first (and would scroll away), so only a resume puts the cursor here. */}
               <input ref={codeRef} value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))} autoFocus={fine && ask.kind === "resume"}
                 inputMode="numeric" autoComplete="one-time-code" enterKeyHint="send" placeholder="000000" aria-describedby={`${titleId}-code`}
                 className="h-10 w-full rounded-md border border-line2 bg-input px-2.5 text-center font-mono text-[18px] tracking-[0.35em] text-fg outline-none placeholder:text-dim focus:border-line-strong" />
               <span id={`${titleId}-code`} className="text-[11.5px] leading-relaxed text-mut2">
-                Asking a computer to run an agent takes a current code from your authenticator app.
-              </span>
+                {tx("Asking a computer to run an agent takes a current code from your authenticator app.")}</span>
             </label>
           ) : (
             <p className="flex items-center gap-2 text-[12px] text-mut2">
               <Icon name="check" size={12} strokeWidth={2.2} className="shrink-0" />
-              {codeFree ? `No code needed: ${name} takes requests without one.` : "No code needed: you entered one in the last few minutes."}
+              {codeFree ? tx("No code needed: {0} takes requests without one.", [name]) : tx("No code needed: you entered one in the last few minutes.")}
             </p>
           ))}
 
-          {error && <p ref={errorRef} role="alert" className="rounded-md border border-line-strong px-3 py-2 text-[12.5px] leading-relaxed text-fg">{error}</p>}
+          {error && <p ref={errorRef} role="alert" className="rounded-md border border-line-strong px-3 py-2 text-[12.5px] leading-relaxed text-fg">{tx.generated(error)}</p>}
         </div>
 
         <div className="flex shrink-0 items-center justify-end gap-2 border-t border-line px-5 py-3 max-md:px-4 max-md:pb-[max(12px,env(safe-area-inset-bottom))]">
-          <Button type="button" variant="ghost" onClick={onClose} className="max-md:h-10 max-md:flex-1 max-md:justify-center">Cancel</Button>
+          <Button type="button" variant="ghost" onClick={onClose} className="max-md:h-10 max-md:flex-1 max-md:justify-center">{tx("Cancel")}</Button>
           {hereLacks.length > 0 && (
             <Button type="button" disabled={startingHere || busy} onClick={() => void startHere()} className="max-md:h-10 max-md:flex-1 max-md:justify-center">
-              {startingHere ? "Starting…" : "Start here anyway"}
+              {startingHere ? tx("Starting…") : tx("Start here anyway")}
             </Button>
           )}
           {!stop && (
             <Button type="submit" variant="primary" disabled={!ready} className="min-w-0 max-md:h-10 max-md:flex-[2] max-md:justify-center">
-              <span className="truncate">{busy ? "Sending…" : action}</span>
+              <span className="truncate">{busy ? tx("Sending…") : action}</span>
             </Button>
           )}
         </div>
@@ -585,6 +586,7 @@ function Tag({ children, title }: { children: ReactNode; title?: string }) {
 function DeviceInfo({ device, agent, now, here, boxed, needs = [] }: {
   device: Device; agent: AgentId | null; now: number; here: boolean; boxed?: boolean; needs?: string[];
 }) {
+  const tx = useTranslation();
   const has = agent ? toolsOn(device, agent) : null;
   const lacks = agent ? missingOn(needs, device, agent) : [];
   const online = deviceOnline(device, now);
@@ -592,20 +594,20 @@ function DeviceInfo({ device, agent, now, here, boxed, needs = [] }: {
     <span className={cx("flex min-w-0 flex-1 flex-col gap-1", boxed && "rounded-lg border border-line2 px-3 py-2.5")}>
       <span className="flex min-w-0 items-center gap-1.5">
         <span className="min-w-0 truncate text-[13px] font-medium text-strong">{device.name}</span>
-        {here && <Tag>This computer</Tag>}
-        {device.isDefault && <Tag>Default</Tag>}
+        {here && <Tag>{tx("This computer")}</Tag>}
+        {device.isDefault && <Tag>{tx("Default")}</Tag>}
         <span className="flex-1" />
-        {!device.remoteCode && device.remoteStart !== "off" && <Tag title="Asking it for a session needs no two-factor code">No code</Tag>}
-        <Tag title={SETTING_TITLE[device.remoteStart]}>{REMOTE_START_LABEL[device.remoteStart]}</Tag>
+        {!device.remoteCode && device.remoteStart !== "off" && <Tag title={tx("Asking it for a session needs no two-factor code")}>{tx("No code")}</Tag>}
+        <Tag title={tx(SETTING_TITLE(tx)[device.remoteStart])}>{tx(REMOTE_START_LABEL[device.remoteStart])}</Tag>
       </span>
       <span className="flex items-center gap-1.5 text-[12px] text-mut2">
         <span aria-hidden="true" className={cx("h-[7px] w-[7px] shrink-0 rounded-full", online ? "bg-fg2" : "border border-dim")} />
-        {online ? "Online" : seen(device.lastSeenAt, now)} · {platformName(device.platform)}
+        {online ? tx("Online") : seen(device.lastSeenAt, now, tx)} · {platformName(device.platform)}
       </span>
       {agent && <Tools agent={agent} tools={device.checkedAt ? device.agents[agent] : undefined} />}
       {agent && needs.length > 0 && (
         <span className={cx("text-[12px]", has && !lacks.length ? "text-fg3" : "text-dim")}>
-          {!has ? "Hasn't said which MCP servers it has" : lacks.length ? `Doesn't have ${needList(lacks)}` : `Has ${needList(needs)}`}
+          {!has ? tx("Hasn't said which MCP servers it has") : lacks.length ? tx("Doesn't have {0}", [needList(lacks)]) : tx("Has {0}", [needList(needs)])}
         </span>
       )}
     </span>
@@ -614,15 +616,16 @@ function DeviceInfo({ device, agent, now, here, boxed, needs = [] }: {
 
 /** What a computer has of one agent: its CLI, its desktop app and whether that reaches PacedMind, and the CLI's sign-in. */
 function Tools({ agent, tools }: { agent: AgentId; tools: AgentTools | undefined }) {
-  if (!tools) return <span className="text-[12px] text-dim">Hasn&apos;t said what it has installed yet</span>;
+  const tx = useTranslation();
+  if (!tools) return <span className="text-[12px] text-dim">{tx("Hasn't said what it has installed yet")}</span>;
   const login = tools.login.state === "in"
-    ? `Signed in${tools.login.plan ? `, ${capital(tools.login.plan)}` : tools.login.method ? ` (${tools.login.method})` : ""}`
-    : tools.login.state === "out" ? "Signed out" : null;
+    ? tx("Signed in{0}", [tools.login.plan ? `, ${capital(tools.login.plan)}` : tools.login.method ? ` (${tools.login.method})` : ""])
+    : tools.login.state === "out" ? tx("Signed out") : null;
   // Whether each is there, and what it says. The app's MCP link only matters with an app.
   const parts: [boolean, string][] = [
-    [!!tools.cli, tools.cli ? `CLI ${tools.cli.version}` : "No CLI"],
-    [!!tools.app, tools.app ? APP_LABEL[agent] : `No ${APP_LABEL[agent]}`],
-    ...(tools.app ? [[mcpReaches(tools.mcp), MCP_TEXT[tools.mcp]] as [boolean, string]] : []),
+    [!!tools.cli, tools.cli ? `CLI ${tools.cli.version}` : tx("No CLI")],
+    [!!tools.app, tools.app ? tx(APP_LABEL[agent]) : tx("No {0}", [tx(APP_LABEL[agent])])],
+    ...(tools.app ? [[mcpReaches(tools.mcp), MCP_TEXT(tx)[tools.mcp]] as [boolean, string]] : []),
     ...(login ? [[tools.login.state === "in", login] as [boolean, string]] : []),
   ];
   return (
@@ -643,7 +646,8 @@ function Tools({ agent, tools }: { agent: AgentId; tools: AgentTools | undefined
 function SurfaceChoice({ surface, agent, on, problem, text, onPick }: {
   surface: Surface; agent: AgentId; on: boolean; problem: string | null; text: string; onPick: () => void;
 }) {
-  const label = surface === "terminal" ? "Terminal" : surface === "desktop" ? APP_LABEL[agent] : CLOUD_LABEL[agent];
+  const tx = useTranslation();
+  const label = surface === "terminal" ? tx("Terminal") : surface === "desktop" ? tx(APP_LABEL[agent]) : tx(CLOUD_LABEL[agent]);
   return (
     <button type="button" role="radio" aria-checked={on} aria-disabled={problem ? true : undefined} onClick={() => { if (!problem) onPick(); }}
       className={cx("flex w-full items-start gap-2.5 rounded-lg border px-3 py-2 text-left",
