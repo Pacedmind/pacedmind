@@ -216,8 +216,12 @@ export function createTaskWindows({ BrowserWindow, screen, origin, preload, them
       }
     },
     updateVersions(scope, versions) {
-      for (const { id, createdAt, version } of versions ?? []) {
+      for (const { id, createdAt, version, hidden } of versions ?? []) {
         const note = notes.get(`${scope}:${id}`);
+        if (hidden === true && note?.createdAt === createdAt && !note.window.isDestroyed()) {
+          note.window.close();
+          continue;
+        }
         if (note && note.createdAt === createdAt && !note.window.isDestroyed() &&
             typeof version === "string" && /^[a-f0-9]{64}$/.test(version)) {
           note.window.webContents.send("pacedmind:task-note-version", version);

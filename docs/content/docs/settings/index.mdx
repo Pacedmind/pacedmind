@@ -10,7 +10,7 @@ In the desktop app, without an account, the menu has these pages:
 | Group | Pages |
 | --- | --- |
 | At the top, without a name | **[Account](#account)**, **[Computers](#computers)**, **[Data](#data)** |
-| **Preferences** | **[Appearance](#appearance)**, **[Planning](#planning)**, **[How you work](#how-you-work)** |
+| **Preferences** | **[Appearance](#appearance)**, **[Planning](#planning)**, **[Hidden projects](#hidden-projects)**, **[How you work](#how-you-work)** |
 | **This computer** | **[General](#general)**, **[Sessions](#sessions)**, **[Projects](#projects)**, **[MCP server](#mcp-server)** |
 
 Signed in to PacedMind Cloud, the menu adds **[Plan](#plan)** (once paid plans are on) and **[Security](#security)** after **Account**, and **[Notifications](#notifications)** after **Appearance**. The web app has no computer of its own: in place of **This computer**, its group **Agents** has **Sessions**, which says that sessions are *Handled by the desktop app*, **Projects**, with each project's default agent only (*Folders are set in the desktop app, on the computer where the sessions run.*), and **MCP server**, for connecting agents to PacedMind Cloud. See [Accounts and Cloud](/accounts-and-cloud).
@@ -263,3 +263,7 @@ Use **Connect** from the copy of PacedMind the agents should report to, normally
 ### Tools agents can use
 
 The MCP tools by group: **Overview**, **Preferences**, **Areas**, **Projects**, **Tasks**, **Calendar**, **Computers** and **Sessions**. The note below them says: *Sessions started from PacedMind may read, add and update tasks, and report on their own task; nothing else, whatever they're asked. Starting a session or sending one back with changes over MCP waits for you to allow it here. Run npm run skills to install the PacedMind skills for Claude Code and Codex.* See the [tool reference](/mcp/tools) and [Agent skills](/skills).
+
+## Hidden projects
+
+Projects hidden with **Hide project** appear here with their area and a **Restore project** button. Restoring a project shows its tasks again with the same statuses, dates and history. See [Hide a project](/concepts/areas-and-projects#hide-a-project).

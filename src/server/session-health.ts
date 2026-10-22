@@ -15,7 +15,7 @@ import { isLiveSession, LIVE_STATUSES } from "@/lib/types";
 export async function checkSessionHealth(now = Date.now()) {
   if (MODE !== "desktop") return;
   const device = deviceConfig().deviceId;
-  const sessions = (await repo.listSessions({ status: LIVE_STATUSES })).filter((s) => s.surface !== "cloud" && (!s.deviceId || s.deviceId === device));
+  const sessions = (await repo.listAllSessions({ status: LIVE_STATUSES })).filter((s) => s.surface !== "cloud" && (!s.deviceId || s.deviceId === device));
   if (!sessions.length) return;
   const histories = await repo.sessionEventsFor(sessions.map((s) => s.id));
   const runtime = readCodexRuntime(sessions.filter((s) => s.agent === "codex" && s.surface === "terminal").map((s) => ({

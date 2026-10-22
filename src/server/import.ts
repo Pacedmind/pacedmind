@@ -384,7 +384,7 @@ export async function findWork({ link = true } = {}): Promise<{ projects: FoundP
 
   // Projects from your other computers should know their repositories before folders here are matched to them.
   if (link) await linkProjects().catch((e) => console.error("[organizer] project links failed", e));
-  const [projects, areas] = await Promise.all([repo.listProjects(), repo.listAreas()]);
+  const [projects, areas] = await Promise.all([repo.listAllProjects(), repo.listAreas()]);
   const scan: Scan = { left: BUDGET };
   const projectAt = new Map(projects.flatMap((p) => (p.folder ? [[keyOf(p.folder), p] as const] : [])));
   const areaAt = new Map(areas.flatMap((a) => (a.folder ? [[keyOf(a.folder), a] as const] : [])));
@@ -635,7 +635,7 @@ export async function importProjects(items: ImportItem[], areaOf: (item: ImportI
   const created: Project[] = [];
   const linked: Project[] = [];
   const skipped: string[] = [];
-  const projects = await repo.listProjects();
+  const projects = await repo.listAllProjects();
   const taken = new Set(projects.flatMap((p) => (p.folder ? [keyOf(p.folder)] : [])));
   const deviceId = thisDeviceId();
   for (const item of items) {
@@ -709,7 +709,7 @@ export async function foldersOfRepos(repos: string[]): Promise<Record<string, st
   const wanted = new Set(repos);
   const seen = new Set<string>();
   const found = await findProjects().catch((): FoundProject[] => []);
-  for (const folder of [...(await repo.listProjects()).flatMap((p) => (p.folder ? [p.folder] : [])), ...found.map((f) => f.folder)]) {
+  for (const folder of [...(await repo.listAllProjects()).flatMap((p) => (p.folder ? [p.folder] : [])), ...found.map((f) => f.folder)]) {
     if (seen.has(folder)) continue;
     seen.add(folder);
     const id = repoIdentity(folder);

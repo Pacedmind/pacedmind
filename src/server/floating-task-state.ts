@@ -12,7 +12,7 @@ export function floatingTaskVersion(data: FloatingTaskData | null): string {
 export async function floatingTaskVersions(scope: string, notes: { id: number; createdAt: string }[]) {
   if (!notes.length) return [];
   const [tasks, areas, projects, sessions] = await Promise.all([
-    repo.listTasks(), repo.listAreas(), repo.listProjects(), repo.listSessions(),
+    repo.listAllTasks(), repo.listAreas(), repo.listAllProjects(), repo.listSessions(),
   ]);
   const byId = new Map(tasks.map((task) => [task.id, task]));
   const byProject = new Map(projects.map((project) => [project.id, project]));
@@ -24,11 +24,12 @@ export async function floatingTaskVersions(scope: string, notes: { id: number; c
   ]);
   return notes.map(({ id, createdAt }) => {
     const task = byId.get(id);
+    const hidden = task?.createdAt === createdAt && !!(task.projectId && byProject.get(task.projectId)?.hidden);
     const session = latest.get(id) ?? null;
     const report = reports.get(id)?.find((r) => r.sessionId === session?.id) ?? null;
-    const data = task?.createdAt === createdAt ? floatingTaskData(scope, task, areas,
+    const data = !hidden && task?.createdAt === createdAt ? floatingTaskData(scope, task, areas,
       task.projectId ? byProject.get(task.projectId) ?? null : null,
       session, session ? events[session.id] ?? [] : [], report) : null;
-    return { id, createdAt, version: floatingTaskVersion(data) };
+    return { id, createdAt, version: floatingTaskVersion(data), hidden };
   });
 }

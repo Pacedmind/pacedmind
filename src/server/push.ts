@@ -42,6 +42,7 @@ async function messageFor(sessionId: string, kind: string, text: string) {
   const session = await repo.getSession(sessionId);
   if (!session) return null;
   const task = await repo.getTask(session.taskId);
+  if (task && !(await repo.isTaskVisible(task))) return null;
   const key = task?.key ?? "A session";
   let title: string;
   if (kind === "permission") title = `${key} asks for your permission`;

@@ -4,6 +4,9 @@ import { isAttention } from "@/lib/dates";
 import { usesCloud } from "./scope";
 import * as cloud from "./store/cloud";
 import * as local from "./store/local";
+import { hiddenProjectIds, taskIsVisible } from "@/lib/project-visibility";
+import type { Task } from "@/lib/types";
+import type { SessionFilter, TaskFilter } from "./store/shared";
 
 /*
  * The app's data: the signed-in account's in PacedMind Cloud (store/cloud.ts), or without an account this
@@ -43,7 +46,11 @@ export const areaPicture = via("areaPicture");
 export const createArea = via("createArea");
 export const updateArea = via("updateArea");
 export const deleteArea = via("deleteArea");
-export const listProjects = via("listProjects");
+/** Complete data for settings, transfers and background operations, including hidden work. */
+export const listAllProjects = via("listProjects");
+export async function listProjects() {
+  return (await listAllProjects()).filter((p) => !p.hidden);
+}
 export const getProject = via("getProject");
 export const createProject = via("createProject");
 export const updateProject = via("updateProject");
@@ -53,7 +60,15 @@ export const setAreaRepo = via("setAreaRepo");
 export const mergeProject = via("mergeProject");
 
 /* ---------- tasks ---------- */
-export const listTasks = via("listTasks");
+export const listAllTasks = via("listTasks");
+export async function listTasks(filter: TaskFilter = {}) {
+  const [tasks, projects] = await Promise.all([listAllTasks(filter), listAllProjects()]);
+  const hidden = hiddenProjectIds(projects);
+  return tasks.filter((t) => taskIsVisible(t, hidden));
+}
+export async function isTaskVisible(task: Pick<Task, "projectId">) {
+  return !task.projectId || !(await getProject(task.projectId))?.hidden;
+}
 export const getTask = via("getTask");
 export const createTask = via("createTask");
 export const updateTask = via("updateTask");
@@ -72,7 +87,15 @@ export const setEventDone = via("setEventDone");
 export const occurrences = via("occurrences");
 
 /* ---------- sessions ---------- */
-export const listSessions = via("listSessions");
+export const listAllSessions = via("listSessions");
+export async function listSessions(filter: SessionFilter = {}) {
+  const [sessions, projects] = await Promise.all([listAllSessions(filter), listAllProjects()]);
+  const hidden = hiddenProjectIds(projects);
+  if (!hidden.size) return sessions;
+  const tasks = await listAllTasks();
+  const hiddenTasks = new Set(tasks.filter((t) => !taskIsVisible(t, hidden)).map((t) => t.id));
+  return sessions.filter((s) => !hiddenTasks.has(s.taskId));
+}
 export const getSession = via("getSession");
 export const latestSession = via("latestSession");
 export const createSession = via("createSession");

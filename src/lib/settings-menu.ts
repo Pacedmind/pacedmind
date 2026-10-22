@@ -2,7 +2,7 @@ import { createTranslator, type Translator } from "./i18n";
 /** Settings' pages, each at /settings/<id> (src/app/(app)/settings/[section]). */
 export type SettingsSection =
   | "account" | "plan" | "security" | "computers" | "data"
-  | "appearance" | "notifications" | "planning" | "preferences"
+  | "appearance" | "notifications" | "planning" | "preferences" | "hidden-projects"
   | "computer" | "sessions" | "projects" | "mcp";
 
 export interface SettingsPage {
@@ -43,6 +43,7 @@ export function settingsMenu({ account, plan, desktop }: { account: boolean; pla
         page("appearance", "Appearance", "How PacedMind looks here."),
         ...(account ? [page("notifications", "Notifications", "When a session needs you, wherever you are.")] : []),
         page("planning", "Planning", "The time the auto-planner fills with focus blocks."),
+        page("hidden-projects", "Hidden projects", "Restore projects and their tasks when you are ready to work on them again."),
         page("preferences", "How you work", "What agents follow when they plan your time and write tasks for you."),
       ],
     },

@@ -137,7 +137,11 @@ export async function findProject(query: string): Promise<Project> {
 }
 
 export async function findTask(query: string): Promise<Task> {
-  return (await repo.getTask(query.trim())) ?? fail(`No task ${query}. Task keys look like WRK-12; list_tasks finds them.`);
+  const task = await repo.getTask(query.trim());
+  const who = caller();
+  // A session already working on a hidden project still needs to report back on its own task.
+  if (task && ((who.kind === "session" && who.taskId === task.id) || await repo.isTaskVisible(task))) return task;
+  return fail(`No task ${query}. Task keys look like WRK-12; list_tasks finds them.`);
 }
 
 export async function findEvent(id: number): Promise<CalEvent> {

@@ -21,12 +21,12 @@ import {
  */
 export async function afterTaskDone(taskId: number): Promise<void> {
   await repeatTask(taskId);
-  const finished = await repo.listSessions({ taskId, status: ["finished"] });
+  const finished = await repo.listAllSessions({ taskId, status: ["finished"] });
   for (const s of finished) {
     await repo.updateSession(s.id, { status: "done" });
     await repo.addSessionEvent(s.id, "done", "You marked it done");
   }
-  for (const s of await repo.listSessions({ taskId, surface: "cloud", status: LIVE_STATUSES })) {
+  for (const s of await repo.listAllSessions({ taskId, surface: "cloud", status: LIVE_STATUSES })) {
     await repo.updateSession(s.id, { status: "done", finishedAt: nowStamp() });
     await repo.addSessionEvent(s.id, "done", "You marked it done");
   }
@@ -69,7 +69,7 @@ export async function activeSession(taskId: number, sessionId?: string | null): 
     const s = await repo.getSession(sessionId);
     if (s && s.taskId === taskId) return s;
   }
-  return (await repo.listSessions({ taskId, status: LIVE_STATUSES }))[0] ?? null;
+  return (await repo.listAllSessions({ taskId, status: LIVE_STATUSES }))[0] ?? null;
 }
 
 /** What an agent hands back with finish_task besides its summary (the note). The images are already stored. */
@@ -170,7 +170,7 @@ export function changesViaIn(s: Session, ctx: { task: Task | null | undefined; l
 /** changesProblemIn for one session, looking up what it needs. */
 export async function changesProblem(s: Session, where: "here" | "remote" = "here"): Promise<string | null> {
   const [task, live, newest] = await Promise.all([
-    repo.getTask(s.taskId), repo.listSessions({ taskId: s.taskId, status: LIVE_STATUSES }), repo.latestReport(s.taskId),
+    repo.getTask(s.taskId), repo.listAllSessions({ taskId: s.taskId, status: LIVE_STATUSES }), repo.latestReport(s.taskId),
   ]);
   return changesProblemIn(s, { task, live: live.length > 0, newest }, where);
 }
@@ -233,7 +233,7 @@ export async function edgeWouldLoop(fromId: number, toId: number): Promise<boole
 
 /** Whether making `projectId` start after `afterId` would make projects wait for each other in a circle. */
 export async function startsAfterWouldLoop(projectId: string, afterId: string): Promise<boolean> {
-  const byId = new Map((await repo.listProjects()).map((p) => [p.id, p]));
+  const byId = new Map((await repo.listAllProjects()).map((p) => [p.id, p]));
   const seen = new Set<string>();
   for (let cur: string | null = afterId; cur && !seen.has(cur); cur = byId.get(cur)?.afterProjectId ?? null) {
     if (cur === projectId) return true;

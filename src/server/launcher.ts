@@ -642,7 +642,7 @@ export function startSession(
     const bad = checkTask(task);
     if (bad) return { ok: false, error: bad };
     if (task.agent === "human") return { ok: false, error: `${task.key} is marked as yours. Hand it to Claude Code or Codex before starting a session.` };
-    if ((await repo.listSessions({ taskId: task.id, status: LIVE_STATUSES })).length) {
+    if ((await repo.listAllSessions({ taskId: task.id, status: LIVE_STATUSES })).length) {
       return { ok: false, error: `${task.key} already has a running session` };
     }
     const project = task.projectId ? await repo.getProject(task.projectId) : null;

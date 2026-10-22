@@ -74,6 +74,10 @@ export async function POST(request: NextRequest) {
     }
     if (row.status !== "pending") continue;
     const task = await repo.getTask(row.taskId);
+    if (task && !(await repo.isTaskVisible(task))) {
+      await repo.settleTaskNoteRequest(row.id, "pending", "failed", "The project is hidden.");
+      continue;
+    }
     if (!task || task.createdAt !== row.taskCreatedAt) {
       await repo.settleTaskNoteRequest(row.id, "pending", "failed", "That task was deleted or replaced.");
       continue;

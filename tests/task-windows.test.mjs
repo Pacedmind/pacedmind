@@ -368,6 +368,18 @@ test("46 notes share one inventory; version messages cannot cross accounts or re
   assert.equal(windows[0].messages.length, 1);
 });
 
+test("hidden project notes close only for the matching account and task creation time", () => {
+  const { notes } = fixture();
+  notes.show(1, "local", createdAt, "1");
+  notes.show(2, "local", createdAt, "1");
+  const hidden = { id: 1, createdAt, version: "a".repeat(64), hidden: true };
+  notes.updateVersions(account, [hidden]);
+  notes.updateVersions("local", [{ ...hidden, createdAt: "2000-01-01T00:00:00" }]);
+  assert.equal(notes.tasks("local").length, 2);
+  notes.updateVersions("local", [hidden]);
+  assert.deepEqual(notes.tasks("local"), [{ id: 2, createdAt }]);
+});
+
 test("layout settings and custom spaces cannot put cards outside a display or overlap groups", () => {
   const area = { x: -2560, y: -200, width: 2560, height: 1392 };
   const notes = Array.from({ length: 23 }, (_, i) => ({ id: i + 1, createdAt, meta: { priority: i % 3 ? "medium" : "high", projectId: String(i % 3), projectName: `Project ${i % 3}` } }));

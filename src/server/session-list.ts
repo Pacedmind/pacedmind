@@ -20,10 +20,11 @@ const active = (s: Session) => s.status === "starting" || s.status === "running"
  * as they last said (every minute while they run). Computers without any are left out.
  */
 export async function otherSessionGroups(): Promise<OtherGroup[]> {
-  const [projects, devices, cloud, attached] = await Promise.all([repo.listProjects(), repo.listDevices(), usesCloud(), attachedConversations()]);
+  const [projects, devices, cloud, attached] = await Promise.all([repo.listAllProjects(), repo.listDevices(), usesCloud(), attachedConversations()]);
   const names = new Map(projects.map((p) => [p.id, p.name]));
   // One attached to a task since its computer last said is PacedMind's now.
-  const named = (list: OtherSession[]) => list.filter((s) => !attached.has(outsideConversation(s) ?? s.ref))
+  const hidden = new Set(projects.filter((p) => p.hidden).map((p) => p.id));
+  const named = (list: OtherSession[]) => list.filter((s) => !attached.has(outsideConversation(s) ?? s.ref) && (!s.projectId || !hidden.has(s.projectId)))
     .map((s) => ({ ...s, project: (s.projectId && names.get(s.projectId)) || null }));
   const groups: OtherGroup[] = [];
   if (MODE === "desktop") groups.push({ id: "here", computer: deviceConfig().name, here: true, online: true, sessions: named(scanOtherSessions(projects, attached)) });

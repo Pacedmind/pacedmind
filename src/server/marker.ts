@@ -179,7 +179,7 @@ export async function markArea(area: Pick<Area, "id" | "name" | "folder">): Prom
 /** The projects and areas linked to a folder here whose folder doesn't name them yet. */
 export async function unmarked(): Promise<{ projects: Project[]; areas: Area[] }> {
   if (!(await marking())) return { projects: [], areas: [] };
-  const [projects, areas] = await Promise.all([repo.listProjects(), repo.listAreas()]);
+  const [projects, areas] = await Promise.all([repo.listAllProjects(), repo.listAreas()]);
   const missing = (folder: string | null, id: string, kind: "project" | "area") =>
     !!folder && !folderProblem(folder) && !asks(path.join(folder, MARKER)) && readMarker(folder)?.[kind]?.id !== id.toLowerCase();
   return {

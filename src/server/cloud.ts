@@ -22,7 +22,7 @@ export async function checkCodexCloud() {
   if (busy || !me || !localTools().codex.cli) return;
   busy = true;
   try {
-    const running = (await repo.listSessions({ status: ["running"], surface: "cloud", agent: "codex", deviceId: me }))
+    const running = (await repo.listAllSessions({ status: ["running"], surface: "cloud", agent: "codex", deviceId: me }))
       .filter((s) => s.url?.startsWith("https://chatgpt.com/codex/tasks/"));
     if (!running.length) return;
     const out = await runCommand(`${cliCommand("codex")} cloud list --json --limit 20`, 60_000);

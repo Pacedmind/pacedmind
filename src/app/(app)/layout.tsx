@@ -68,7 +68,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
     today: tasks.filter((t) => open(t) && ((t.dueDate && dateOnly(t.dueDate) <= today) || t.plannedDate === today)).length,
     sessions: waiting.length,
   };
-  const approvals = MODE === "desktop" ? approvalItems(tasks) : [];
+  const approvals = MODE === "desktop" ? approvalItems(tasks, new Set(projects.map((p) => p.id))) : [];
   // Signed in on the desktop, after the import's first offer: the agents here not yet on PacedMind Cloud's MCP server.
   const offer = MODE === "desktop" && state && deviceConfig().importOffered && !deviceConfig().cloudConnectOffered;
   const found = offer ? localTools() : null;

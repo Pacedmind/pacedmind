@@ -361,6 +361,10 @@ export function ProjectMenu({ project, projects, areas, anchor, usage, onClose, 
         </>
       )}
       <PopoverSeparator />
+      <PopoverItem icon={<Icon name="moon" size={14} />} onClick={() => {
+        run(() => updateProjectAction(project.id, { hidden: true }), tx("Project hidden. Restore it in Settings → Hidden projects."));
+        onClose();
+      }}>{tx("Hide project")}</PopoverItem>
       <PopoverItem icon={<Icon name="trash" size={14} />} danger onClick={() => setConfirm(true)}>{tx("Delete project…")}</PopoverItem>
     </Popover>
   );

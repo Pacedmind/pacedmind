@@ -25,7 +25,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
  */
 export async function linkProjects() {
   if (MODE !== "desktop") return;
-  const projects = await repo.listProjects();
+  const projects = await repo.listAllProjects();
   for (const p of projects) {
     const found = p.folder && !p.repo ? repoIdentity(p.folder) : null;
     if (found) {
@@ -81,7 +81,7 @@ export async function linkWorkspace(area: Area, folder: string): Promise<string 
  * none: its sessions start where you start them.
  */
 export async function mergeProjects(fromIds: string[], intoId: string): Promise<{ into: Project; merged: Project[] } | { error: string }> {
-  const projects = await repo.listProjects();
+  const projects = await repo.listAllProjects();
   const into = projects.find((p) => p.id === intoId);
   if (!into) return { error: "Project not found" };
   const merged = [...new Set(fromIds)].flatMap((id) => projects.find((p) => p.id === id && id !== intoId) ?? []);

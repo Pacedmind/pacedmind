@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { ComputersSettings } from "@/components/computers-settings";
+import { HiddenProjectsSettings } from "@/components/hidden-projects-settings";
 import {
   AccountSettings, AppearanceSettings, ComputerSettings, DataSettings, McpSettings, NotificationSettings, PlanSettings,
   PlanningSettings, PreferencesSettings, ProjectSettings, SecuritySettings, SessionSettings, SettingsContent, type AccountView,
@@ -61,6 +62,10 @@ export default async function SettingsSectionPage(props: PageProps<"/settings/[s
 
 async function body(section: SettingsSection, state: Auth | null, desktop: boolean, tx: Translator = createTranslator("en")): Promise<ReactNode> {
   switch (section) {
+    case "hidden-projects": {
+      const [projects, areas] = await Promise.all([repo.listAllProjects(), repo.listAreas()]);
+      return <HiddenProjectsSettings projects={projects.filter((p) => p.hidden)} areas={areas} />;
+    }
     case "account": {
       if (!state) return <AccountSettings account={null} devices={[]} thisDeviceId={null} />;
       const [all, me] = await Promise.all([repo.listDevices(), desktop ? thisDevice() : null]);
@@ -79,7 +84,7 @@ async function body(section: SettingsSection, state: Auth | null, desktop: boole
       return <ComputersSettings />;
     case "data": {
       const [legacy, sessions, summary, copies] = await Promise.all([
-        state && desktop ? legacySummary() : null, repo.listSessions(), dataSummary(),
+        state && desktop ? legacySummary() : null, repo.listAllSessions(), dataSummary(),
         // Before the account's copies exist in its database, there are none to list.
         dataCopies().catch(() => []),
       ]);

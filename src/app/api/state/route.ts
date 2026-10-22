@@ -71,14 +71,14 @@ export async function GET() {
   }
   const names = recent.length ? new Map((await repo.listDevices()).map((d) => [d.id, d.name])) : new Map<string, string>();
   const now = Date.now();
-  const requests: LaunchRequestView[] = recent.map((r) => ({
+  const requests: LaunchRequestView[] = recent.filter((r) => byId.has(r.taskId)).map((r) => ({
     id: r.id, kind: r.kind, taskId: r.taskId, agent: r.agent, taskKey: byId.get(r.taskId)?.key ?? null, targetSessionId: r.targetSessionId, sessionId: r.sessionId,
     deviceId: r.deviceId, deviceName: names.get(r.deviceId) ?? null,
     // A computer that was off never answered: past its time, a waiting request is as good as expired.
     status: r.status === "pending" && Date.parse(r.expiresAt) <= now ? "expired" : r.status,
     note: r.note, createdAt: r.requestedAt, expiresAt: r.expiresAt, decidedAt: r.decidedAt,
   }));
-  const approvals = MODE === "desktop" ? approvalItems(tasks) : [];
+  const approvals = MODE === "desktop" ? approvalItems(tasks, new Set((await repo.listProjects()).map((p) => p.id))) : [];
   const approvalKey = approvals.map((a) => a.id).join(",");
   return Response.json(
     {

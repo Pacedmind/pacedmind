@@ -54,6 +54,7 @@ export function registerTaskNoteTools(server: McpServer) {
     kind: "create", openWorld: true,
   }, async ({ task, computer, display, remember }) => {
     const t = await findTask(task);
+    if (!(await repo.isTaskVisible(t))) fail("Restore the project in Settings → Hidden projects before showing its tasks.");
     const session = callerSession();
     if (session && session.taskId !== t.id) fail("A launched session may show a note only for its own task.");
     const { device, snapshot } = await destination(computer);

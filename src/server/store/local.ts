@@ -174,6 +174,7 @@ export async function deleteProject(id: string) {
 }
 
 const toProject = (r: Row): Project => ({
+  hidden: r.hidden === 1,
   id: String(r.id), areaId: String(r.area_id), name: String(r.name), color: s(r.color), startDate: s(r.start_date), targetDate: s(r.target_date),
   folder: projectFolder(String(r.id)), deviceId: null, codexEnv: s(r.codex_env), repo: repoOf(r.repo), agent: s(r.agent) as AgentId | null,
   afterProjectId: s(r.after_project_id), sort: Number(r.sort),
@@ -229,6 +230,10 @@ export async function updateProject(id: string, patch: Partial<Omit<Project, "id
     patch = { ...patch, codexEnv: env };
   }
   const values = columns(patch, PROJECT_COLS);
+  if (patch.hidden !== undefined) {
+    if (typeof patch.hidden !== "boolean") throw new Error("Choose whether to hide the project.");
+    values.hidden = Number(patch.hidden);
+  }
   // The repository of a folder set here; a folder outside one keeps what another computer saw.
   const found = patch.folder ? repoIdentity(patch.folder) : null;
   if (found) values.repo = found;

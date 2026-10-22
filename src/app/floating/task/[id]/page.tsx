@@ -16,7 +16,7 @@ export default async function FloatingTaskPage(props: PageProps<"/floating/task/
   if (!/^[1-9]\d*$/.test(id) || !Number.isSafeInteger(Number(id)) || typeof scope !== "string" ||
       typeof createdAt !== "string" || floatingTaskScope(await authState()) !== scope) return <FloatingTask data={null} version={floatingTaskVersion(null)} />;
   const task = await repo.getTask(Number(id));
-  if (!task || task.createdAt !== createdAt) return <FloatingTask data={null} version={floatingTaskVersion(null)} />;
+  if (!task || task.createdAt !== createdAt || !(await repo.isTaskVisible(task))) return <FloatingTask data={null} version={floatingTaskVersion(null)} />;
   const [areas, project, sessions] = await Promise.all([
     repo.listAreas(), task.projectId ? repo.getProject(task.projectId) : null, repo.listSessions({ taskId: task.id }),
   ]);

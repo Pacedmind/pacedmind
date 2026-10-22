@@ -16,7 +16,7 @@ export default async function ProjectPage(props: PageProps<"/project/[id]">) {
   const sp = await props.searchParams;
   const project = await repo.getProject(id);
   // Deleted (maybe just now, from its own menu): show the overview instead of a 404.
-  if (!project) redirect("/projects");
+  if (!project || project.hidden) redirect("/projects");
   const [areas, tasks, areaTasks] = await Promise.all([repo.listAreas(), repo.listTasks({ projectId: id }), repo.listTasks({ areaId: project.areaId })]);
   // Tasks about the project without being part of it: they live in its area's To-dos and count nowhere here.
   const related = areaTasks.filter((t) => t.relatedProjectId === id && !t.projectId && t.status !== "canceled");

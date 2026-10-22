@@ -110,6 +110,8 @@ export interface FolderHints {
 
 export interface Project {
   id: string;
+  /** Hidden from everyday views together with its tasks; restored in Settings. */
+  hidden: boolean;
   areaId: string;
   name: string;
   /** Own color; null means the area's color is used. */

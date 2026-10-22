@@ -23,7 +23,7 @@ const REF = /^[A-Za-z0-9_-]{1,80}$/;
 
 /** The conversations PacedMind's sessions have: sessions it started, and outside ones attached to a task. */
 export async function attachedConversations(): Promise<Set<string>> {
-  return new Set((await repo.listSessions()).flatMap((s) => (s.cliSessionId ? [s.cliSessionId] : [])));
+  return new Set((await repo.listAllSessions()).flatMap((s) => (s.cliSessionId ? [s.cliSessionId] : [])));
 }
 
 export interface AttachInput {
@@ -73,7 +73,7 @@ export async function attachOutsideSession(input: AttachInput): Promise<AttachRe
   // One conversation, one session: attached already, or started by PacedMind.
   const conversation = outsideConversation(found);
   if (conversation) {
-    const already = (await repo.listSessions()).find((s) => s.cliSessionId === conversation);
+    const already = (await repo.listAllSessions()).find((s) => s.cliSessionId === conversation);
     if (already) return fail(`That session is already ${(await repo.getTask(already.taskId))?.key ?? "another task"}'s.`);
   }
 
@@ -90,7 +90,7 @@ export async function attachOutsideSession(input: AttachInput): Promise<AttachRe
   if (task.agent === "human") return fail(`${task.key} is marked as yours. Hand it to Claude Code or Codex before attaching a session to it.`);
 
   const live = found.state !== "idle";
-  if (live && (await repo.listSessions({ taskId: task.id, status: LIVE_STATUSES })).length) {
+  if (live && (await repo.listAllSessions({ taskId: task.id, status: LIVE_STATUSES })).length) {
     return fail(`${task.key} already has a running session. Attach this one to another task, or close that one first.`);
   }
   const session = await repo.createSession({

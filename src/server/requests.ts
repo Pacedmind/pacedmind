@@ -74,9 +74,9 @@ const FROM_TEXT: Record<ApprovalFrom, string> = {
   agentElsewhere: "an agent, from elsewhere",
 };
 
-export function approvalItems(tasks: Task[]): ApprovalItem[] {
+export function approvalItems(tasks: Task[], visibleProjectIds: ReadonlySet<string>): ApprovalItem[] {
   const byId = new Map(tasks.map((t) => [t.id, t]));
-  const sessions: ApprovalItem[] = pendingApprovals().map((a) => ({
+  const sessions: ApprovalItem[] = pendingApprovals().filter((a) => byId.has(a.taskId)).map((a) => ({
     id: a.id, kind: a.kind, key: a.key, title: byId.get(a.taskId)?.title ?? "", agent: `${AGENT_LABEL[a.agent]} · ${SURFACE_LABEL[a.surface]}`,
     surface: a.surface, folder: a.folder, modelSettings: a.modelSettings,
     from: a.changes ? `${FROM_TEXT[a.from]}, sending the session back with changes: “${excerpt(a.changes.text)}”`
@@ -85,7 +85,9 @@ export function approvalItems(tasks: Task[]): ApprovalItem[] {
     requestedAt: a.requestedAt, expiresAt: a.expiresAt,
   }));
   // A folder: `title` says what gets it (a project, an area's workspace, a task).
-  const folders: ApprovalItem[] = pendingFolderApprovals().map((a) => ({
+  const folders: ApprovalItem[] = pendingFolderApprovals().filter((a) =>
+    a.target.kind === "project" ? visibleProjectIds.has(a.target.id) : a.target.kind !== "task" || byId.has(Number(a.target.id))
+  ).map((a) => ({
     id: a.id, kind: "folder", key: "", title: a.name, agent: "", surface: "terminal", folder: a.folder, modelSettings: null,
     from: FROM_TEXT[a.from], changes: null, missing: [], requestedAt: a.requestedAt, expiresAt: a.expiresAt,
   }));
@@ -212,7 +214,7 @@ const g = globalThis as unknown as {
 async function othersToReport(): Promise<OtherSession[] | null> {
   try {
     const five = 5 * 60_000;
-    const [projects, attached] = await Promise.all([repo.listProjects(), attachedConversations()]);
+    const [projects, attached] = await Promise.all([repo.listAllProjects(), attachedConversations()]);
     return scanOtherSessions(projects, attached)
       .map((s) => ({ ...s, activeAt: new Date(Math.floor(Date.parse(s.activeAt) / five) * five).toISOString() }));
   } catch (e) {

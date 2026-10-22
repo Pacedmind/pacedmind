@@ -2119,5 +2119,14 @@
   "large": "duże",
   "grid": "siatkę",
   "columns": "kolumny",
-  "rows": "wiersze"
+  "rows": "wiersze",
+  "Hidden projects": "Ukryte projekty",
+  "Restore projects and their tasks when you are ready to work on them again.": "Przywróć projekty i ich zadania, gdy zechcesz do nich wrócić.",
+  "Hidden projects and their tasks stay out of your views, search, planning and notifications. Their dates and history are kept.": "Ukryte projekty i ich zadania nie pojawiają się w widokach, wyszukiwaniu, planowaniu ani powiadomieniach. Ich terminy i historia zostają zachowane.",
+  "Project restored": "Projekt przywrócony",
+  "Restore project": "Przywróć projekt",
+  "No hidden projects. Use Hide project in a project's menu to put it aside.": "Brak ukrytych projektów. Wybierz „Ukryj projekt” w menu projektu, aby odłożyć go na później.",
+  "Project hidden. Restore it in Settings → Hidden projects.": "Projekt ukryty. Przywrócisz go w Ustawieniach → Ukryte projekty.",
+  "Hide project": "Ukryj projekt",
+  "Choose whether to hide the project.": "Wybierz, czy ukryć projekt."
 }

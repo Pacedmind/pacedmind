@@ -352,6 +352,7 @@ export async function importLegacy(): Promise<{ areas: number; projects: number;
       const env = typeof p.codex_env === "string" ? p.codex_env.trim() : "";
       const r = check(await db.from("projects").insert({
         area_id: area, name: clip(p.name, 120) || "Project", color: renewOptional(match(p.color, COLOR)), start_date: match(p.start_date, DAY),
+        hidden: p.hidden === 1,
         target_date: match(p.target_date, DAY), agent: oneOf(p.agent, ["claude", "codex"]), sort: int(p.sort, -1e6, 1e6, 0),
         codex_env: CODEX_ENV.test(env) ? env : null, device_id: p.device_id ? here : null, ...(repoOf(p.repo) ? { repo: repoOf(p.repo) } : {}),
       }).select("id").single()) as Row;
@@ -610,14 +611,14 @@ export async function moveToThisComputer(): Promise<{ areas: number; projects: n
     const area = (v: unknown) => (v == null ? null : areaId.get(String(v)) ?? null);
 
     const projectIds = new Set<string>();
-    const insProject = conn.prepare(`INSERT INTO projects (id, area_id, name, start_date, target_date, agent, sort, color, codex_env, repo)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    const insProject = conn.prepare(`INSERT INTO projects (id, area_id, name, start_date, target_date, agent, sort, color, codex_env, repo, hidden)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
     for (const p of projects) {
       const a = area(p.area_id);
       if (!a) continue;
       const id = unique(slug(p.name, "project"), projectIds);
       projectId.set(String(p.id), id);
-      insProject.run(id, a, String(p.name), s(p.start_date), s(p.target_date), s(p.agent), Number(p.sort ?? 0), s(p.color), s(p.codex_env), s(p.repo));
+      insProject.run(id, a, String(p.name), s(p.start_date), s(p.target_date), s(p.agent), Number(p.sort ?? 0), s(p.color), s(p.codex_env), s(p.repo), Number(p.hidden === true));
     }
     const afterProject = conn.prepare("UPDATE projects SET after_project_id = ? WHERE id = ?");
     for (const p of projects) {
