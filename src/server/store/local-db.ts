@@ -25,7 +25,7 @@ const SCHEMA = `
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
 CREATE TABLE IF NOT EXISTS areas (
   id TEXT PRIMARY KEY, name TEXT NOT NULL, key TEXT NOT NULL UNIQUE, color TEXT NOT NULL, sort INTEGER NOT NULL DEFAULT 0, icon TEXT,
-  picture TEXT, repo TEXT
+  picture TEXT, repo TEXT, hidden INTEGER NOT NULL DEFAULT 0 CHECK (hidden IN (0, 1))
 );
 CREATE TABLE IF NOT EXISTS projects (
   id TEXT PRIMARY KEY, area_id TEXT NOT NULL REFERENCES areas(id), name TEXT NOT NULL,
@@ -149,7 +149,7 @@ function migrate(conn: DatabaseSync) {
   // Again here, because in development a code reload keeps the open connection, which ran an older schema.
   conn.exec(SCHEMA);
   const added: Record<string, [string, string][]> = {
-    areas: [["icon", "TEXT"], ["picture", "TEXT"], ["repo", "TEXT"]],
+    areas: [["icon", "TEXT"], ["picture", "TEXT"], ["repo", "TEXT"], ["hidden", "INTEGER NOT NULL DEFAULT 0 CHECK (hidden IN (0, 1))"]],
     projects: [["color", "TEXT"], ["device_id", "TEXT"], ["codex_env", "TEXT"], ["repo", "TEXT"], ["hidden", "INTEGER NOT NULL DEFAULT 0 CHECK (hidden IN (0, 1))"]],
     tasks: [["run_in", "TEXT"], ["device_id", "TEXT"], ["folder", "TEXT"], ["done_when", "TEXT NOT NULL DEFAULT '[]'"], ["needs", "TEXT NOT NULL DEFAULT '[]'"], ["model_settings", "TEXT"], ["planned_time", "TEXT"], ["related_project_id", "TEXT"], ["repeat", "TEXT"]],
     sessions: [["surface", "TEXT NOT NULL DEFAULT 'terminal'"], ["device_id", "TEXT"], ["url", "TEXT"], ["usage", "TEXT"]],

@@ -33,7 +33,7 @@ export async function linkProjects() {
       p.repo = found;
     }
   }
-  for (const a of await repo.listAreas()) {
+  for (const a of await repo.listAllAreas()) {
     const found = a.folder && !a.repo ? repoIdentity(a.folder) : null;
     if (found) await repo.setAreaRepo(a.id, found);
   }

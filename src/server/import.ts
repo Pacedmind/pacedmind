@@ -384,7 +384,7 @@ export async function findWork({ link = true } = {}): Promise<{ projects: FoundP
 
   // Projects from your other computers should know their repositories before folders here are matched to them.
   if (link) await linkProjects().catch((e) => console.error("[organizer] project links failed", e));
-  const [projects, areas] = await Promise.all([repo.listAllProjects(), repo.listAreas()]);
+  const [projects, areas] = await Promise.all([repo.listAllProjects(), repo.listAllAreas()]);
   const scan: Scan = { left: BUDGET };
   const projectAt = new Map(projects.flatMap((p) => (p.folder ? [[keyOf(p.folder), p] as const] : [])));
   const areaAt = new Map(areas.flatMap((a) => (a.folder ? [[keyOf(a.folder), a] as const] : [])));
@@ -667,7 +667,7 @@ export async function importProjects(items: ImportItem[], areaOf: (item: ImportI
  * the areas that already have their workspace here.
  */
 export async function importAreas(list: ImportArea[]): Promise<{ areaOf: Map<string, string>; created: string[]; linked: string[]; skipped: string[] }> {
-  const areas = await repo.listAreas();
+  const areas = await repo.listAllAreas();
   const areaOf = new Map(areas.flatMap((a) => (a.folder ? [[keyOf(a.folder), a.id] as const] : [])));
   const created: string[] = [];
   const linked: string[] = [];

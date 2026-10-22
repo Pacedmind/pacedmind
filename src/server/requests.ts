@@ -74,7 +74,7 @@ const FROM_TEXT: Record<ApprovalFrom, string> = {
   agentElsewhere: "an agent, from elsewhere",
 };
 
-export function approvalItems(tasks: Task[], visibleProjectIds: ReadonlySet<string>): ApprovalItem[] {
+export function approvalItems(tasks: Task[], visibleProjectIds: ReadonlySet<string>, visibleAreaIds: ReadonlySet<string>): ApprovalItem[] {
   const byId = new Map(tasks.map((t) => [t.id, t]));
   const sessions: ApprovalItem[] = pendingApprovals().filter((a) => byId.has(a.taskId)).map((a) => ({
     id: a.id, kind: a.kind, key: a.key, title: byId.get(a.taskId)?.title ?? "", agent: `${AGENT_LABEL[a.agent]} · ${SURFACE_LABEL[a.surface]}`,
@@ -86,7 +86,7 @@ export function approvalItems(tasks: Task[], visibleProjectIds: ReadonlySet<stri
   }));
   // A folder: `title` says what gets it (a project, an area's workspace, a task).
   const folders: ApprovalItem[] = pendingFolderApprovals().filter((a) =>
-    a.target.kind === "project" ? visibleProjectIds.has(a.target.id) : a.target.kind !== "task" || byId.has(Number(a.target.id))
+    a.target.kind === "project" ? visibleProjectIds.has(a.target.id) : a.target.kind === "area" ? visibleAreaIds.has(a.target.id) : byId.has(Number(a.target.id))
   ).map((a) => ({
     id: a.id, kind: "folder", key: "", title: a.name, agent: "", surface: "terminal", folder: a.folder, modelSettings: null,
     from: FROM_TEXT[a.from], changes: null, missing: [], requestedAt: a.requestedAt, expiresAt: a.expiresAt,

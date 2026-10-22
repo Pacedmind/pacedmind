@@ -8,6 +8,7 @@ import { scanOtherSessions } from "./other-sessions";
 import * as repo from "./repo";
 import { usesCloud } from "./scope";
 import { MODE } from "./supabase";
+import { hiddenAreaIds, hiddenProjectIds } from "@/lib/project-visibility";
 import { attentionOf, dateOnly, todayStr } from "@/lib/dates";
 import type { AttachableTask, OtherGroup, SessionGroup, SessionItem, StartableTask } from "@/components/views/sessions";
 import { agentOf, deviceOnline, outsideConversation, taskHref, type OtherSession, type Report, type Session, type Status, type Task } from "@/lib/types";
@@ -20,10 +21,10 @@ const active = (s: Session) => s.status === "starting" || s.status === "running"
  * as they last said (every minute while they run). Computers without any are left out.
  */
 export async function otherSessionGroups(): Promise<OtherGroup[]> {
-  const [projects, devices, cloud, attached] = await Promise.all([repo.listAllProjects(), repo.listDevices(), usesCloud(), attachedConversations()]);
+  const [projects, areas, devices, cloud, attached] = await Promise.all([repo.listAllProjects(), repo.listAllAreas(), repo.listDevices(), usesCloud(), attachedConversations()]);
   const names = new Map(projects.map((p) => [p.id, p.name]));
   // One attached to a task since its computer last said is PacedMind's now.
-  const hidden = new Set(projects.filter((p) => p.hidden).map((p) => p.id));
+  const hidden = hiddenProjectIds(projects, hiddenAreaIds(areas));
   const named = (list: OtherSession[]) => list.filter((s) => !attached.has(outsideConversation(s) ?? s.ref) && (!s.projectId || !hidden.has(s.projectId)))
     .map((s) => ({ ...s, project: (s.projectId && names.get(s.projectId)) || null }));
   const groups: OtherGroup[] = [];

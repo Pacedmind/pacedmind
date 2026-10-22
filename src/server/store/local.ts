@@ -99,6 +99,7 @@ const slug = (name: string, fallback: string) => name.toLowerCase().replace(/[^a
 /* ---------- areas and projects ---------- */
 
 const toArea = (r: Row): Area => ({
+  hidden: r.hidden === 1,
   id: String(r.id), name: String(r.name), key: String(r.key), color: String(r.color), icon: areaIconOf(r.icon),
   picture: pictureHash(r.picture), sort: Number(r.sort), folder: areaFolder(String(r.id)), repo: repoOf(r.repo),
 });
@@ -130,8 +131,12 @@ export async function createArea(input: { name: string; color: string; icon?: Ar
  * the other; `picture` is base64 PNG (area-picture.ts), and one that isn't stays out. A new name can give the area a
  * new key (`renamedKey`), which only its new tasks get.
  */
-export async function updateArea(id: string, patch: { name?: string; color?: string; icon?: AreaIcon | null; picture?: string | null; sort?: number }) {
+export async function updateArea(id: string, patch: { name?: string; color?: string; icon?: AreaIcon | null; picture?: string | null; sort?: number; hidden?: boolean }) {
   const values: Record<string, Value> = {};
+  if (patch.hidden !== undefined) {
+    if (typeof patch.hidden !== "boolean") throw new Error("Choose whether to hide the area.");
+    values.hidden = Number(patch.hidden);
+  }
   const name = patch.name?.trim();
   if (name) {
     values.name = name;

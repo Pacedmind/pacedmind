@@ -78,7 +78,8 @@ export async function GET() {
     status: r.status === "pending" && Date.parse(r.expiresAt) <= now ? "expired" : r.status,
     note: r.note, createdAt: r.requestedAt, expiresAt: r.expiresAt, decidedAt: r.decidedAt,
   }));
-  const approvals = MODE === "desktop" ? approvalItems(tasks, new Set((await repo.listProjects()).map((p) => p.id))) : [];
+  const [projects, areas] = MODE === "desktop" ? await Promise.all([repo.listProjects(), repo.listAreas()]) : [[], []];
+  const approvals = MODE === "desktop" ? approvalItems(tasks, new Set(projects.map((p) => p.id)), new Set(areas.map((a) => a.id))) : [];
   const approvalKey = approvals.map((a) => a.id).join(",");
   return Response.json(
     {

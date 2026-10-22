@@ -54,6 +54,8 @@ export type RemoteStart = "off" | "ask" | "auto";
 
 export interface Area {
   id: string;
+  /** Hides the whole area and its contents until restored in Settings. */
+  hidden: boolean;
   /** Default workspace on this computer only; tasks and projects can override it. */
   folder: string | null;
   name: string;

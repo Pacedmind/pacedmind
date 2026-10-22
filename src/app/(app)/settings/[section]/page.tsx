@@ -63,8 +63,8 @@ export default async function SettingsSectionPage(props: PageProps<"/settings/[s
 async function body(section: SettingsSection, state: Auth | null, desktop: boolean, tx: Translator = createTranslator("en")): Promise<ReactNode> {
   switch (section) {
     case "hidden-projects": {
-      const [projects, areas] = await Promise.all([repo.listAllProjects(), repo.listAreas()]);
-      return <HiddenProjectsSettings projects={projects.filter((p) => p.hidden)} areas={areas} />;
+      const [projects, areas] = await Promise.all([repo.listAllProjects(), repo.listAllAreas()]);
+      return <HiddenProjectsSettings projects={projects} areas={areas} />;
     }
     case "account": {
       if (!state) return <AccountSettings account={null} devices={[]} thisDeviceId={null} />;

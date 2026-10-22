@@ -2,6 +2,7 @@ import "server-only";
 import { createHash } from "node:crypto";
 import { floatingTaskData, type FloatingTaskData } from "@/lib/floating-task";
 import type { Session } from "@/lib/types";
+import { hiddenAreaIds, hiddenProjectIds, taskIsVisible } from "@/lib/project-visibility";
 import * as repo from "./repo";
 
 export function floatingTaskVersion(data: FloatingTaskData | null): string {
@@ -12,8 +13,10 @@ export function floatingTaskVersion(data: FloatingTaskData | null): string {
 export async function floatingTaskVersions(scope: string, notes: { id: number; createdAt: string }[]) {
   if (!notes.length) return [];
   const [tasks, areas, projects, sessions] = await Promise.all([
-    repo.listAllTasks(), repo.listAreas(), repo.listAllProjects(), repo.listSessions(),
+    repo.listAllTasks(), repo.listAllAreas(), repo.listAllProjects(), repo.listSessions(),
   ]);
+  const hiddenAreas = hiddenAreaIds(areas);
+  const hiddenProjects = hiddenProjectIds(projects, hiddenAreas);
   const byId = new Map(tasks.map((task) => [task.id, task]));
   const byProject = new Map(projects.map((project) => [project.id, project]));
   const ids = new Set(notes.filter((n) => byId.get(n.id)?.createdAt === n.createdAt).map((n) => n.id));
@@ -24,7 +27,7 @@ export async function floatingTaskVersions(scope: string, notes: { id: number; c
   ]);
   return notes.map(({ id, createdAt }) => {
     const task = byId.get(id);
-    const hidden = task?.createdAt === createdAt && !!(task.projectId && byProject.get(task.projectId)?.hidden);
+    const hidden = task?.createdAt === createdAt && !taskIsVisible(task, hiddenProjects, hiddenAreas);
     const session = latest.get(id) ?? null;
     const report = reports.get(id)?.find((r) => r.sessionId === session?.id) ?? null;
     const data = !hidden && task?.createdAt === createdAt ? floatingTaskData(scope, task, areas,

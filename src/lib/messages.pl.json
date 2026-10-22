@@ -2128,5 +2128,17 @@
   "No hidden projects. Use Hide project in a project's menu to put it aside.": "Brak ukrytych projektów. Wybierz „Ukryj projekt” w menu projektu, aby odłożyć go na później.",
   "Project hidden. Restore it in Settings → Hidden projects.": "Projekt ukryty. Przywrócisz go w Ustawieniach → Ukryte projekty.",
   "Hide project": "Ukryj projekt",
-  "Choose whether to hide the project.": "Wybierz, czy ukryć projekt."
+  "Choose whether to hide the project.": "Wybierz, czy ukryć projekt.",
+  "Hide area": "Ukryj obszar",
+  "Restore area": "Przywróć obszar",
+  "Area restored": "Obszar przywrócony",
+  "Choose whether to hide the area.": "Wybierz, czy ukryć obszar.",
+  "Hidden areas and projects": "Ukryte obszary i projekty",
+  "Restore areas, projects and their tasks when you are ready to work on them again.": "Przywróć obszary, projekty i ich zadania, gdy zechcesz do nich wrócić.",
+  "Area hidden. Restore it in Settings → Hidden areas and projects.": "Obszar ukryty. Przywrócisz go w Ustawieniach → Ukryte obszary i projekty.",
+  "Project hidden. Restore it in Settings → Hidden areas and projects.": "Projekt ukryty. Przywrócisz go w Ustawieniach → Ukryte obszary i projekty.",
+  "Hidden areas, projects and their contents stay out of your views, search, planning and notifications. Their dates and history are kept.": "Ukryte obszary, projekty i ich zawartość nie pojawiają się w widokach, wyszukiwaniu, planowaniu ani powiadomieniach. Ich terminy i historia zostają zachowane.",
+  "Area with its projects, to-dos and calendar activities": "Obszar wraz z projektami, zadaniami i aktywnościami w kalendarzu",
+  "Nothing hidden. Use Hide area or Hide project in its menu to put it aside.": "Brak ukrytych elementów. Wybierz „Ukryj obszar” lub „Ukryj projekt” w jego menu, aby odłożyć go na później.",
+  "Restoring an area keeps individually hidden projects hidden. You can then restore them here separately.": "Po przywróceniu obszaru osobno ukryte projekty pozostaną ukryte. Możesz je wtedy przywrócić tutaj oddzielnie."
 }

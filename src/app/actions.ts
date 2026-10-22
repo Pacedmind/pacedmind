@@ -620,10 +620,11 @@ export async function createAreaAction(input: { name: string; color: string }): 
 }
 
 /** `icon: null` puts the area's dot back. */
-export async function updateAreaAction(id: string, patch: { name?: string; color?: string; icon?: string | null }) {
+export async function updateAreaAction(id: string, patch: { name?: string; color?: string; icon?: string | null; hidden?: boolean }) {
   await guard();
   if (patch.icon != null && !isAreaIcon(patch.icon)) return { ok: false, error: "Pick one of the icons" };
-  await repo.updateArea(id, { name: patch.name, color: patch.color, icon: patch.icon === undefined ? undefined : areaIconOf(patch.icon) });
+  if (patch.hidden !== undefined && typeof patch.hidden !== "boolean") return { ok: false, error: "Choose whether to hide the area." };
+  await repo.updateArea(id, { name: patch.name, color: patch.color, icon: patch.icon === undefined ? undefined : areaIconOf(patch.icon), hidden: patch.hidden });
   return done();
 }
 

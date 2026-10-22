@@ -333,6 +333,7 @@ export async function importLegacy(): Promise<{ areas: number; projects: number;
         row: {
           name: clip(a.name, 80) || "Area", key, color: renewColor(match(a.color, COLOR) ?? PALETTE[0].value),
           ...(picture ? { picture } : icon ? { icon } : {}), sort: int(a.sort, -1e6, 1e6, 0), repo: repoOf(a.repo),
+          hidden: a.hidden === 1,
         },
       };
     });
@@ -602,11 +603,11 @@ export async function moveToThisComputer(): Promise<{ areas: number; projects: n
     conn.exec("DELETE FROM sqlite_sequence");
 
     const areaIds = new Set<string>();
-    const insArea = conn.prepare("INSERT INTO areas (id, name, key, color, sort, icon, picture, repo) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+    const insArea = conn.prepare("INSERT INTO areas (id, name, key, color, sort, icon, picture, repo, hidden) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
     for (const a of areas) {
       const id = unique(slug(a.name, "area"), areaIds);
       areaId.set(String(a.id), id);
-      insArea.run(id, String(a.name), String(a.key), String(a.color), Number(a.sort ?? 0), s(a.icon), s(a.picture), repoOf(a.repo));
+      insArea.run(id, String(a.name), String(a.key), String(a.color), Number(a.sort ?? 0), s(a.icon), s(a.picture), repoOf(a.repo), Number(a.hidden === true));
     }
     const area = (v: unknown) => (v == null ? null : areaId.get(String(v)) ?? null);
 

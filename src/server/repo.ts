@@ -4,8 +4,8 @@ import { isAttention } from "@/lib/dates";
 import { usesCloud } from "./scope";
 import * as cloud from "./store/cloud";
 import * as local from "./store/local";
-import { hiddenProjectIds, taskIsVisible } from "@/lib/project-visibility";
-import type { Task } from "@/lib/types";
+import { hiddenAreaIds, hiddenProjectIds, taskIsVisible } from "@/lib/project-visibility";
+import type { Project, Task } from "@/lib/types";
 import type { SessionFilter, TaskFilter } from "./store/shared";
 
 /*
@@ -41,7 +41,10 @@ function via<K extends keyof Store>(name: K): Store[K] {
 }
 
 /* ---------- areas and projects ---------- */
-export const listAreas = via("listAreas");
+export const listAllAreas = via("listAreas");
+export async function listAreas() {
+  return (await listAllAreas()).filter((a) => !a.hidden);
+}
 export const areaPicture = via("areaPicture");
 export const createArea = via("createArea");
 export const updateArea = via("updateArea");
@@ -49,7 +52,17 @@ export const deleteArea = via("deleteArea");
 /** Complete data for settings, transfers and background operations, including hidden work. */
 export const listAllProjects = via("listProjects");
 export async function listProjects() {
-  return (await listAllProjects()).filter((p) => !p.hidden);
+  const [projects, areas] = await Promise.all([listAllProjects(), listAllAreas()]);
+  const hidden = hiddenAreaIds(areas);
+  return projects.filter((p) => !p.hidden && !hidden.has(p.areaId));
+}
+export async function isProjectVisible(project: Pick<Project, "hidden" | "areaId">) {
+  return !project.hidden && !(await listAllAreas()).some((a) => a.id === project.areaId && a.hidden);
+}
+async function visibility() {
+  const [projects, areas] = await Promise.all([listAllProjects(), listAllAreas()]);
+  const hiddenAreas = hiddenAreaIds(areas);
+  return { areas: hiddenAreas, projects: hiddenProjectIds(projects, hiddenAreas) };
 }
 export const getProject = via("getProject");
 export const createProject = via("createProject");
@@ -62,12 +75,12 @@ export const mergeProject = via("mergeProject");
 /* ---------- tasks ---------- */
 export const listAllTasks = via("listTasks");
 export async function listTasks(filter: TaskFilter = {}) {
-  const [tasks, projects] = await Promise.all([listAllTasks(filter), listAllProjects()]);
-  const hidden = hiddenProjectIds(projects);
-  return tasks.filter((t) => taskIsVisible(t, hidden));
+  const [tasks, hidden] = await Promise.all([listAllTasks(filter), visibility()]);
+  return tasks.filter((t) => taskIsVisible(t, hidden.projects, hidden.areas));
 }
-export async function isTaskVisible(task: Pick<Task, "projectId">) {
-  return !task.projectId || !(await getProject(task.projectId))?.hidden;
+export async function isTaskVisible(task: Pick<Task, "projectId" | "areaId">) {
+  const hidden = await visibility();
+  return taskIsVisible(task, hidden.projects, hidden.areas);
 }
 export const getTask = via("getTask");
 export const createTask = via("createTask");
@@ -78,22 +91,31 @@ export const setSubtaskDone = via("setSubtaskDone");
 export const deleteSubtask = via("deleteSubtask");
 
 /* ---------- calendar events ---------- */
-export const listEvents = via("listEvents");
+export const listAllEvents = via("listEvents");
+export async function listEvents() {
+  const [events, areas] = await Promise.all([listAllEvents(), listAllAreas()]);
+  const hidden = hiddenAreaIds(areas);
+  return events.filter((e) => !e.areaId || !hidden.has(e.areaId));
+}
 export const createEvent = via("createEvent");
 export const getEvent = via("getEvent");
 export const updateEvent = via("updateEvent");
 export const deleteEvent = via("deleteEvent");
 export const setEventDone = via("setEventDone");
-export const occurrences = via("occurrences");
+const allOccurrences = via("occurrences");
+export async function occurrences(from: string, to: string) {
+  const [events, areas] = await Promise.all([allOccurrences(from, to), listAllAreas()]);
+  const hidden = hiddenAreaIds(areas);
+  return events.filter((e) => !e.areaId || !hidden.has(e.areaId));
+}
 
 /* ---------- sessions ---------- */
 export const listAllSessions = via("listSessions");
 export async function listSessions(filter: SessionFilter = {}) {
-  const [sessions, projects] = await Promise.all([listAllSessions(filter), listAllProjects()]);
-  const hidden = hiddenProjectIds(projects);
-  if (!hidden.size) return sessions;
+  const [sessions, hidden] = await Promise.all([listAllSessions(filter), visibility()]);
+  if (!hidden.projects.size && !hidden.areas.size) return sessions;
   const tasks = await listAllTasks();
-  const hiddenTasks = new Set(tasks.filter((t) => !taskIsVisible(t, hidden)).map((t) => t.id));
+  const hiddenTasks = new Set(tasks.filter((t) => !taskIsVisible(t, hidden.projects, hidden.areas)).map((t) => t.id));
   return sessions.filter((s) => !hiddenTasks.has(s.taskId));
 }
 export const getSession = via("getSession");

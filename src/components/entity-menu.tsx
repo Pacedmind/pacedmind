@@ -242,6 +242,10 @@ export function AreaMenu({ area, anchor, usage, desktop, onClose, onRename, onNe
       <PopoverItem icon={<Icon name="pen" size={14} />} onClick={() => { onClose(); onRename(); }}>{tx("Rename")}</PopoverItem>
       <PopoverItem icon={<Icon name="plus" size={14} />} onClick={() => { onClose(); onNewProject(); }}>{tx("New project")}</PopoverItem>
       <PopoverLink icon={<Icon name="layers" size={14} />} href={`/area/${area.id}`} onClick={onClose}>{tx("Open tasks")}</PopoverLink>
+      <PopoverItem icon={<Icon name="moon" size={14} />} onClick={() => {
+        run(() => updateAreaAction(area.id, { hidden: true }), tx("Area hidden. Restore it in Settings → Hidden areas and projects."));
+        onClose();
+      }}>{tx("Hide area")}</PopoverItem>
       {desktop && <>
         <PopoverItem icon={<Icon name="folder" size={14} />} onClick={() => setWorkspace((v) => !v)}
           hint={<Icon name={workspace ? "chevronDown" : "chevronRight"} size={12} />}>{tx("Workspace…")}</PopoverItem>
@@ -362,7 +366,7 @@ export function ProjectMenu({ project, projects, areas, anchor, usage, onClose, 
       )}
       <PopoverSeparator />
       <PopoverItem icon={<Icon name="moon" size={14} />} onClick={() => {
-        run(() => updateProjectAction(project.id, { hidden: true }), tx("Project hidden. Restore it in Settings → Hidden projects."));
+        run(() => updateProjectAction(project.id, { hidden: true }), tx("Project hidden. Restore it in Settings → Hidden areas and projects."));
         onClose();
       }}>{tx("Hide project")}</PopoverItem>
       <PopoverItem icon={<Icon name="trash" size={14} />} danger onClick={() => setConfirm(true)}>{tx("Delete project…")}</PopoverItem>
