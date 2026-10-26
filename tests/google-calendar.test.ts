@@ -32,6 +32,19 @@ test("imports and exports once, and incremental sync never duplicates", async ()
   f.incremental(); await synchronize(f.state, f.io); await synchronize(f.state, f.io);
   assert.equal(f.locals.size, 2); assert.equal(f.remotes.size, 2); assert.equal(f.writes(), 1);
 });
+test("unchanged incremental mappings need one checkpoint while local edits still export", async () => {
+  const f = fixture([], Array.from({ length: 100 }, (_, i) => remote(`google${i}`)));
+  await synchronize(f.state, f.io);
+  f.incremental();
+  let checkpoints = 0;
+  f.io.save = async () => { checkpoints++; };
+  await synchronize(f.state, f.io);
+  assert.equal(checkpoints, 1);
+  const last = [...f.locals.values()].at(-1)!;
+  last.title = "Changed locally";
+  await synchronize(f.state, f.io);
+  assert.equal(f.remotes.get(last.calendar!.source!.eventId)?.summary, "Changed locally");
+});
 test("existing events stay private unless selected, while new events export", async () => {
   const f = fixture([event()]); f.state.excluded = [1]; await synchronize(f.state, f.io);
   assert.equal(f.remotes.size, 0); f.locals.set(2, event(2)); await synchronize(f.state, f.io);

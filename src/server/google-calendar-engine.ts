@@ -144,6 +144,13 @@ export async function synchronize(state: SyncState, io: SyncIO): Promise<void> {
       if (existing) { await io.remove(existing.id, existing); locals.delete(existing.id); }
       delete state.links[id]; await io.save(); continue;
     }
+    // An incremental poll usually changes only a few events. Keep checking local
+    // edits/deletions, but don't rewrite the encrypted collection for every
+    // unchanged mapping: each checkpoint is a round trip to the cloud store.
+    const currentSource = existing?.calendar?.source;
+    if (link && !changed.has(id) && !link.pending && !link.conflict && l && r && same(l, link.base)
+      && currentSource?.eventId === id && currentSource.calendarId === state.calendarId
+      && currentSource.connectionId === state.connectionId) continue;
     if (!link) {
       if (!r && !remote.recurringEventId) removedParents.add(id);
       let localId: number | null = existing?.id ?? null;
