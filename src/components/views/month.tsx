@@ -10,6 +10,8 @@ import { projectColor } from "@/lib/colors";
 import { dateOnly, fmtDay, fmtTime, parseLocal, timeOf } from "@/lib/dates";
 import type { EventOccurrence, Project, Task, TaskContext } from "@/lib/types";
 import { openActivity } from "../activity-editor";
+import { CalendarSourceBadge, CalendarSourceLegend } from "../calendar-source";
+import { calendarSource } from "@/lib/calendar-source";
 import { Diamond, Icon, StatusIcon } from "../icons";
 import { DatePicker } from "../date-picker";
 import { Popover, PopoverItem, PopoverSeparator, anchorOf, type Anchor } from "../popover";
@@ -288,9 +290,10 @@ export function MonthView({
       return (
         <button key={`e${e.eventId}-${e.start}`} type="button" title={`${fmtTime(e.start)}–${fmtTime(e.end)} ${e.title}`} onClick={() => openActivity(e)}
           className={cx(pill, "border-transparent hover:bg-hover", it.past ? "text-mut2" : "text-fg3")}>
-          <Dot color={areaColor(ctx.areas, e.areaId)} size={6} />
+          <Dot color={e.calendar?.source ? calendarSource(e.calendar).color : areaColor(ctx.areas, e.areaId)} size={6} />
           <span className="shrink-0 font-mono text-[10.5px] text-mut2">{fmtTime(e.start)}</span>
-          <span className="truncate">{e.title}</span>
+          <span className="min-w-0 flex-1 truncate">{e.title}</span>
+          <CalendarSourceBadge calendar={e.calendar} compact />
         </button>
       );
     }
@@ -332,6 +335,7 @@ export function MonthView({
           <span className="flex-1" />
           <ViewSwitch value="month" month={nav.month} week={nav.week} />
         </ViewHeader>
+        <CalendarSourceLegend events={events} />
 
         <div className="flex h-10 shrink-0 items-center gap-1.5 border-b border-line px-5 text-[12px] max-md:overflow-x-auto max-md:px-3">
           {FILTERS(tx).map((f) => (

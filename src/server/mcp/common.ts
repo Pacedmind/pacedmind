@@ -19,6 +19,8 @@ import {
   type Area, type Attachment, type CalEvent, type Priority, type Project, type Report, type Session, type Status, type Task, type ReportDiff
 } from "@/lib/types";
 import { NO_USE, addUse, agentUseLine, hasUse, sessionUse } from "@/lib/usage";
+import { calendarSource } from "@/lib/calendar-source";
+import type { CalendarDetails } from "@/lib/calendar-sync";
 
 /* ---------- registering tools ---------- */
 
@@ -379,6 +381,7 @@ export function projectLine(p: Project, n: Names, u: { tasks: number; open: numb
   return parts.join(" · ");
 }
 
-export function eventLine(e: { eventId: number; title: string; areaId: string | null; start: string; end: string }, n: Names, weekly: boolean): string {
-  return `${timeOf(e.start)}–${timeOf(e.end)} ${e.title}${e.areaId ? ` · ${n.area(e.areaId)}` : ""}${weekly ? " · weekly" : ""} [event ${e.eventId}]`;
+export function eventLine(e: { eventId: number; title: string; areaId: string | null; start: string; end: string; calendar?: CalendarDetails }, n: Names, weekly: boolean): string {
+  const source = calendarSource(e.calendar);
+  return `${timeOf(e.start)}–${timeOf(e.end)} ${e.title}${e.areaId ? ` · ${n.area(e.areaId)}` : ""}${weekly ? " · weekly" : ""} · ${source.google ? "Google Calendar: " : ""}${source.label} [event ${e.eventId}]`;
 }

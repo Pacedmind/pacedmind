@@ -15,6 +15,8 @@ import { blockMinutes, type PlannedBlock } from "@/lib/planner";
 import { AGENT_LABEL, type AgentId, type Area, type EventOccurrence, type Project, type SessionStatus, type Settings, type Task, type TaskContext } from "@/lib/types";
 import type { WeekPlan } from "@/server/calendar";
 import { openActivity } from "../activity-editor";
+import { CalendarSourceBadge, CalendarSourceLegend } from "../calendar-source";
+import { calendarSource } from "@/lib/calendar-source";
 import { AgentIcon, Icon, StatusIcon } from "../icons";
 import { TaskDetail } from "../task-detail";
 import { Button, Dot, Segmented, Switch, cx, useAction } from "../ui";
@@ -223,7 +225,7 @@ export function WeekView({
   const blocksOn = (day: string) => {
     const list: Block[] = events.filter((e) => dateOnly(e.start) === day).map((e) => ({
       id: `e${e.eventId}-${e.start}`, s: minOn(e.start, day), e: minOn(e.end, day), kind: "fixed", title: e.title,
-      start: e.start, end: e.end, color: areaColor(ctx.areas, e.areaId), event: e,
+      start: e.start, end: e.end, color: e.calendar?.source ? calendarSource(e.calendar).color : areaColor(ctx.areas, e.areaId), event: e,
     }));
     for (const b of autoOn(day)) {
       const t = byId.get(b.taskId);
@@ -413,6 +415,7 @@ export function WeekView({
           <span className="flex-1" />
           <ViewSwitch value="week" month={nav.month} week={nav.week} />
         </ViewHeader>
+        <CalendarSourceLegend events={events} />
 
         <div className="flex h-10 shrink-0 items-center gap-3.5 overflow-hidden border-b border-line px-5 text-[12px] text-mut max-md:hidden">
           {legend}
@@ -662,7 +665,7 @@ function BlockView({ block: b, past, selected, dragging, onOpen, onGrab }: {
   const time = `${fmtTime(b.start)}–${b.running ? tx("now") : fmtTime(b.end)}`;
   const label = b.kind === "session"
     ? `${tx(AGENT_LABEL[b.agent!])}: ${b.title}, ${fmtTime(b.start)}–${b.running ? tx("now, running") : fmtTime(b.end)}`
-    : `${b.title}, ${time}${b.kind === "auto" ? tx(" (auto-planned)") : ""}${done ? tx(", done") : ""}${onGrab ? ". Drag to move it." : ""}`;
+    : `${b.title}, ${time}${b.event ? ` · ${calendarSource(b.event.calendar).label}` : ""}${b.kind === "auto" ? tx(" (auto-planned)") : ""}${done ? tx(", done") : ""}${onGrab ? ". Drag to move it." : ""}`;
   return (
     <div data-block data-item title={label} aria-label={label} {...pressable(onOpen)} className={cls} style={style}
       onPointerDown={onGrab ? (e) => onGrab(e, "move") : undefined}>
@@ -679,6 +682,7 @@ function BlockView({ block: b, past, selected, dragging, onOpen, onGrab }: {
         )}
       </span>
       {height >= 36 && <span className={cx("block font-mono text-[10px]", past ? "text-dim" : b.kind === "fixed" ? "text-mut2" : "text-mut")}>{time}</span>}
+      {b.event && height >= 54 && <CalendarSourceBadge calendar={b.event.calendar} compact />}
       {/* The edges of a block you placed move its start (top) and its finish (bottom); the middle moves the whole block. */}
       {onGrab && b.kind === "pinned" && (
         <>

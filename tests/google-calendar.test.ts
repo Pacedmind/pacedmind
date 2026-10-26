@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { detailedOccurrences, zonedTime } from "../src/lib/calendar-sync";
+import { calendarDetails, detailedOccurrences, zonedTime } from "../src/lib/calendar-sync";
+import { calendarSource, matchesCalendarSource } from "../src/lib/calendar-source";
 import { googleBody, googlePatch, localFields, mergeFields, remoteFields, resolveConflict, synchronize, type GoogleEvent, type SyncIO, type SyncState } from "../src/server/google-calendar-engine";
 import type { CalEvent } from "../src/lib/types";
 
@@ -44,6 +45,34 @@ test("unchanged incremental mappings need one checkpoint while local edits still
   last.title = "Changed locally";
   await synchronize(f.state, f.io);
   assert.equal(f.remotes.get(last.calendar!.source!.eventId)?.summary, "Changed locally");
+});
+test("source account and calendar survive occurrences and backfill without changing Google events", async () => {
+  const f = fixture([], [remote()]);
+  await synchronize(f.state, f.io);
+  f.incremental();
+  f.state.accountName = "person@example.com";
+  f.state.calendarName = "Work";
+  await synchronize(f.state, f.io);
+  const saved = [...f.locals.values()][0];
+  const occurrence = detailedOccurrences(saved, "2026-10-26", "2026-10-26")[0];
+  assert.equal(occurrence.calendar?.source?.accountName, "person@example.com");
+  assert.equal(occurrence.calendar?.source?.calendarName, "Work");
+  assert.equal(calendarSource(occurrence.calendar).label, "person@example.com / Work");
+  assert.equal(f.writes(), 0);
+  let checkpoints = 0;
+  f.io.save = async () => { checkpoints++; };
+  await synchronize(f.state, f.io);
+  assert.equal(checkpoints, 1);
+});
+test("source filtering separates accounts, names and provider calendar IDs", () => {
+  const work = calendarDetails({ source: { connectionId: "c1", eventId: "e1", calendarId: "calendar-a", accountName: "person@example.com", calendarName: "Work" } });
+  assert.ok(matchesCalendarSource(work, "PERSON@EXAMPLE.COM", "work"));
+  assert.ok(matchesCalendarSource(work, undefined, "calendar-a"));
+  assert.equal(matchesCalendarSource(work, "other@example.com"), false);
+  assert.equal(matchesCalendarSource(work, undefined, "calendar-b"), false);
+  assert.ok(matchesCalendarSource(undefined, "PacedMind", "PacedMind"));
+  assert.equal(calendarSource(work).color, calendarSource({ ...work, source: { ...work!.source!, calendarId: "calendar-b" } }).color);
+  assert.equal(calendarSource(work).label.includes("c1"), false);
 });
 test("existing events stay private unless selected, while new events export", async () => {
   const f = fixture([event()]); f.state.excluded = [1]; await synchronize(f.state, f.io);

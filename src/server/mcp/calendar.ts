@@ -12,6 +12,7 @@ import { planTimeBlocks, type PlanResult } from "@/lib/planner";
 import { addDaysStr, dateOnly, dayDiff, hhmm, minutesOf, parseLocal, timeOf, toDateStr } from "@/lib/dates";
 import { PRIORITY_LABEL, type CalEvent } from "@/lib/types";
 import { terminalFor } from "@/lib/terminals";
+import { calendarSource, matchesCalendarSource } from "@/lib/calendar-source";
 import {
   areaRef, dateInput, dateTimeInput, eventLine, fail, findAreaOrInbox, findEvent, fmtMinutes, fmtWhen, isOpen, names,
   taskLine, todayLine, tool, when, type Names,
@@ -23,8 +24,9 @@ const dayLabel = (d: string) => `${format(parseLocal(d), "EEE")} ${d}`;
 const weekdayOf = (d: string) => ((parseLocal(d).getDay() + 6) % 7) + 1;
 
 function eventText(e: CalEvent, n: Names): string {
+  const source = calendarSource(e.calendar);
   return `Event ${e.id} · ${e.title} · ${fmtWhen(e.start.slice(0, 10))} ${timeOf(e.start)}–${timeOf(e.end)}` +
-    `${e.areaId ? ` · ${n.area(e.areaId)}` : ""}${e.recurrence === "weekly" ? ` · weekly on ${format(parseLocal(e.start), "EEEE")}s` : ""}`;
+    `${e.areaId ? ` · ${n.area(e.areaId)}` : ""}${e.recurrence === "weekly" ? ` · weekly on ${format(parseLocal(e.start), "EEEE")}s` : ""} · ${source.google ? "Google Calendar: " : ""}${source.label}`;
 }
 
 /** An event's end: a time on the start's day ("18:30"), a date-time on the same day, or start + duration. */
@@ -57,11 +59,14 @@ export function registerCalendarTools(server: McpServer) {
   tool(server, "list_events", {
     title: "List calendar events",
     description:
-      "Fixed calendar activities (meetings, gym, appointments) between two dates, including weekly ones. Each shows its event id for update_event and delete_event.",
+      "Calendar activities between two dates, including connected Google calendars and repeating events. Each shows its source account/calendar and event id for update_event and delete_event. Use details for descriptions, locations, time zones and recurrence. Google edits sync while the owning PacedMind app is running.",
     input: z.object({
       from: dateInput.optional().describe("Defaults to today"),
       to: dateInput.optional().describe("Defaults to 6 days after from"),
       area: areaRef.optional(),
+      account: z.string().optional().describe("Only this Google account email, or PacedMind for local activities"),
+      calendar: z.string().optional().describe("Only this Google calendar name or ID, or PacedMind for local activities"),
+      details: z.boolean().optional().describe("Include event descriptions, locations, time zones, recurrence and source calendar IDs"),
     }),
     kind: "read",
   }, async (args) => {
@@ -72,16 +77,27 @@ export function registerCalendarTools(server: McpServer) {
     const area = args.area ? await findAreaOrInbox(args.area) : undefined;
     const [n, list, all] = await Promise.all([names(), repo.listEvents(), repo.occurrences(from, to)]);
     const weekly = new Set(list.filter((e) => e.recurrence === "weekly").map((e) => e.id));
-    const occ = all.filter((e) => area === undefined || e.areaId === (area?.id ?? null));
+    const occ = all.filter((e) => (area === undefined || e.areaId === (area?.id ?? null)) && matchesCalendarSource(e.calendar, args.account, args.calendar));
     if (!occ.length) return `No events from ${fmtWhen(from)} to ${fmtWhen(to)}.`;
     const days = [...new Set(occ.map((e) => dateOnly(e.start)))];
-    return days.map((d) => `${dayLabel(d)}:\n${occ.filter((e) => dateOnly(e.start) === d).map((e) => `- ${eventLine(e, n, weekly.has(e.eventId))}`).join("\n")}`).join("\n\n");
+    return days.map((d) => `${dayLabel(d)}:\n${occ.filter((e) => dateOnly(e.start) === d).map((e) => {
+      let line = `- ${eventLine(e, n, weekly.has(e.eventId))}`;
+      if (args.details && e.calendar) {
+        const c = e.calendar;
+        if (c.source) line += `\n  Calendar ID: ${c.source.calendarId}`;
+        if (c.timeZone) line += `\n  Time zone: ${c.timeZone}${c.allDay ? " · all day" : ""}`;
+        if (c.location) line += `\n  Location: ${c.location}`;
+        if (c.description) line += `\n  Description: ${c.description.replace(/\n/g, "\n  ")}`;
+        if (c.recurrence?.length) line += `\n  Recurrence: ${c.recurrence.join("; ")}`;
+      }
+      return line;
+    }).join("\n")}`).join("\n\n");
   });
 
   tool(server, "create_event", {
     title: "Create calendar event",
     description:
-      "Add a fixed activity to the calendar (a meeting, workout, appointment). The auto-planner keeps focus time around it. Weekly events repeat on the same weekday.",
+      "Add a fixed activity to the calendar (a meeting, workout, appointment). New activities sync to the default connected Google calendar while the owning PacedMind app is running. The auto-planner keeps focus time around it. Weekly events repeat on the same weekday.",
     input: z.object({
       title: z.string(),
       start: dateTimeInput.describe('Start with a time, e.g. "2026-09-26T14:00" or "friday 14:00"'),
@@ -91,6 +107,7 @@ export function registerCalendarTools(server: McpServer) {
       weekly: z.boolean().optional(),
     }),
     kind: "create",
+    openWorld: true,
   }, async (args) => {
     if (!args.title.trim()) fail("An event needs a title.");
     const start = when(args.start, "required");
@@ -103,7 +120,7 @@ export function registerCalendarTools(server: McpServer) {
   tool(server, "update_event", {
     title: "Update or move calendar event",
     description:
-      "Rename an event, change its area, or move it: to a new start (keeps its length), to another day at the same time (move_to_date), or by a number of days or minutes. For a weekly event this moves the whole series.",
+      "Rename an event, change its area, or move it: to a new start (keeps its length), to another day at the same time (move_to_date), or by a number of days or minutes. Connected Google events sync back to their original calendar. For a weekly event this moves the whole series.",
     input: z.object({
       event: z.number().int().describe("Event id from list_events"),
       title: z.string().optional(),
@@ -117,6 +134,7 @@ export function registerCalendarTools(server: McpServer) {
       weekly: z.boolean().optional().describe("Turn repeating on or off"),
     }),
     kind: "write",
+    openWorld: true,
   }, async (args) => {
     const e = await findEvent(args.event);
     const moves = [args.start, args.move_to_date, args.shift_days, args.shift_minutes].filter((x) => x !== undefined).length;
@@ -150,6 +168,7 @@ export function registerCalendarTools(server: McpServer) {
     description: "Remove an event from the calendar. For a weekly event this removes every occurrence. It can't be undone.",
     input: z.object({ event: z.number().int() }),
     kind: "delete",
+    openWorld: true,
   }, async ({ event }) => {
     const e = await findEvent(event);
     const n = await names();
@@ -235,6 +254,7 @@ export function registerCalendarTools(server: McpServer) {
       move_deadlines: z.boolean().optional().describe("Also move open tasks that are due that day (default false)"),
     }),
     kind: "write",
+    openWorld: true,
   }, async (args) => {
     const from = when(args.from, "drop");
     const to = when(args.to, "drop");

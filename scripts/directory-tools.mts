@@ -34,7 +34,7 @@ const EFFECT: Record<string, string> = {
   list_tasks: "the tasks that match the filters",
   get_task: "one task with its details and the latest report on it",
   get_preferences: "the planning preferences the user saved",
-  list_events: "calendar events between two dates",
+  list_events: "calendar events between two dates, including source accounts, with optional account/calendar filters and event details",
   get_agenda: "the day-by-day plan: events, tasks, free time and focus blocks",
   get_settings: "the work hours and the account's MCP address",
   list_computers: "the user's computers and what their agents have",
@@ -72,6 +72,10 @@ const EFFECT: Record<string, string> = {
 };
 /** For open-world tools: what they reach outside the account. */
 const OUTSIDE: Record<string, string> = {
+  create_event: "the default connected Google calendar when synchronization is running",
+  update_event: "the event's original Google calendar when synchronization is running",
+  delete_event: "the event's original Google calendar when synchronization is running",
+  reschedule_day: "the original Google calendars of moved events when synchronization is running",
   set_folder: "a folder setting on one of the user's own computers",
   show_task_note: "a window on one of the user's own computers",
   start_session: "an agent session on one of the user's own computers",

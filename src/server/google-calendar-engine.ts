@@ -33,6 +33,8 @@ export interface EventLink {
 export interface SyncState {
   connectionId: string;
   calendarId: string;
+  accountName?: string;
+  calendarName?: string;
   timeZone: string;
   localTimeZone?: string;
   syncToken?: string;
@@ -99,7 +101,8 @@ function localBody(f: EventFields, remote: GoogleEvent, state: SyncState, existi
   return { title: f.title, start: f.schedule.start, end: f.schedule.end, areaId: existing?.areaId ?? null,
     recurrence: same(f.schedule.recurrence, ["RRULE:FREQ=WEEKLY"]) ? "weekly" : null,
     calendar: calendarDetails({ ...existing?.calendar, description: f.description, location: f.location,
-      ...f.schedule, source: { connectionId: state.connectionId, calendarId: state.calendarId, eventId: remote.id } }) };
+      ...f.schedule, source: { connectionId: state.connectionId, calendarId: state.calendarId, eventId: remote.id,
+        accountName: state.accountName, calendarName: state.calendarName } }) };
 }
 
 /** Three-way field merge. Conflicting time/recurrence changes are atomic; neither side silently wins. */
@@ -150,7 +153,8 @@ export async function synchronize(state: SyncState, io: SyncIO): Promise<void> {
     const currentSource = existing?.calendar?.source;
     if (link && !changed.has(id) && !link.pending && !link.conflict && l && r && same(l, link.base)
       && currentSource?.eventId === id && currentSource.calendarId === state.calendarId
-      && currentSource.connectionId === state.connectionId) continue;
+      && currentSource.connectionId === state.connectionId && currentSource.accountName === state.accountName
+      && currentSource.calendarName === state.calendarName) continue;
     if (!link) {
       if (!r && !remote.recurringEventId) removedParents.add(id);
       let localId: number | null = existing?.id ?? null;
@@ -185,7 +189,8 @@ export async function synchronize(state: SyncState, io: SyncIO): Promise<void> {
     let finalRemote = remote;
     if (!same(merged.value, r)) { await io.save(); finalRemote = await io.patch(remote, merged.value); }
     const source = existing!.calendar?.source;
-    if (!same(merged.value, l) || source?.eventId !== id || source.calendarId !== state.calendarId || source.connectionId !== state.connectionId) {
+    if (!same(merged.value, l) || source?.eventId !== id || source.calendarId !== state.calendarId || source.connectionId !== state.connectionId
+      || source.accountName !== state.accountName || source.calendarName !== state.calendarName) {
       await io.save(); await io.update(existing!.id, localBody(merged.value, finalRemote, state, existing), existing);
     }
     state.links[id] = { localId: existing!.id, base: merged.value, remote: finalRemote };

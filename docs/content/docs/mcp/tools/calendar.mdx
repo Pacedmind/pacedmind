@@ -9,19 +9,22 @@ Calendar events are the **activities** of the app: fixed entries such as meeting
 
 **Read-only. Allowed without asking.**
 
-The activities between two dates, including every occurrence of weekly ones, grouped by day. Each line shows the time, title, area, *weekly* when it repeats, and the event id for `update_event` and `delete_event`: `18:00–20:00 Climbing with Tomek · Health · weekly [event 4]`.
+The activities between two dates, including every occurrence of weekly ones, grouped by day. Each line shows the time, title, area, *weekly* when it repeats, the source account and calendar, and the event id for `update_event` and `delete_event`: `18:00–20:00 Climbing with Tomek · Health · weekly [event 4]`.
 
 | Parameter | Type | Description |
 | --- | --- | --- |
 | `from` | date | Defaults to today. |
 | `to` | date | Defaults to six days after `from`. At most about three months after it. |
 | `area` | string | Only activities in this area; `none` for those without an area. |
+| `account` | string | Only this Google account email; `PacedMind` for activities without a Google source. |
+| `calendar` | string | Only this Google calendar name or id; `PacedMind` for activities without a Google source. |
+| `details` | boolean | Include description, location, time zone, recurrence and source calendar id. |
 
 ## `create_event`
 
 **Changes data.**
 
-Adds an activity. The auto-planner keeps focus time around it. Weekly activities repeat on the same weekday.
+Adds an activity. If Google Calendar is connected, new activities synchronize to the default calendar while the owning app runs. The auto-planner keeps focus time around it. Weekly activities repeat on the same weekday.
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -38,7 +41,7 @@ An activity starts and ends on the same day: *The event would run past midnight.
 
 **Changes data.**
 
-Renames an activity, changes its area, or moves it. For a weekly activity, this changes the whole series.
+Renames an activity, changes its area, or moves it. Changes to imported Google activities synchronize back to their source calendar. For a weekly activity, this changes the whole series.
 
 | Parameter | Type | Description |
 | --- | --- | --- |

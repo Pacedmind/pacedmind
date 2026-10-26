@@ -1,13 +1,19 @@
 ---
 title: Google Calendar
-description: Synchronize calendar activities between PacedMind and one Google calendar.
+description: Synchronize calendar activities across several Google accounts and identify each event’s source.
 ---
 
 Open **Settings → Google Calendar**, choose **Connect Google Calendar**, and approve access in Google. Back in PacedMind, choose a calendar you can edit, then **Start synchronization**.
 
-Every ordinary event in the selected Google calendar is imported. New PacedMind activities are sent to that calendar. **Also send existing PacedMind events to Google** is off initially; leave it off to keep your existing activities outside this connection. Tasks, deadlines and automatic focus blocks are not exported. Prefer a separate Google calendar if you want to choose exactly which events appear in PacedMind.
+Use **Add Google account** for another account and **Add another calendar** for another calendar on an account already connected. **Default calendar for new events** chooses where new PacedMind activities are sent. Every ordinary event in each selected Google calendar is imported. Imported activities remain linked to their original calendar. **Also send existing PacedMind events to Google** is off initially; leave it off to keep your existing activities outside this connection. Tasks, deadlines and automatic focus blocks are not exported. Prefer a separate Google calendar if you want to choose exactly which events appear in PacedMind.
 
 Changes usually synchronize within a minute. A desktop connection runs while that computer's PacedMind app runs, including in its tray/menu bar. A connection made in the web app runs while a PacedMind tab is open; browser suspension can delay it. One connection owns synchronization for a planner, so another computer does not make duplicate copies. Settings tells you when it runs elsewhere.
+
+## Sources and agents
+
+The month and week calendars show a **Calendar sources** legend. Account colors and source labels identify Google activities; opening an activity shows the full account and calendar under **Calendar source**. Activities created only in PacedMind are labeled **PacedMind**. Sources stay attached when activities move or repeat.
+
+Connected agents can read imported events with `list_events` and `get_agenda`, including their source account and calendar. `list_events` accepts `account` and `calendar` filters and `details: true` for descriptions, locations and time zones. Agents can edit or delete an imported activity using its PacedMind event id; the change goes back to the original calendar. Agents do not receive the Google credentials or manage Google connections.
 
 ## Editing and conflicts
 

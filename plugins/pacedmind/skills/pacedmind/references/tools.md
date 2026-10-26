@@ -59,8 +59,8 @@ How the user likes to work, in their own words: one short sentence each, under a
 
 ## Calendar and planning
 
-- `list_events` (read): events with their ids for a date range (default: 7 days). Weekly events are expanded.
-- `create_event`: title, start with a time, end time or duration, area, weekly.
+- `list_events` (read): events with their ids and source accounts/calendars for a date range (default: 7 days). Weekly events are expanded. Filter with `account` (Google email) or `calendar` (name/id); `PacedMind` selects unsynced activities. Set `details: true` for descriptions, locations, time zones and recurrence.
+- `create_event`: title, start with a time, end time or duration, area, weekly. New activities synchronize to the default connected Google calendar.
 - `update_event`: rename or change the area, or move the event with `start`, `move_to_date` (same time, another day), `shift_days` or `shift_minutes`. You can also change its length or turn weekly on or off. Moving a weekly event moves the series.
 - `delete_event`: removes every occurrence of a weekly event. Ask first.
 - `get_agenda` (read): day by day, up to 14 days. Shows events, tasks due and planned, auto-planned focus blocks, free focus time, overdue tasks and what didn't fit.

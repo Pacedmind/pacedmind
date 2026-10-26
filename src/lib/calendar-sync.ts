@@ -10,7 +10,7 @@ export interface CalendarDetails {
   allDay?: boolean;
   recurrence?: string[];
   excludedStarts?: string[];
-  source?: { connectionId: string; calendarId: string; eventId: string };
+  source?: { connectionId: string; calendarId: string; eventId: string; accountName?: string; calendarName?: string };
 }
 
 export function calendarDetails(value: unknown): CalendarDetails | undefined {
@@ -24,7 +24,11 @@ export function calendarDetails(value: unknown): CalendarDetails | undefined {
   result.allDay = v.allDay === true;
   if (Array.isArray(v.recurrence)) result.recurrence = v.recurrence.filter((s) => typeof s === "string" && /^(RRULE|EXRULE|RDATE|EXDATE)[;:]/.test(s) && s.length <= 2000).slice(0, 100);
   if (Array.isArray(v.excludedStarts)) result.excludedStarts = v.excludedStarts.filter((s) => typeof s === "string" && /^\d{4}-\d{2}-\d{2}/.test(s)).slice(0, 10000);
-  if (v.source && [v.source.connectionId, v.source.calendarId, v.source.eventId].every((s) => typeof s === "string" && s.length <= 1024)) result.source = v.source;
+  if (v.source && [v.source.connectionId, v.source.calendarId, v.source.eventId].every((s) => typeof s === "string" && s.length <= 1024)) {
+    result.source = { connectionId: v.source.connectionId, calendarId: v.source.calendarId, eventId: v.source.eventId,
+      ...(typeof v.source.accountName === "string" ? { accountName: v.source.accountName.slice(0, 1024) } : {}),
+      ...(typeof v.source.calendarName === "string" ? { calendarName: v.source.calendarName.slice(0, 1024) } : {}) };
+  }
   return result;
 }
 

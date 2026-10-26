@@ -121,6 +121,21 @@ test("OAuth, encrypted storage, incremental refresh, conditional writes and disc
     status = await googleCalendarStatus(); assert.equal(status.connections?.length, 3);
     const posts = requests.filter((r) => r.url.hostname === "www.googleapis.com" && r.init.method === "POST");
     assert.deepEqual(posts.map((r) => [r.url.pathname.split("/")[4], JSON.parse(String(r.init.body)).summary]), [["primary", "First destination"], ["secondary", "Second destination"]]);
+    const { registerCalendarTools } = await import("../src/server/mcp/calendar");
+    const { runAs } = await import("../src/server/mcp/principal");
+    const tools = new Map<string, { input: { parse: (value: unknown) => unknown }; call: (value: unknown) => Promise<{ content: { text: string }[]; isError?: boolean }> }>();
+    runAs({ kind: "owner" }, () => registerCalendarTools({ registerTool: (name: string, config: { inputSchema: { parse: (value: unknown) => unknown } }, call: (value: unknown) => Promise<{ content: { text: string }[] }>) => {
+      tools.set(name, { input: config.inputSchema, call });
+    } } as never));
+    const listing = tools.get("list_events")!;
+    const listed = await runAs({ kind: "owner" }, () => listing.call(listing.input.parse({ from: "2026-10-26", to: "2026-10-27", account: "secondary", details: true })));
+    assert.equal(listed.isError, undefined);
+    const text = listed.content.map((c) => c.text).join("\n");
+    assert.match(text, /Google Calendar: secondary \/ Other account/);
+    assert.match(text, /Calendar ID: secondary/);
+    assert.doesNotMatch(text, /First destination|private-access-token|private-refresh-token/);
+    const empty = await runAs({ kind: "owner" }, () => listing.call(listing.input.parse({ from: "2026-10-26", to: "2026-10-27", calendar: "unknown" })));
+    assert.match(empty.content[0].text, /No events/);
     await disconnectGoogleCalendar(secondId);
     assert.equal((await googleCalendarStatus()).connections?.length, 2);
     assert.equal((await googleCalendarStatus()).defaultId, firstId);

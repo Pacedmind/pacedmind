@@ -9,6 +9,7 @@ import { dateOnly, hhmm, minutesOf, parseLocal, timeOf } from "@/lib/dates";
 import type { Area, EventOccurrence } from "@/lib/types";
 import { ConfirmDialog } from "./dialog";
 import { DateField } from "./date-field";
+import { CalendarSourceBadge } from "./calendar-source";
 import { AreaMark, Icon } from "./icons";
 import { Button, Menu, cx, toast, useAction } from "./ui";
 
@@ -145,6 +146,10 @@ export function ActivityEditor({ areas }: { areas: Area[] }) {
             onKeyDown={(e) => { if (e.key === "Enter" && !e.ctrlKey && !e.metaKey) { e.preventDefault(); save(); } }}
             aria-label={tx("Activity title")} placeholder={tx("Activity title")}
             className="w-full bg-transparent text-[18px] font-medium leading-7 text-strong outline-none placeholder:text-dim" />
+        </div>
+
+        <div className="flex items-center gap-2 px-5 pb-3 text-[12px] text-mut">
+          <span>{tx("Calendar source")}</span><CalendarSourceBadge calendar={occ.calendar} />
         </div>
 
         {detailsOpen ? <div className="max-h-[55vh] space-y-3 overflow-y-auto px-5 pb-4 text-[13px]">

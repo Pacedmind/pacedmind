@@ -2210,5 +2210,7 @@
   "Disconnect a calendar before adding another.": "Odłącz kalendarz, zanim dodasz kolejny.",
   "Choose a connected Google account.": "Wybierz połączone konto Google.",
   "Existing events can only be exported when choosing the first calendar.": "Istniejące wydarzenia można wysłać tylko podczas wyboru pierwszego kalendarza.",
-  "This calendar is already connected.": "Ten kalendarz jest już połączony."
+  "This calendar is already connected.": "Ten kalendarz jest już połączony.",
+  "Calendar source": "Źródło wydarzenia",
+  "Calendar sources": "Źródła wydarzeń"
 }

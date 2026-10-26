@@ -320,6 +320,8 @@ export async function syncGoogleCalendar(force = false) {
     for (const c of bundle.connections) {
       if (!c.sync || !c.credentials || (!force && (c.retryAt ?? 0) > Date.now())) continue;
       if (!force && Date.now() - Date.parse(c.sync.lastSync ?? "1970-01-01") < 60_000) continue;
+      c.sync.accountName = c.accountName;
+      c.sync.calendarName = c.calendarName;
       try { await synchronize(c.sync, ioFor(c, save, store, bundle.defaultId === c.id)); delete c.error; delete c.retryAt; }
       catch (e) {
         c.error = e instanceof CalendarHttpError || e instanceof GoogleConnectionError ? e.message : "Calendar sync could not finish. Try again, or reconnect Google Calendar.";
