@@ -1,4 +1,5 @@
 import "server-only";
+import publicCalendarClient from "@/lib/google-calendar-client.json";
 import crypto from "node:crypto";
 import path from "node:path";
 import { Temporal } from "@js-temporal/polyfill";
@@ -52,8 +53,11 @@ function decrypt(payload: string, k: Buffer, scope: string): Connection {
   return JSON.parse(Buffer.concat([decipher.update(raw.subarray(28)), decipher.final()]).toString("utf8"));
 }
 function owner(k: Buffer) { return crypto.createHash("sha256").update(k).digest("hex"); }
+function calendarClientId() {
+  return process.env.GOOGLE_CALENDAR_CLIENT_ID || (MODE === "desktop" ? publicCalendarClient.desktopClientId : "");
+}
 function clientConfig() {
-  const id = process.env.GOOGLE_CALENDAR_CLIENT_ID;
+  const id = calendarClientId();
   if (!id) throw new Error("Google Calendar has not been configured on this server.");
   return { client_id: id, ...(process.env.GOOGLE_CALENDAR_CLIENT_SECRET ? { client_secret: process.env.GOOGLE_CALENDAR_CLIENT_SECRET } : {}) };
 }
@@ -172,7 +176,7 @@ export async function googleCalendarStatus(): Promise<GoogleCalendarStatus> {
     }
     throw error;
   }
-  const status: GoogleCalendarStatus = { configured: !!process.env.GOOGLE_CALENDAR_CLIENT_ID && !!k, connected: !!row, elsewhere: !!row && (!k || row.owner !== owner(k)) };
+  const status: GoogleCalendarStatus = { configured: !!calendarClientId() && !!k, connected: !!row, elsewhere: !!row && (!k || row.owner !== owner(k)) };
   if (row && k && !status.elsewhere) {
     try {
       const c = decrypt(row.payload, k, ctx.scope);
@@ -245,7 +249,7 @@ export async function selectGoogleCalendar(id: string, includeExisting: boolean,
 }
 
 export async function syncGoogleCalendar(force = false) {
-  if (!process.env.GOOGLE_CALENDAR_CLIENT_ID || !key()) return;
+  if (!calendarClientId() || !key()) return;
   const status = await googleCalendarStatus();
   if (!status.connected || status.elsewhere) return;
   if (!(await cloudWritable())) return;
