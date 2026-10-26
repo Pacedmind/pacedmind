@@ -1,5 +1,7 @@
 /** Safe status only: never put OAuth credentials or raw provider responses in a component prop. */
 export interface GoogleCalendarStatus {
+  connections?: GoogleCalendarConnectionStatus[];
+  defaultId?: string;
   configured: boolean;
   connected: boolean;
   elsewhere: boolean;
@@ -15,4 +17,15 @@ export interface CalendarConnectionRow {
   owner: string;
   payload: string;
   leaseUntil: number;
+}
+
+export interface GoogleCalendarConnectionStatus {
+  id: string;
+  accountName?: string;
+  connected: boolean;
+  calendarName?: string;
+  lastSync?: string;
+  error?: string;
+  calendars?: { id: string; name: string; timeZone: string }[];
+  conflicts?: GoogleCalendarStatus["conflicts"];
 }

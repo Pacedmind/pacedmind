@@ -2195,5 +2195,20 @@
   "Choose which version to keep.": "Wybierz wersję do zachowania.",
   "Disconnect before choosing another calendar.": "Rozłącz przed wybraniem innego kalendarza.",
   "This event changed again in Google. Review the new version before choosing.": "To wydarzenie ponownie zmieniło się w Google. Sprawdź nową wersję przed wyborem.",
-  "Google Calendar requires a database update before it can connect.": "Połączenie z Kalendarzem Google wymaga najpierw aktualizacji bazy danych."
+  "Google Calendar requires a database update before it can connect.": "Połączenie z Kalendarzem Google wymaga najpierw aktualizacji bazy danych.",
+  "Connect calendars from several Google accounts. Imported events stay linked to their original calendar. New PacedMind events go to your default calendar.": "Połącz kalendarze z kilku kont Google. Zaimportowane wydarzenia pozostają połączone z kalendarzem źródłowym. Nowe wydarzenia PacedMind trafiają do kalendarza domyślnego.",
+  "Add Google account": "Dodaj konto Google",
+  "Default calendar for new events": "Domyślny kalendarz dla nowych wydarzeń",
+  "Changes sync about once a minute. Tasks and automatic focus blocks are not sent to Google.": "Zmiany synchronizują się mniej więcej co minutę. Zadania i automatyczne bloki skupienia nie są wysyłane do Google.",
+  "Add another calendar": "Dodaj kolejny kalendarz",
+  "No additional calendars with editing permission were found.": "Nie znaleziono kolejnych kalendarzy z uprawnieniami do edycji.",
+  "Events from this calendar will be imported and edits will synchronize in both directions.": "Wydarzenia z tego kalendarza zostaną zaimportowane, a zmiany będą synchronizowane w obie strony.",
+  "Google Calendar OAuth client configuration is invalid. Contact the app administrator.": "Konfiguracja klienta OAuth Kalendarza Google jest nieprawidłowa. Skontaktuj się z administratorem aplikacji.",
+  "Google authorization expired or was already used. Connect Google Calendar again.": "Autoryzacja Google wygasła lub została już wykorzystana. Połącz Kalendarz Google ponownie.",
+  "Google Calendar could not authorize access. Connect again and allow both calendar permissions.": "Nie udało się autoryzować dostępu do Kalendarza Google. Połącz ponownie i zezwól na oba uprawnienia kalendarza.",
+  "Disconnect a calendar before adding another account.": "Odłącz kalendarz, zanim dodasz kolejne konto.",
+  "Disconnect a calendar before adding another.": "Odłącz kalendarz, zanim dodasz kolejny.",
+  "Choose a connected Google account.": "Wybierz połączone konto Google.",
+  "Existing events can only be exported when choosing the first calendar.": "Istniejące wydarzenia można wysłać tylko podczas wyboru pierwszego kalendarza.",
+  "This calendar is already connected.": "Ten kalendarz jest już połączony."
 }

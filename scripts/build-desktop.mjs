@@ -28,6 +28,14 @@ const flags = new Set(process.argv.slice(2));
 const installs = !flags.has("--no-install") && ["win32", "darwin"].includes(process.platform);
 // The installed app is this computer's, whichever checkout builds it.
 if (installs && !flags.has("--allow-unlanded")) assertLanded(root, { skip: "npm run desktop -- --allow-unlanded" });
+// Google still requires the installed-app credential at the token endpoint.
+// Keep its source outside git; only the selected desktop fields enter the package.
+const calendarCredentialsFile = process.env.GOOGLE_CALENDAR_DESKTOP_CREDENTIALS;
+const calendarCredentials = calendarCredentialsFile ? JSON.parse(fs.readFileSync(calendarCredentialsFile, "utf8")).installed : undefined;
+if (calendarCredentialsFile && (!calendarCredentials?.client_id || !calendarCredentials?.client_secret)) {
+  throw new Error("GOOGLE_CALENDAR_DESKTOP_CREDENTIALS must contain an installed-app OAuth client.");
+}
+if (flags.has("--release") && !calendarCredentials) throw new Error("A release requires GOOGLE_CALENDAR_DESKTOP_CREDENTIALS.");
 const readJson = (file) => JSON.parse(fs.readFileSync(file, "utf8"));
 const pkg = readJson(path.join(root, "package.json"));
 const electronVersion = readJson(path.join(root, "node_modules", "electron", "package.json")).version;
@@ -123,6 +131,9 @@ fs.cpSync(path.join(root, ".next", "static"), path.join(server, ".next", "static
 if (fs.existsSync(path.join(root, "public"))) fs.cpSync(path.join(root, "public"), path.join(server, "public"), { recursive: true });
 for (const file of ["main.mjs", "localization.mjs", "node-executable.mjs", "task-windows.mjs", "task-note-controls.mjs", "task-note-opener.mjs", "task-note-layout.mjs", "task-note-workspace.mjs", "task-note-motion.mjs", "preload.cjs", "icon.ico", "icon.png", "trayTemplate.png", "trayTemplate@2x.png"]) {
   fs.copyFileSync(path.join(root, "desktop", file), path.join(stage, file));
+}
+if (calendarCredentials) {
+  fs.writeFileSync(path.join(stage, "google-calendar-oauth.json"), JSON.stringify({ client_id: calendarCredentials.client_id, client_secret: calendarCredentials.client_secret }));
 }
 fs.copyFileSync(path.join(root, "src", "lib", "messages.pl.json"), path.join(stage, "messages.pl.json"));
 fs.writeFileSync(path.join(stage, "package.json"), JSON.stringify({

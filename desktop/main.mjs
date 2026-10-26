@@ -23,6 +23,14 @@ const ICON_PNG = path.join(import.meta.dirname, "icon.png");
 // Black on clear with "Template" in its name, so macOS tints it for a light or dark menu bar.
 const TRAY_TEMPLATE = path.join(import.meta.dirname, "trayTemplate.png");
 const SERVER_DIR = path.join(import.meta.dirname, "server");
+// Written by the desktop packager from its private build configuration, never from a web client.
+function googleCalendarEnv() {
+  try {
+    const value = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, "google-calendar-oauth.json"), "utf8"));
+    if (typeof value.client_id !== "string" || typeof value.client_secret !== "string") return {};
+    return { GOOGLE_CALENDAR_CLIENT_ID: value.client_id, GOOGLE_CALENDAR_CLIENT_SECRET: value.client_secret };
+  } catch { return {}; }
+}
 const THEME_COLORS = {
   dark: { background: "#010101", symbol: "#a1a1a8", line: "#121214" },
   light: { background: "#f5f5f6", symbol: "#61616e", line: "#e3e3e8" },
@@ -305,6 +313,7 @@ async function startServer() {
       ORGANIZER_EXIT_WITH_PARENT: "1",
       ORGANIZER_UI_SECRET: UI_KEY,
       ...(dataKeyValue ? { ORGANIZER_DATA_KEY: dataKeyValue } : {}),
+      ...googleCalendarEnv(),
       NEXT_TELEMETRY_DISABLED: "1",
     },
     // stdin stays open as a lifeline: the server exits when it closes (see src/instrumentation.ts).
