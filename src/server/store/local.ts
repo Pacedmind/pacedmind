@@ -1,4 +1,6 @@
 import "server-only";
+import { calendarDetails, type CalendarDetails } from "@/lib/calendar-sync";
+import type { CalendarConnectionRow } from "@/lib/google-calendar";
 import type { NoteDisplays, TaskNoteInput, TaskNoteRequest } from "@/lib/task-notes";
 import { localNoteDisplays, publishNoteDisplays } from "../task-note-displays";
 import { checkedModelSelection, modelSelectionOf } from "@/lib/agent-models";
@@ -417,6 +419,7 @@ export async function deleteSubtask(id: number) {
 const toEvent = (r: Row): CalEvent => ({
   id: Number(r.id), title: String(r.title), areaId: s(r.area_id), start: String(r.start_at), end: String(r.end_at),
   recurrence: s(r.recurrence) as CalEvent["recurrence"], doneOn: doneDaysOf(r.done_on),
+  calendar: calendarDetails(r.calendar_data),
 });
 const eventsNow = () => all("SELECT * FROM events ORDER BY start_at, id").map(toEvent);
 
@@ -424,9 +427,9 @@ export async function listEvents(): Promise<CalEvent[]> {
   return eventsNow();
 }
 
-export async function createEvent(input: { title: string; areaId?: string | null; start: string; end: string; recurrence?: "weekly" | null }): Promise<number> {
-  const r = run("INSERT INTO events (title, area_id, start_at, end_at, recurrence) VALUES (?, ?, ?, ?, ?)",
-    input.title.trim(), input.areaId ?? null, input.start, input.end, input.recurrence ?? null);
+export async function createEvent(input: { title: string; areaId?: string | null; start: string; end: string; recurrence?: "weekly" | null; calendar?: CalendarDetails }): Promise<number> {
+  const r = run("INSERT INTO events (title, area_id, start_at, end_at, recurrence, calendar_data) VALUES (?, ?, ?, ?, ?, ?)",
+    input.title.trim(), input.areaId ?? null, input.start, input.end, input.recurrence ?? null, input.calendar ? JSON.stringify(calendarDetails(input.calendar)) : null);
   return Number(r.lastInsertRowid);
 }
 
@@ -437,12 +440,36 @@ export async function getEvent(id: number): Promise<CalEvent | null> {
 
 export async function updateEvent(id: number, patch: Partial<Omit<CalEvent, "id">>) {
   const values = columns(patch, { title: "title", areaId: "area_id", start: "start_at", end: "end_at", recurrence: "recurrence" });
+  if ("calendar" in patch) values.calendar_data = patch.calendar ? JSON.stringify(calendarDetails(patch.calendar)) : null;
   if (typeof values.title === "string") values.title = values.title.trim();
   update("events", id, values);
 }
 
 export async function deleteEvent(id: number) {
   run("DELETE FROM events WHERE id = ?", id);
+}
+
+/** A Google response must not overwrite an edit made while the network request was in flight. */
+export async function changeCalendarEvent(before: CalEvent, patch: Partial<CalEvent> | null): Promise<boolean> {
+  const where = "id = ? AND title = ? AND start_at = ? AND end_at = ? AND area_id IS ? AND recurrence IS ? AND calendar_data IS ?";
+  const args: Value[] = [before.id, before.title, before.start, before.end, before.areaId, before.recurrence, before.calendar ? JSON.stringify(calendarDetails(before.calendar)) : null];
+  if (!patch) return Number(run(`DELETE FROM events WHERE ${where}`, ...args).changes) === 1;
+  const values = columns(patch, { title: "title", areaId: "area_id", start: "start_at", end: "end_at", recurrence: "recurrence" });
+  if ("calendar" in patch) values.calendar_data = patch.calendar ? JSON.stringify(calendarDetails(patch.calendar)) : null;
+  return Number(run(`UPDATE events SET ${Object.keys(values).map((k) => `${k} = ?`).join(", ")} WHERE ${where}`, ...Object.values(values), ...args).changes) === 1;
+}
+
+export async function getCalendarConnection(): Promise<CalendarConnectionRow | null> {
+  const r = get("SELECT * FROM google_calendar_connection WHERE id = 1");
+  return r ? { revision: Number(r.revision), owner: String(r.owner), payload: String(r.payload), leaseUntil: Number(r.lease_until) } : null;
+}
+/** Compare-and-swap: never let another tab or a stale worker overwrite a newer connection. */
+export async function putCalendarConnection(value: CalendarConnectionRow, expected: number | null): Promise<boolean> {
+  if (expected === null) return Number(run("INSERT OR IGNORE INTO google_calendar_connection (id, revision, owner, payload, lease_until) VALUES (1, ?, ?, ?, ?)", value.revision, value.owner, value.payload, value.leaseUntil).changes) === 1;
+  return Number(run("UPDATE google_calendar_connection SET revision = ?, owner = ?, payload = ?, lease_until = ? WHERE id = 1 AND revision = ?", value.revision, value.owner, value.payload, value.leaseUntil, expected).changes) === 1;
+}
+export async function deleteCalendarConnection(expected: number): Promise<boolean> {
+  return Number(run("DELETE FROM google_calendar_connection WHERE id = 1 AND revision = ?", expected).changes) === 1;
 }
 
 /** Marks one day's occurrence of an activity done, or not done. */

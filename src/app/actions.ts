@@ -1,6 +1,8 @@
 "use server";
 
 import { refresh } from "next/cache";
+import { Temporal } from "@js-temporal/polyfill";
+import { calendarDetails, detailedOccurrences } from "@/lib/calendar-sync";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import * as repo from "@/server/repo";
@@ -125,17 +127,37 @@ const isStamp = (s: unknown): s is string => typeof s === "string" && /^\d{4}-\d
  * week. Moved to another day, the whole series moves by as many days and keeps its first week; made one-off, it
  * stays only on the day the change gives it.
  */
-export async function updateEventAction(id: number, occurrence: string, input: { title: string; areaId: string | null; start: string; end: string; weekly: boolean }) {
+export async function updateEventAction(id: number, occurrence: string, input: { title: string; areaId: string | null; start: string; end: string; weekly: boolean;
+  details?: { description: string; location: string; timeZone: string; allDay: boolean; repeat: "none" | "daily" | "weekly" | "monthly" | "yearly" | "custom" } }) {
   await guard();
   const e = await repo.getEvent(id);
   if (!e) return { ok: false, error: "That activity is no longer in the calendar" };
   const title = typeof input.title === "string" ? input.title.trim() : "";
   if (!title) return { ok: false, error: "Give the activity a title" };
-  if (title.length > 200) return { ok: false, error: "Keep the title under 200 characters" };
-  if (!isStamp(occurrence) || !isStamp(input.start) || !isStamp(input.end)) return { ok: false, error: "That isn't a day and time" };
-  if (dateOnly(input.end) !== dateOnly(input.start)) return { ok: false, error: "An activity starts and ends on the same day" };
+  if (title.length > 16000) return { ok: false, error: "The activity title is too long" };
+  const validStamp = input.details ? (stamp: unknown) => {
+    try { return typeof stamp === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(stamp) && Temporal.PlainDateTime.from(stamp).toString({ smallestUnit: "minute" }) === stamp; } catch { return false; }
+  } : isStamp;
+  if (!validStamp(occurrence) || !validStamp(input.start) || !validStamp(input.end)) return { ok: false, error: "That isn't a day and time" };
+  if (!input.details && dateOnly(input.end) !== dateOnly(input.start)) return { ok: false, error: "An activity starts and ends on the same day" };
   if (input.end <= input.start) return { ok: false, error: "The end has to be after the start" };
   let { start, end } = input;
+  if (input.details) {
+    const d = input.details;
+    if (!["none", "daily", "weekly", "monthly", "yearly", "custom"].includes(d.repeat)) return { ok: false, error: "Choose how the activity repeats" };
+    try { Temporal.Now.zonedDateTimeISO(d.timeZone); } catch { return { ok: false, error: "Choose a valid time zone" }; }
+    const rules = d.repeat === "custom" ? e.calendar?.recurrence ?? [] : d.repeat === "none" ? [] : [`RRULE:FREQ=${d.repeat.toUpperCase()}`];
+    if ((e.recurrence || e.calendar?.recurrence?.length) && rules.length) {
+      const shift = Temporal.PlainDate.from(occurrence.slice(0, 10)).until(Temporal.PlainDate.from(start.slice(0, 10))).days;
+      const duration = Temporal.PlainDateTime.from(start).until(Temporal.PlainDateTime.from(end));
+      start = Temporal.PlainDateTime.from(`${Temporal.PlainDate.from(e.start.slice(0, 10)).add({ days: shift })}T${start.slice(11)}`).toString({ smallestUnit: "minute" });
+      end = Temporal.PlainDateTime.from(start).add(duration).toString({ smallestUnit: "minute" });
+    }
+    const calendar = calendarDetails({ ...e.calendar, description: d.description, location: d.location, timeZone: d.timeZone, allDay: d.allDay, recurrence: rules });
+    try { detailedOccurrences({ ...e, start, end, calendar }, start.slice(0, 10), start.slice(0, 10)); } catch { return { ok: false, error: "Choose valid dates and recurrence" }; }
+    await repo.updateEvent(id, { title, areaId: input.areaId ?? null, start, end, recurrence: d.repeat === "weekly" ? "weekly" : null, calendar });
+    return done();
+  }
   if (e.recurrence === "weekly" && input.weekly) {
     const first = addDaysStr(e.start, dayDiff(occurrence, start));
     start = `${first}T${timeOf(start)}`;

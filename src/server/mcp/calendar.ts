@@ -1,6 +1,7 @@
 import "server-only";
 import { format } from "date-fns";
 import { z } from "zod";
+import { Temporal } from "@js-temporal/polyfill";
 import type { McpServer } from "@modelcontextprotocol/server";
 import { mcpUrl } from "../launcher";
 import { agentCommandFor, deviceConfig } from "../device";
@@ -42,7 +43,9 @@ function endFor(start: string, end: string | undefined, minutes: number | undefi
   return value;
 }
 
-const durationOf = (e: CalEvent) => minutesOf(e.end.slice(11, 16)) - minutesOf(e.start.slice(11, 16));
+const durationOf = (e: CalEvent) => Temporal.PlainDateTime.from(e.start).until(Temporal.PlainDateTime.from(e.end), { largestUnit: "minutes" }).minutes;
+const repeating = (e: CalEvent) => e.recurrence === "weekly" || !!e.calendar?.recurrence?.length;
+const afterMinutes = (start: string, minutes: number) => Temporal.PlainDateTime.from(start).add({ minutes }).toString({ smallestUnit: "minute" });
 
 function readTime(label: string, value: string): string {
   const m = /^(\d{1,2}):(\d{2})$/.exec(value.trim());
@@ -124,12 +127,12 @@ export function registerCalendarTools(server: McpServer) {
     if (args.shift_days !== undefined) start = `${addDaysStr(e.start, args.shift_days)}T${timeOf(e.start)}`;
     if (args.shift_minutes !== undefined) {
       const m = minutesOf(e.start.slice(11, 16)) + args.shift_minutes;
-      if (m < 0 || m + durationOf(e) > 24 * 60) fail("That would move the event into another day. Use shift_days or move_to_date for that.");
-      start = `${e.start.slice(0, 10)}T${hhmm(m)}`;
+      if (!e.calendar && (m < 0 || m + durationOf(e) > 24 * 60)) fail("That would move the event into another day. Use shift_days or move_to_date for that.");
+      start = e.calendar ? afterMinutes(e.start, args.shift_minutes) : `${e.start.slice(0, 10)}T${hhmm(m)}`;
     }
     const end = args.end !== undefined || args.duration_minutes !== undefined
       ? endFor(start, args.end, args.duration_minutes)
-      : endFor(start, undefined, durationOf(e));
+      : afterMinutes(start, durationOf(e));
     if (args.title !== undefined && !args.title.trim()) fail("The title can't be empty.");
     await repo.updateEvent(e.id, {
       title: args.title,
@@ -137,6 +140,7 @@ export function registerCalendarTools(server: McpServer) {
       start,
       end,
       recurrence: args.weekly === undefined ? undefined : args.weekly ? "weekly" : null,
+      ...(e.calendar && args.weekly !== undefined ? { calendar: { ...e.calendar, recurrence: args.weekly ? ["RRULE:FREQ=WEEKLY"] : [] } } : {}),
     });
     return `Updated ${eventText((await repo.getEvent(e.id))!, await names())}.`;
   });
@@ -255,15 +259,15 @@ export function registerCalendarTools(server: McpServer) {
     }
     const list = await repo.listEvents();
     if (include !== "tasks") {
-      for (const e of list.filter((x) => x.recurrence !== "weekly" && dateOnly(x.start) === from)) {
-        const moved = { ...e, start: `${to}T${timeOf(e.start)}`, end: `${to}T${timeOf(e.end)}` };
+      for (const e of list.filter((x) => !repeating(x) && dateOnly(x.start) === from)) {
+        const moved = { ...e, start: `${to}T${timeOf(e.start)}`, end: `${addDaysStr(e.end, dayDiff(from, to))}T${timeOf(e.end)}` };
         await repo.updateEvent(e.id, { start: moved.start, end: moved.end });
         lines.push(`Moved ${eventText(moved, n)}`);
       }
     }
-    const weeklyIds = new Set(list.filter((e) => e.recurrence === "weekly").map((e) => e.id));
+    const weeklyIds = new Set(list.filter(repeating).map((e) => e.id));
     const weeklyThatDay = include === "tasks" ? [] : (await repo.occurrences(from, from)).filter((o) => weeklyIds.has(o.eventId));
-    if (weeklyThatDay.length) lines.push(`Left in place (weekly): ${weeklyThatDay.map((o) => `${o.title} ${timeOf(o.start)}`).join(", ")}`);
+    if (weeklyThatDay.length) lines.push(`Left in place (repeating): ${weeklyThatDay.map((o) => `${o.title} ${timeOf(o.start)}`).join(", ")}`);
     return lines.length ? `From ${fmtWhen(from)} to ${fmtWhen(to)}:\n${lines.join("\n")}` : `Nothing to move on ${fmtWhen(from)}.`;
   });
 

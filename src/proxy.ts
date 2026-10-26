@@ -9,6 +9,7 @@ const LOCAL = new Set(["127.0.0.1", "localhost", "[::1]"]);
 
 /** Desktop routes that work without the window key, because each checks its own credentials. */
 const DESKTOP_OPEN = [
+  /^\/api\/google-calendar\/callback$/, // single-use OAuth state + PKCE; no window cookie in an external browser
   /^\/api\/mcp\/?$/, // agents, with an MCP token (src/server/auth.ts)
   /^\/api\/sessions\/[0-9a-f]{16}\/ended$/, // a session's SessionEnd hook, with that session's token
   /^\/api\/sessions\/[0-9a-f]{16}\/signal$/, // the hooks that say it waits for you or went on, with that session's token

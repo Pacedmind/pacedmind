@@ -50,6 +50,10 @@ CREATE TABLE IF NOT EXISTS events (
   id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, area_id TEXT REFERENCES areas(id),
   start_at TEXT NOT NULL, end_at TEXT NOT NULL, recurrence TEXT, done_on TEXT NOT NULL DEFAULT '[]'
 );
+CREATE TABLE IF NOT EXISTS google_calendar_connection (
+  id INTEGER PRIMARY KEY CHECK (id = 1), revision INTEGER NOT NULL, owner TEXT NOT NULL,
+  payload TEXT NOT NULL, lease_until INTEGER NOT NULL DEFAULT 0
+);
 CREATE TABLE IF NOT EXISTS sessions (
   id TEXT PRIMARY KEY, task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE, agent TEXT NOT NULL,
   folder TEXT, branch TEXT, status TEXT NOT NULL, started_at TEXT NOT NULL, finished_at TEXT, ended_at TEXT,
@@ -154,7 +158,7 @@ function migrate(conn: DatabaseSync) {
     tasks: [["run_in", "TEXT"], ["device_id", "TEXT"], ["folder", "TEXT"], ["done_when", "TEXT NOT NULL DEFAULT '[]'"], ["needs", "TEXT NOT NULL DEFAULT '[]'"], ["model_settings", "TEXT"], ["planned_time", "TEXT"], ["related_project_id", "TEXT"], ["repeat", "TEXT"]],
     sessions: [["surface", "TEXT NOT NULL DEFAULT 'terminal'"], ["device_id", "TEXT"], ["url", "TEXT"], ["usage", "TEXT"]],
     reports: [["changes", "TEXT"], ["changes_at", "TEXT"], ["diff", "TEXT"]],
-    events: [["done_on", "TEXT NOT NULL DEFAULT '[]'"]],
+    events: [["done_on", "TEXT NOT NULL DEFAULT '[]'"], ["calendar_data", "TEXT"]],
   };
   for (const [table, columns] of Object.entries(added)) {
     const have = (conn.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).map((c) => c.name);
@@ -244,7 +248,7 @@ function adopt(conn: DatabaseSync) {
 }
 
 /** What starting over deletes, in an order the foreign keys allow. */
-const CLEARED = ["session_asks", "attachments", "reports", "session_events", "sessions", "edges", "subtasks", "tasks", "events", "projects", "areas"];
+const CLEARED = ["google_calendar_connection", "session_asks", "attachments", "reports", "session_events", "sessions", "edges", "subtasks", "tasks", "events", "projects", "areas"];
 
 const idsOf = (conn: DatabaseSync, table: "projects" | "areas") =>
   (conn.prepare(`SELECT id FROM ${table}`).all() as Row[]).map((r) => String(r.id));

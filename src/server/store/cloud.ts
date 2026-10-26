@@ -1,4 +1,6 @@
 import "server-only";
+import { calendarDetails, type CalendarDetails } from "@/lib/calendar-sync";
+import type { CalendarConnectionRow } from "@/lib/google-calendar";
 import { noteDisplaysOf, type NoteDisplays, type TaskNoteInput, type TaskNoteRequest } from "@/lib/task-notes";
 import { checkedModelSelection, modelSelectionOf, modelCatalogOf } from "@/lib/agent-models";
 import crypto from "node:crypto";
@@ -471,6 +473,7 @@ export async function deleteSubtask(id: number) {
 const toEvent = (r: Row): CalEvent => ({
   id: Number(r.id), title: String(r.title), areaId: s(r.area_id), start: String(r.start_at), end: String(r.end_at),
   recurrence: s(r.recurrence) as CalEvent["recurrence"], doneOn: doneDaysOf(r.done_on),
+  calendar: calendarDetails(r.calendar_data),
 });
 
 export async function listEvents(): Promise<CalEvent[]> {
@@ -478,10 +481,11 @@ export async function listEvents(): Promise<CalEvent[]> {
   return (await all((from, to) => db.from("events").select("*").order("start_at").order("id").range(from, to))).map(toEvent);
 }
 
-export async function createEvent(input: { title: string; areaId?: string | null; start: string; end: string; recurrence?: "weekly" | null }): Promise<number> {
+export async function createEvent(input: { title: string; areaId?: string | null; start: string; end: string; recurrence?: "weekly" | null; calendar?: CalendarDetails }): Promise<number> {
   const db = await accountDb();
   const r = one(await db.from("events").insert({
     title: input.title.trim(), area_id: input.areaId ?? null, start_at: input.start, end_at: input.end, recurrence: input.recurrence ?? null,
+    calendar_data: input.calendar ? calendarDetails(input.calendar) : null,
   }).select("id").single());
   return Number(r!.id);
 }
@@ -494,6 +498,7 @@ export async function getEvent(id: number): Promise<CalEvent | null> {
 
 export async function updateEvent(id: number, patch: Partial<Omit<CalEvent, "id">>) {
   const values = columns(patch, { title: "title", areaId: "area_id", start: "start_at", end: "end_at", recurrence: "recurrence" });
+  if ("calendar" in patch) values.calendar_data = patch.calendar ? calendarDetails(patch.calendar) : null;
   if (typeof values.title === "string") values.title = values.title.trim();
   if (!Object.keys(values).length) return;
   const db = await accountDb();
@@ -503,6 +508,36 @@ export async function updateEvent(id: number, patch: Partial<Omit<CalEvent, "id"
 export async function deleteEvent(id: number) {
   const db = await accountDb();
   check(await db.from("events").delete().eq("id", id));
+}
+
+export async function changeCalendarEvent(before: CalEvent, patch: Partial<CalEvent> | null): Promise<boolean> {
+  const db = await accountDb();
+  const values = patch ? columns(patch, { title: "title", areaId: "area_id", start: "start_at", end: "end_at", recurrence: "recurrence" }) : {};
+  if (patch && "calendar" in patch) values.calendar_data = patch.calendar ? calendarDetails(patch.calendar) : null;
+  let query = (patch ? db.from("events").update(values) : db.from("events").delete())
+    .eq("id", before.id).eq("title", before.title).eq("start_at", before.start).eq("end_at", before.end);
+  query = before.areaId === null ? query.is("area_id", null) : query.eq("area_id", before.areaId);
+  query = before.recurrence === null ? query.is("recurrence", null) : query.eq("recurrence", before.recurrence);
+  query = before.calendar ? query.eq("calendar_data", JSON.stringify(calendarDetails(before.calendar))) : query.is("calendar_data", null);
+  return !!one(await query.select("id").maybeSingle());
+}
+
+export async function getCalendarConnection(): Promise<CalendarConnectionRow | null> {
+  const r = one(await (await accountDb()).from("google_calendar_connections").select("*").maybeSingle());
+  return r ? { revision: Number(r.revision), owner: String(r.owner), payload: String(r.payload), leaseUntil: Number(r.lease_until) } : null;
+}
+export async function putCalendarConnection(value: CalendarConnectionRow, expected: number | null): Promise<boolean> {
+  const db = await accountDb();
+  const values = { revision: value.revision, owner: value.owner, payload: value.payload, lease_until: value.leaseUntil };
+  if (expected === null) {
+    const result = await db.from("google_calendar_connections").insert(values).select("revision").maybeSingle();
+    if (result.error?.code === "23505") return false;
+    return !!one(result);
+  }
+  return !!one(await db.from("google_calendar_connections").update(values).eq("revision", expected).select("revision").maybeSingle());
+}
+export async function deleteCalendarConnection(expected: number): Promise<boolean> {
+  return !!one(await (await accountDb()).from("google_calendar_connections").delete().eq("revision", expected).select("revision").maybeSingle());
 }
 
 /** Marks one day's occurrence of an activity done, or not done. */

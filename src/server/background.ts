@@ -1,5 +1,6 @@
 import "server-only";
 import { cloudWritable } from "./billing";
+import { syncGoogleCalendar } from "./google-calendar";
 import { checkCodexCloud } from "./cloud";
 import { checkThisDevice, refreshAgentModels, saveToolsOnce } from "./devices";
 import { refreshFolders } from "./folder-hints";
@@ -82,4 +83,5 @@ export function startBackground() {
   g.__organizerAgents = every(60_000, "agent sign-ins", async () => {
     if (await usesCloud()) await repo.listConnectedAgents();
   }, { planner: true });
+  every(60_000, "Google Calendar", syncGoogleCalendar, { writes: true, planner: true });
 }

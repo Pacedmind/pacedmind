@@ -1,4 +1,5 @@
 import "server-only";
+import { calendarDetails } from "@/lib/calendar-sync";
 import { modelSelectionOf } from "@/lib/agent-models";
 import fs from "node:fs";
 import crypto from "node:crypto";
@@ -54,7 +55,7 @@ async function clearAccount(db: SupabaseClient, kept = false) {
   const projects = (check(await db.from("projects").select("id")) as Row[]).map((r) => String(r.id));
   const areas = (check(await db.from("areas").select("id")) as Row[]).map((r) => String(r.id));
   // Deleting tasks takes their sub-tasks, sessions, reports, images and connections along; areas take their projects.
-  for (const table of ["tasks", "events", "projects", "areas", "key_counters"]) {
+  for (const table of ["google_calendar_connections", "tasks", "events", "projects", "areas", "key_counters"]) {
     check(await db.from(table).delete().eq("user_id", id));
   }
   if (kept) return;
@@ -434,8 +435,8 @@ export async function importLegacy(): Promise<{ areas: number; projects: number;
     for (let i = 0; i < subs.length; i += 500) check(await db.from("subtasks").insert(subs.slice(i, i + 500)));
 
     const evs = events.filter((e) => match(e.start_at, MINUTE) && match(e.end_at, MINUTE)).map((e) => ({
-      title: clip(e.title, 200) || "Event", area_id: areaId(e.area_id), start_at: String(e.start_at), end_at: String(e.end_at),
-      recurrence: oneOf(e.recurrence, ["weekly"]), done_on: doneDaysOf(e.done_on),
+      title: clip(e.title, 16000) || "Event", area_id: areaId(e.area_id), start_at: String(e.start_at), end_at: String(e.end_at),
+      recurrence: oneOf(e.recurrence, ["weekly"]), done_on: doneDaysOf(e.done_on), calendar_data: calendarDetails(e.calendar_data) ?? null,
     }));
     for (let i = 0; i < evs.length; i += 500) check(await db.from("events").insert(evs.slice(i, i + 500)));
 
@@ -597,7 +598,7 @@ export async function moveToThisComputer(): Promise<{ areas: number; projects: n
   const reportId = new Map<number, number>();
   conn.exec("BEGIN");
   try {
-    for (const t of ["session_asks", "attachments", "reports", "session_events", "sessions", "edges", "subtasks", "tasks", "events", "projects", "areas"]) {
+    for (const t of ["google_calendar_connection", "session_asks", "attachments", "reports", "session_events", "sessions", "edges", "subtasks", "tasks", "events", "projects", "areas"]) {
       conn.exec(`DELETE FROM ${t}`);
     }
     conn.exec("DELETE FROM sqlite_sequence");
@@ -648,8 +649,8 @@ export async function moveToThisComputer(): Promise<{ areas: number; projects: n
 
     const insSub = conn.prepare("INSERT INTO subtasks (task_id, title, done, sort) VALUES (?, ?, ?, ?)");
     for (const x of subtasks) if (task(x.task_id)) insSub.run(task(x.task_id), String(x.title), x.done ? 1 : 0, Number(x.sort ?? 0));
-    const insEvent = conn.prepare("INSERT INTO events (title, area_id, start_at, end_at, recurrence, done_on) VALUES (?, ?, ?, ?, ?, ?)");
-    for (const e of events) insEvent.run(String(e.title), area(e.area_id), String(e.start_at), String(e.end_at), s(e.recurrence), JSON.stringify(doneDaysOf(e.done_on)));
+    const insEvent = conn.prepare("INSERT INTO events (title, area_id, start_at, end_at, recurrence, done_on, calendar_data) VALUES (?, ?, ?, ?, ?, ?, ?)");
+    for (const e of events) insEvent.run(String(e.title), area(e.area_id), String(e.start_at), String(e.end_at), s(e.recurrence), JSON.stringify(doneDaysOf(e.done_on)), e.calendar_data ? JSON.stringify(calendarDetails(e.calendar_data)) : null);
 
     // Sessions keep their ids.
     const kept = new Set(sessions.filter((x) => task(x.task_id)).map((x) => String(x.id)));

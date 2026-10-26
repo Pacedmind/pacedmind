@@ -4,6 +4,8 @@ import type { ReactNode } from "react";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { ComputersSettings } from "@/components/computers-settings";
+import { GoogleCalendarSettings } from "@/components/google-calendar-settings";
+import { googleCalendarStatus } from "@/server/google-calendar";
 import { HiddenProjectsSettings } from "@/components/hidden-projects-settings";
 import {
   AccountSettings, AppearanceSettings, ComputerSettings, DataSettings, McpSettings, NotificationSettings, PlanSettings,
@@ -62,6 +64,8 @@ export default async function SettingsSectionPage(props: PageProps<"/settings/[s
 
 async function body(section: SettingsSection, state: Auth | null, desktop: boolean, tx: Translator = createTranslator("en")): Promise<ReactNode> {
   switch (section) {
+    case "calendar":
+      return <GoogleCalendarSettings initial={await googleCalendarStatus()} web={!desktop} />;
     case "hidden-projects": {
       const [projects, areas] = await Promise.all([repo.listAllProjects(), repo.listAllAreas()]);
       return <HiddenProjectsSettings projects={projects} areas={areas} />;

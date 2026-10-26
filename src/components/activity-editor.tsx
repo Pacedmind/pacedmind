@@ -2,6 +2,7 @@
 import { useTranslation } from "@/components/language";
 
 import { useEffect, useRef, useState } from "react";
+import { Temporal } from "@js-temporal/polyfill";
 
 import { deleteEventAction, updateEventAction } from "@/app/actions";
 import { dateOnly, hhmm, minutesOf, parseLocal, timeOf } from "@/lib/dates";
@@ -39,6 +40,13 @@ export function ActivityEditor({ areas }: { areas: Area[] }) {
   const [start, setStart] = useState("");
   const [length, setLength] = useState(60);
   const [weekly, setWeekly] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [description, setDescription] = useState("");
+  const [location, setLocation] = useState("");
+  const [timeZone, setTimeZone] = useState("");
+  const [allDay, setAllDay] = useState(false);
+  const [detailedEnd, setDetailedEnd] = useState("");
+  const [repeat, setRepeat] = useState<"none" | "daily" | "weekly" | "monthly" | "yearly" | "custom">("none");
   const [confirming, setConfirming] = useState(false);
   const input = useRef<HTMLInputElement>(null);
   const { pending, run } = useAction();
@@ -49,7 +57,14 @@ export function ActivityEditor({ areas }: { areas: Area[] }) {
       setOcc(o);
       setTitle(o.title);
       setAreaId(o.areaId);
-      setStart(o.start);
+      setStart(o.originalStart ?? o.start);
+      setDetailedEnd(o.originalEnd ?? o.end);
+      setDetailsOpen(!!o.calendar);
+      setDescription(o.calendar?.description ?? ""); setLocation(o.calendar?.location ?? "");
+      setTimeZone(o.calendar?.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone);
+      setAllDay(!!o.calendar?.allDay);
+      const rules = o.calendar?.recurrence ?? (o.weekly ? ["RRULE:FREQ=WEEKLY"] : []);
+      setRepeat(rules.length === 0 ? "none" : rules.length === 1 && /^RRULE:FREQ=(DAILY|WEEKLY|MONTHLY|YEARLY)$/.test(rules[0]) ? rules[0].slice(11).toLowerCase() as typeof repeat : "custom");
       setLength(minutesBetween(o.start, o.end));
       setWeekly(o.weekly);
       setConfirming(false);
@@ -67,16 +82,17 @@ export function ActivityEditor({ areas }: { areas: Area[] }) {
   const close = () => { setOcc(null); setConfirming(false); };
   const area = areas.find((a) => a.id === areaId) ?? null;
   const end = endOf(start, length);
-  const changed = title.trim() !== occ.title || areaId !== occ.areaId || start !== occ.start
+  const changed = detailsOpen || title.trim() !== occ.title || areaId !== occ.areaId || start !== occ.start
     || length !== minutesBetween(occ.start, occ.end) || weekly !== occ.weekly;
 
   const save = () => {
     const name = title.trim();
     if (!name) { toast(tx("Give it a title first"), "error"); return; }
-    if (!end) { toast(tx("That runs past midnight. An activity starts and ends on the same day."), "error"); return; }
+    if (!detailsOpen && !end) { toast(tx("That runs past midnight. An activity starts and ends on the same day."), "error"); return; }
     if (!changed) { close(); return; }
     run(async () => {
-      const r = await updateEventAction(occ.eventId, occ.start, { title: name, areaId, start, end, weekly });
+      const r = await updateEventAction(occ.eventId, occ.originalStart ?? occ.start, { title: name, areaId, start, end: detailsOpen ? detailedEnd : end!, weekly,
+        ...(detailsOpen ? { details: { description, location, timeZone, allDay, repeat } } : {}) });
       if (r.ok) close();
       return r;
     }, tx("Saved {0}", [name]));
@@ -125,13 +141,30 @@ export function ActivityEditor({ areas }: { areas: Area[] }) {
         </div>
 
         <div className="px-5 pb-3 pt-1.5">
-          <input ref={input} value={title} onChange={(e) => setTitle(e.target.value)} maxLength={200}
+          <input ref={input} value={title} onChange={(e) => setTitle(e.target.value)} maxLength={16000}
             onKeyDown={(e) => { if (e.key === "Enter" && !e.ctrlKey && !e.metaKey) { e.preventDefault(); save(); } }}
             aria-label={tx("Activity title")} placeholder={tx("Activity title")}
             className="w-full bg-transparent text-[18px] font-medium leading-7 text-strong outline-none placeholder:text-dim" />
         </div>
 
-        <div className="flex flex-wrap gap-1.5 px-5 pb-3.5">
+        {detailsOpen ? <div className="max-h-[55vh] space-y-3 overflow-y-auto px-5 pb-4 text-[13px]">
+          <label className="flex items-center gap-2"><input type="checkbox" checked={allDay} onChange={(e) => {
+            setAllDay(e.target.checked);
+            if (e.target.checked) { setStart(`${start.slice(0, 10)}T00:00`); setDetailedEnd(`${Temporal.PlainDate.from(start.slice(0, 10)).add({ days: 1 })}T00:00`); }
+          }} />{tx("All day")}</label>
+          <div className="grid grid-cols-2 gap-3">
+            <label>{tx("Start")}<input aria-label={tx("Start")} type={allDay ? "date" : "datetime-local"} className="mt-1 block w-full rounded border border-line bg-transparent p-2" value={allDay ? start.slice(0, 10) : start} onChange={(e) => { if (e.target.value) setStart(allDay ? `${e.target.value}T00:00` : e.target.value); }} /></label>
+            <label>{allDay ? tx("Last day") : tx("End")}<input aria-label={allDay ? tx("Last day") : tx("End")} type={allDay ? "date" : "datetime-local"} className="mt-1 block w-full rounded border border-line bg-transparent p-2" value={allDay ? Temporal.PlainDate.from(detailedEnd.slice(0, 10)).subtract({ days: 1 }).toString() : detailedEnd} onChange={(e) => { if (e.target.value) setDetailedEnd(allDay ? `${Temporal.PlainDate.from(e.target.value).add({ days: 1 })}T00:00` : e.target.value); }} /></label>
+          </div>
+          {!allDay && <label className="block">{tx("Time zone")}<input aria-label={tx("Time zone")} list="calendar-time-zones" value={timeZone} onChange={(e) => setTimeZone(e.target.value)} className="mt-1 block w-full rounded border border-line bg-transparent p-2" /><datalist id="calendar-time-zones">{["UTC", ...Intl.supportedValuesOf("timeZone")].map((z) => <option key={z} value={z} />)}</datalist></label>}
+          <label className="block">{tx("Repeat")}<select aria-label={tx("Repeat")} value={repeat} onChange={(e) => setRepeat(e.target.value as typeof repeat)} className="mt-1 block w-full rounded border border-line bg-bg p-2">
+            <option value="none">{tx("Does not repeat")}</option><option value="daily">{tx("Every day")}</option><option value="weekly">{tx("Every week")}</option><option value="monthly">{tx("Every month")}</option><option value="yearly">{tx("Every year")}</option>
+            {occ.calendar?.recurrence?.length ? <option value="custom">{tx("Keep Google repeat pattern")}</option> : null}
+          </select></label>
+          <label className="block">{tx("Location")}<input aria-label={tx("Location")} value={location} maxLength={2000} onChange={(e) => setLocation(e.target.value)} className="mt-1 block w-full rounded border border-line bg-transparent p-2" /></label>
+          <label className="block">{tx("Description")}<textarea aria-label={tx("Description")} value={description} maxLength={16000} onChange={(e) => setDescription(e.target.value)} rows={3} className="mt-1 block w-full rounded border border-line bg-transparent p-2" /></label>
+          {occ.series && <p className="text-mut">{tx("Changes apply to the whole series. Individual exceptions can be edited in Google Calendar.")}</p>}
+        </div> : <div className="flex flex-wrap gap-1.5 px-5 pb-3.5">
           {/* The start keeps its time when only the day changes. */}
           <DateField value={start} onChange={(v) => { if (v) setStart(timeOf(v) ? v : `${dateOnly(v)}T${timeOf(start)}`); }}
             trigger={<button type="button" className={chip}><Icon name="calendar" size={13} />{tx.date(parseLocal(start), "EEE d MMM, HH:mm")}</button>} />
@@ -142,11 +175,12 @@ export function ActivityEditor({ areas }: { areas: Area[] }) {
             className={cx(chip, weekly && "border-accent/45 bg-accent/10 text-accent-fg")}>
             <Icon name="repeat" size={13} />{weekly ? tx("Every week") : tx("Does not repeat")}
           </button>
-        </div>
+          <button type="button" className={chip} onClick={() => { setDetailsOpen(true); setDetailedEnd(end ?? occ.end); setRepeat(weekly ? "weekly" : "none"); }}>{tx("More details")}</button>
+        </div>}
 
         <div className="flex h-9 items-center gap-2 border-t border-line px-5 text-[12px] text-mut2">
           <Icon name="check" size={13} className="shrink-0 text-accent" />
-          <span className="min-w-0 flex-1 truncate">{summary}{note && <span className="text-mut"> · {note}</span>}</span>
+          <span className="min-w-0 flex-1 truncate">{detailsOpen ? (allDay ? tx("All day") : timeZone) : summary}{!detailsOpen && note && <span className="text-mut"> · {note}</span>}</span>
         </div>
         <div className="flex h-14 items-center gap-2 border-t border-line pl-3 pr-3">
           <Button variant="ghost" onClick={() => setConfirming(true)} disabled={pending}><Icon name="trash" size={13} />{tx("Delete")}</Button>
@@ -159,7 +193,7 @@ export function ActivityEditor({ areas }: { areas: Area[] }) {
       </div>
       {confirming && (
         <ConfirmDialog title={tx("Delete {0}?", [occ.title])} confirmLabel={tx("Delete activity")} danger onConfirm={remove} onCancel={() => setConfirming(false)}>
-          {occ.weekly ? tx("It repeats every week. Every week's occurrence is removed from the calendar.") : tx("It's removed from the calendar.")}
+          {occ.series ? tx("The whole series and its exceptions will be removed from both calendars after sync.") : occ.weekly ? tx("It repeats every week. Every week's occurrence is removed from the calendar.") : tx("It's removed from the calendar.")}
         </ConfirmDialog>
       )}
     </div>

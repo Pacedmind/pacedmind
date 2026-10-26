@@ -170,7 +170,7 @@ function ComputersLink() {
 
 const PAGE_ICON: Record<SettingsSection, IconName> = {
   account: "user", plan: "creditCard", security: "shield", computers: "laptop", data: "database",
-  appearance: "palette", notifications: "bell", planning: "calendar", preferences: "target", "hidden-projects": "moon",
+  appearance: "palette", notifications: "bell", planning: "calendar", calendar: "calendar", preferences: "target", "hidden-projects": "moon",
   computer: "laptop", sessions: "terminal", projects: "folder", mcp: "plug",
 };
 

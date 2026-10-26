@@ -202,6 +202,7 @@ export interface CalEvent {
   recurrence: "weekly" | null;
   /** The days ("YYYY-MM-DD") whose occurrence you marked done: one for a one-off activity, any for a weekly one. */
   doneOn: string[];
+  calendar?: import("./calendar-sync").CalendarDetails;
 }
 
 /** One concrete occurrence of a CalEvent within a range. */
@@ -215,6 +216,10 @@ export interface EventOccurrence {
   weekly: boolean;
   /** You marked this occurrence done (on its own day only, for a weekly one). */
   done: boolean;
+  calendar?: import("./calendar-sync").CalendarDetails;
+  series?: boolean;
+  originalStart?: string;
+  originalEnd?: string;
 }
 
 export interface Session {

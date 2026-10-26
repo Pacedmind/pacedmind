@@ -10,6 +10,7 @@ import { QuickAdd } from "@/components/quick-add";
 import { ActivityEditor } from "@/components/activity-editor";
 import { CommandPalette } from "@/components/command-palette";
 import { LiveRefresh } from "@/components/live-refresh";
+import { GoogleCalendarPoll } from "@/components/google-calendar-poll";
 import { Approvals } from "@/components/approvals";
 import { RemoteStart } from "@/components/remote-start";
 import { ImportOffer } from "@/components/import-projects";
@@ -110,6 +111,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
       <CommandPalette tasks={paletteTasks} projects={projects.map((p) => ({ id: p.id, name: p.name }))} />
       <Toaster />
       <LiveRefresh />
+      {MODE === "web" && <GoogleCalendarPoll />}
       {/* The first time PacedMind opens on a computer, it offers to bring the Claude Code and Codex projects there over. */}
       {MODE === "desktop" && !deviceConfig().importOffered && <ImportOffer areas={areas} />}
       {/* Once signed in, it offers (once) to connect the agents here to PacedMind Cloud's MCP server. */}

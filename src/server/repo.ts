@@ -91,6 +91,9 @@ export const setSubtaskDone = via("setSubtaskDone");
 export const deleteSubtask = via("deleteSubtask");
 
 /* ---------- calendar events ---------- */
+export const getCalendarConnection = via("getCalendarConnection");
+export const putCalendarConnection = via("putCalendarConnection");
+export const deleteCalendarConnection = via("deleteCalendarConnection");
 export const listAllEvents = via("listEvents");
 export async function listEvents() {
   const [events, areas] = await Promise.all([listAllEvents(), listAllAreas()]);

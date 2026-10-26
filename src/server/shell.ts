@@ -10,7 +10,7 @@ import { execFile, spawn } from "node:child_process";
 export function agentEnv(): NodeJS.ProcessEnv {
   const env = { ...process.env };
   for (const key of Object.keys(env)) {
-    if (/^(PORT|HOSTNAME|NODE_ENV|ELECTRON_RUN_AS_NODE|NEXT_.*|__NEXT_.*|TURBOPACK.*|ORGANIZER_.*|SUPABASE_.*)$/i.test(key)) delete env[key];
+    if (/^(PORT|HOSTNAME|NODE_ENV|ELECTRON_RUN_AS_NODE|NEXT_.*|__NEXT_.*|TURBOPACK.*|ORGANIZER_.*|SUPABASE_.*|GOOGLE_CALENDAR_.*)$/i.test(key)) delete env[key];
   }
   for (const key of HOST_SESSION_VARS) delete env[key];
   return env;
@@ -24,6 +24,8 @@ export function agentEnv(): NodeJS.ProcessEnv {
  * them again (launcher.ts), since a terminal app started by an earlier launch keeps its environment.
  */
 export const HOST_SESSION_VARS = [
+  // Reused terminal apps can retain the server environment from an earlier launch.
+  "GOOGLE_CALENDAR_CLIENT_ID", "GOOGLE_CALENDAR_CLIENT_SECRET", "GOOGLE_CALENDAR_ENCRYPTION_KEY",
   "CLAUDECODE", "CLAUDE_CODE_CHILD_SESSION", "CLAUDE_CODE_ENTRYPOINT", "CLAUDE_CODE_SESSION_ID", "CLAUDE_CODE_HOST_SESSION_ID",
   "CLAUDE_CODE_MESSAGING_SOCKET", "CLAUDE_CODE_MESSAGING_TOKEN", "CLAUDE_CODE_SSE_PORT", "CLAUDE_CODE_EXECPATH",
   "CLAUDE_CODE_SESSION_ATTENDED", "CLAUDE_PID",

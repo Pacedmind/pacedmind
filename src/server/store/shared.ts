@@ -1,4 +1,5 @@
 import "server-only";
+import { detailedOccurrences } from "@/lib/calendar-sync";
 import { createHash } from "node:crypto";
 import { addDays } from "date-fns";
 import { areaPictureProblem } from "@/lib/area-picture";
@@ -224,6 +225,7 @@ export function expandOccurrences(events: CalEvent[], from: string, to: string):
   const start = parseLocal(from);
   const end = parseLocal(to);
   for (const e of events) {
+    if (e.calendar) { out.push(...detailedOccurrences(e, from, to)); continue; }
     const first = parseLocal(e.start);
     const durMs = parseLocal(e.end).getTime() - first.getTime();
     if (e.recurrence === "weekly") {

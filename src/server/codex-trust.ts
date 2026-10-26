@@ -54,7 +54,7 @@ export function trustForCodex(folder: string): boolean {
     const answered = [...text.matchAll(/^\s*\[\s*projects\.(?:'([^']+)'|"((?:[^"\\]|\\.)+)")\s*\]/gm)]
       .some((m) => {
         const name = m[1] ?? unquote(m[2]);
-        return name !== null && fold(path.resolve(name)) === fold(key);
+        return name !== null && fold(path.resolve(/*turbopackIgnore: true*/ name)) === fold(key);
       });
     // Projects written as one inline table can't take another table after them.
     if (answered || /^\s*projects\s*=/m.test(text)) return false;

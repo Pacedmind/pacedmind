@@ -1,0 +1,26 @@
+---
+title: Google Calendar
+description: Synchronize calendar activities between PacedMind and one Google calendar.
+---
+
+Open **Settings → Google Calendar**, choose **Connect Google Calendar**, and approve access in Google. Back in PacedMind, choose a calendar you can edit, then **Start synchronization**.
+
+Every ordinary event in the selected Google calendar is imported. New PacedMind activities are sent to that calendar. **Also send existing PacedMind events to Google** is off initially; leave it off to keep your existing activities outside this connection. Tasks, deadlines and automatic focus blocks are not exported. Prefer a separate Google calendar if you want to choose exactly which events appear in PacedMind.
+
+Changes usually synchronize within a minute. A desktop connection runs while that computer's PacedMind app runs, including in its tray/menu bar. A connection made in the web app runs while a PacedMind tab is open; browser suspension can delay it. One connection owns synchronization for a planner, so another computer does not make duplicate copies. Settings tells you when it runs elsewhere.
+
+## Editing and conflicts
+
+Titles, dates, times, location, description, all-day events and repeating series synchronize in both directions. Events keep their time zone across daylight-saving changes. Open an activity and choose **More details** to edit these fields. Imported activities show them immediately. Editing a recurring activity changes the whole series; use Google Calendar to move or cancel an individual occurrence. PacedMind reflects those exceptions.
+
+Changes to different fields are combined. When both calendars change the same field, or one deletes an event the other edits, Settings shows both versions. Choose **Keep PacedMind version** or **Keep Google version**. Other events keep synchronizing. **Sync now** retries without waiting for the next automatic check.
+
+Google guests, invitations, Meet links, attachments and reminder settings stay with Google; PacedMind does not manage them. Google-specific event types such as birthdays, working locations and out-of-office entries are outside this connection.
+
+## Disconnecting
+
+**Disconnect Google Calendar** stops synchronization and removes the stored authorization. Events already copied stay in both calendars. You can also revoke PacedMind in your Google account's connected apps. Restoring a data copy or starting over disconnects synchronization, so resetting PacedMind does not delete the Google calendar.
+
+## If connection is unavailable
+
+The app's operator must enable Google Calendar integration first. For a self-hosted instance, see the repository's **deploy/google-calendar.md** setup instructions. After setup, return to this page and connect your account. Never paste a Google password or authorization token into a chat.

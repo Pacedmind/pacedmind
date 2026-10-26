@@ -96,7 +96,7 @@ function git(cwd: string, args: string[], maxBuffer = 4 << 20): Promise<{ out: s
   const bin = gitBinary();
   if (!bin) return Promise.reject(new GitMissing());
   return new Promise((resolve, reject) => {
-    const child = execFile(bin, [...SAFE, ...args], { cwd, env: gitEnv(), maxBuffer, timeout: 20_000, windowsHide: true, encoding: "utf8" },
+    const child = execFile(/*turbopackIgnore: true*/ bin, [...SAFE, ...args], { cwd, env: gitEnv(), maxBuffer, timeout: 20_000, windowsHide: true, encoding: "utf8" },
       (err, stdout) => {
         if (err && (err as NodeJS.ErrnoException).code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER") return resolve({ out: stdout, cut: true });
         if (err && (err as NodeJS.ErrnoException).code === "ENOENT") return reject(new GitMissing());
