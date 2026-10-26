@@ -10,6 +10,7 @@ export interface FloatingTaskData {
   areaName: string | null;
   place: string;
   color: string | null;
+  areaColor: string | null;
   href: string;
   subtasks: { done: number; total: number };
   session: Session | null;
@@ -28,6 +29,7 @@ export function floatingTaskData(scope: string, task: Task, areas: Area[], proje
     projectId: project?.id ?? null, projectName: project?.name ?? null, areaId: area?.id ?? null, areaName: area?.name ?? null,
     place: project?.name ?? area?.name ?? "Inbox",
     color: project ? projectColor(project, areas) : area?.color ?? null,
+    areaColor: area?.color ?? null,
     href: `${href}?task=${encodeURIComponent(task.key)}`,
     subtasks: { done: task.subtasks.filter((s) => s.done).length, total: task.subtasks.length },
     session, events,

@@ -11,6 +11,9 @@ export function useNoteAppearance(data: FloatingTaskData | null) {
     const style = desktop?.onTaskNoteStyle?.(value => {
       document.documentElement.dataset.noteSize = value.size;
       document.documentElement.dataset.noteEmphasis = value.emphasis;
+      document.documentElement.dataset.noteColored = value.color ? "true" : "false";
+      if (value.color) document.documentElement.style.setProperty("--note-tint", value.color);
+      else document.documentElement.style.removeProperty("--note-tint");
     });
     const theme = desktop?.onTaskNoteTheme?.(({ theme, duration }) => {
       const elements = [...document.querySelectorAll<HTMLElement>(".task-note-surface, .task-note-surface *")];
@@ -29,7 +32,8 @@ export function useNoteAppearance(data: FloatingTaskData | null) {
     if (!data) return;
     const media = matchMedia("(prefers-reduced-motion: reduce)");
     const report = () => window.pacedMindDesktop?.reportTaskNote?.({ ...data.task,
-      projectId: data.projectId, projectName: data.projectName, areaId: data.areaId, areaName: data.areaName, reducedMotion: media.matches });
+      projectId: data.projectId, projectName: data.projectName, projectColor: data.color,
+      areaId: data.areaId, areaName: data.areaName, areaColor: data.areaColor, reducedMotion: media.matches });
     report();
     media.addEventListener("change", report);
     // Refresh urgency and grouping when a planned day or deadline arrives.

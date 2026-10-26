@@ -9,6 +9,7 @@ import { spacePreviews, spaceRegions } from "@/lib/task-note-preview";
 import { Icon } from "./icons";
 import { Popover, type Anchor } from "./popover";
 import { Button, cx } from "./ui";
+import { NoteColorPicker } from "./task-note-colors";
 
 const field = "h-8 max-w-[166px] rounded-md border border-ctl bg-panel px-2 text-[12px] text-fg2";
 const subscribeDesktop = () => () => {};
@@ -113,6 +114,7 @@ export function TaskNoteLayout() {
           <option value="manual">{tx("Manual")}</option><option value="relevance">{tx("Relevance")}</option><option value="deadline">{tx("Due date")}</option>
         </select></label>
         <div className="border-t border-line" />
+        <NoteColorPicker value={display.settings.color} onChange={color => set({ color })} />
         <label className="flex items-center justify-between gap-3">{tx("Emphasize important")}<input type="checkbox" checked={display.settings.emphasis} onChange={e => set({ emphasis: e.target.checked })} /></label>
         <label className="flex items-center justify-between gap-3">{tx("Animation")}<select aria-label={tx("Task note animation")} className={field} value={display.settings.animation} onChange={e => set({ animation: e.target.value as NoteLayoutSettings["animation"] })}>
           <option value="shuffle">{tx("Shuffle")}</option><option value="right">{tx("Right to left")}</option><option value="diagonal">{tx("Corner to corner")}</option><option value="cascade">{tx("Top to bottom")}</option><option value="center">{tx("Center outward")}</option><option value="together">{tx("Together")}</option><option value="none">{tx("None")}</option>

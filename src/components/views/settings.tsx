@@ -37,6 +37,7 @@ import { useExecution } from "../execution-context";
 import { FolderField } from "../folder-field";
 import { PushSettings, type PushDevice } from "../push-settings";
 import { ThemeSelector } from "../theme";
+import { TaskNoteColorSettings } from "../task-note-colors";
 import { Button, Dot, Menu, Segmented, Switch, cx, toast, useAction } from "../ui";
 
 /** The MCP server's tools by purpose (src/server/mcp). */
@@ -575,10 +576,10 @@ export function DataSettings({ account, desktop, legacy, sessionsCount, summary,
 export function AppearanceSettings() {
   const tx = useTranslation();
   return (
-    <Section>
+    <><Section>
       <Row label={tx("Theme")}><ThemeSelector /></Row>
       <Row label={tx("Language")}><LanguageSelector /></Row>
-    </Section>
+    </Section><TaskNoteColorSettings /></>
   );
 }
 

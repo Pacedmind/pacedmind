@@ -133,6 +133,19 @@ html[data-note-size="xs"] .task-note-surface:has(.task-note-xs) > :not(.task-not
 html[data-note-emphasis="strong"] .task-note-surface { background: color-mix(in srgb, var(--color-panel) 90%, var(--color-fg)); border-color: var(--color-fg3); box-shadow: inset 4px 0 0 var(--color-fg2), inset 0 0 0 1px var(--color-line-strong); }
 html[data-note-emphasis="strong"] .task-note-content h1 { font-weight: 650; }
 html[data-note-emphasis="quiet"] .task-note-surface { background: var(--color-bg); }
+/* A soft identity tint in both themes; switching colors off leaves the original surfaces intact. */
+html[data-note-colored="true"] .task-note-surface,
+.task-note-color-preview {
+  background: color-mix(in srgb, var(--note-tint) 16%, var(--color-panel));
+  border-color: color-mix(in srgb, var(--note-tint) 38%, var(--color-line2));
+}
+html[data-note-colored="true"][data-note-emphasis="strong"] .task-note-surface {
+  background: color-mix(in srgb, var(--note-tint) 22%, var(--color-panel));
+  border-color: var(--color-fg3);
+}
+html[data-note-colored="true"][data-note-emphasis="quiet"] .task-note-surface {
+  background: color-mix(in srgb, var(--note-tint) 10%, var(--color-panel));
+}
 @media (prefers-reduced-motion: reduce) { .task-note-surface { transition: none; } }
 html[data-note-size="small"] .task-note-titlebar { height: 30px; }
 html[data-note-size="small"] .task-note-content { padding: 10px 12px; gap: 7px; }

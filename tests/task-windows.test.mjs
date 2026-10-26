@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { createTaskWindows } from "../desktop/task-windows.mjs";
 import { registerTaskNoteControls } from "../desktop/task-note-controls.mjs";
 import { noteCapacity, noteLayout } from "../desktop/task-note-layout.mjs";
-import { animationDelays, importance, layoutSettings, noteGroups, workspaceLayout } from "../desktop/task-note-workspace.mjs";
+import { animationDelays, importance, layoutSettings, noteColor, noteGroups, workspaceLayout } from "../desktop/task-note-workspace.mjs";
 import { createNoteMotion } from "../desktop/task-note-motion.mjs";
 import { createTaskNoteOpener } from "../desktop/task-note-opener.mjs";
 
@@ -665,4 +665,36 @@ test("first hydration preserves saved manual positions until a real task change"
   notes.report(event(windows[1]), { status: "in_progress", priority: 4 });
   await new Promise(r => setTimeout(r, 200));
   assert.notDeepEqual(windows[1].getBounds(), saved);
+});
+
+test("note colors persist per display, update without moving cards, and turn off cleanly", async () => {
+  const { notes, windows, event, layouts } = fixture();
+  notes.show(1, "local", createdAt, "1");
+  const meta = { title: "A task", projectColor: "#6A8DC3", areaColor: "#70B192" };
+  notes.report(event(windows[0]), meta);
+  await new Promise(r => setTimeout(r, 200));
+  notes.moveNote("local", "1", `1:${createdAt}`, { x: .2, y: .2, width: .3, height: .4 });
+  const position = windows[0].getBounds();
+  const color = () => windows[0].messages.filter(([name]) => name === "pacedmind:task-note-style").at(-1)[1].color;
+  for (const [mode, expected] of [["project", "#6A8DC3"], ["area", "#70B192"], ["rose", "#B97C97"], ["none", null]]) {
+    assert.equal(notes.configure("local", { displayId: "1", settings: { color: mode } }).ok, true);
+    assert.equal(color(), expected);
+    assert.equal(layoutSettings(JSON.parse(JSON.stringify(layouts.get("local:1")))).color, mode);
+    assert.deepEqual(windows[0].getBounds(), position);
+    assert.equal(notes.workspace(account).displays[0].settings.color, "none");
+  }
+  notes.configure("local", { displayId: "1", settings: { color: "project" } });
+  notes.configure("local", { displayId: "1", preset: { action: "save", name: "Colors" } });
+  notes.configure("local", { displayId: "1", settings: { color: "none" } });
+  notes.configure("local", { displayId: "1", preset: { action: "load", name: "Colors" } });
+  assert.equal(color(), "#6A8DC3");
+  notes.moveNote("local", "1", `1:${createdAt}`, { x: .2, y: .2, width: .3, height: .4 });
+  notes.report(event(windows[0]), { ...meta, projectColor: "#9485C0" });
+  await new Promise(r => setTimeout(r, 200));
+  assert.equal(color(), "#9485C0");
+  assert.deepEqual(windows[0].getBounds(), position);
+  assert.equal(noteColor({ areaColor: "#70B192" }, "project"), "#70B192");
+  assert.equal(noteColor({ projectColor: "url(https://example.com)" }, "project"), null);
+  assert.equal(layoutSettings({ color: "invalid" }).color, "none");
+  notes.keepScope(account);
 });

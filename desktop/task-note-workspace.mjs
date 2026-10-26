@@ -1,7 +1,12 @@
 import { noteCorner, noteLayout, noteMinimum } from "./task-note-layout.mjs";
 
-export const DEFAULT_LAYOUT = { size: "medium", group: "none", arrangement: "grid", order: "manual", emphasis: true, animation: "shuffle", regions: {}, fills: {} };
-const choices = { size: ["xs", "small", "medium", "large"], group: ["none", "focus", "project", "area", "priority", "status", "deadline"], arrangement: ["grid", "columns", "rows"], order: ["manual", "relevance", "deadline"], animation: ["shuffle", "right", "diagonal", "together", "cascade", "center", "none"] };
+export const NOTE_COLORS = { blue: "#6A8DC3", teal: "#68AAB9", green: "#70B192", sand: "#C8A565", rose: "#B97C97", violet: "#9485C0" };
+export const DEFAULT_LAYOUT = { size: "medium", group: "none", arrangement: "grid", order: "manual", color: "none", emphasis: true, animation: "shuffle", regions: {}, fills: {} };
+const choices = { size: ["xs", "small", "medium", "large"], group: ["none", "focus", "project", "area", "priority", "status", "deadline"], arrangement: ["grid", "columns", "rows"], order: ["manual", "relevance", "deadline"], color: ["none", "project", "area", ...Object.keys(NOTE_COLORS)], animation: ["shuffle", "right", "diagonal", "together", "cascade", "center", "none"] };
+export function noteColor(meta, mode) {
+  const color = mode === "project" ? meta?.projectColor ?? meta?.areaColor : mode === "area" ? meta?.areaColor : NOTE_COLORS[mode];
+  return typeof color === "string" && /^#[\da-f]{6}$/i.test(color) ? color : null;
+}
 export const refOf = (n) => `${n.id}:${n.createdAt}`;
 export function layoutSettings(raw) {
   const result = { ...DEFAULT_LAYOUT, regions: {}, fills: {} };

@@ -5,6 +5,7 @@ export type NoteLayoutSettings = {
   group: "none" | "focus" | "project" | "area" | "priority" | "status" | "deadline";
   arrangement: "grid" | "columns" | "rows";
   order: "manual" | "relevance" | "deadline";
+  color: "none" | "project" | "area" | "blue" | "teal" | "green" | "sand" | "rose" | "violet";
   emphasis: boolean;
   animation: "shuffle" | "right" | "diagonal" | "together" | "cascade" | "center" | "none";
   regions: Record<string, NoteRegion>;
@@ -19,4 +20,4 @@ export type NoteDisplay = NoteRegion & {
 export type NoteWorkspace = { scope: string; defaultDisplay: string | null; displays: NoteDisplay[] };
 export type NoteLayoutReply = { ok: boolean; error?: string; workspace?: NoteWorkspace };
 export type NoteLayoutChange = { displayId: string; settings?: Partial<NoteLayoutSettings>; move?: boolean; rearrange?: boolean; preset?: { action: "save" | "load" | "delete"; name: string }; ref?: string; bounds?: NoteRegion };
-export type NoteStyle = { size: NoteLayoutSettings["size"]; emphasis: "strong" | "normal" | "quiet" };
+export type NoteStyle = { size: NoteLayoutSettings["size"]; emphasis: "strong" | "normal" | "quiet"; color: string | null };

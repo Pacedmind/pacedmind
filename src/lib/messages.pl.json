@@ -2212,5 +2212,18 @@
   "Existing events can only be exported when choosing the first calendar.": "Istniejące wydarzenia można wysłać tylko podczas wyboru pierwszego kalendarza.",
   "This calendar is already connected.": "Ten kalendarz jest już połączony.",
   "Calendar source": "Źródło wydarzenia",
-  "Calendar sources": "Źródła wydarzeń"
+  "Calendar sources": "Źródła wydarzeń",
+  "Note colors": "Kolory notatek",
+  "Teal": "Turkusowy",
+  "Off (current appearance)": "Wyłączone (obecny wygląd)",
+  "By area": "Według obszaru",
+  "Blue": "Niebieski",
+  "By project": "Według projektu",
+  "Soft pastel tints in light and dark themes.": "Delikatne pastelowe odcienie w jasnym i ciemnym motywie.",
+  "Green": "Zielony",
+  "Violet": "Fioletowy",
+  "Sand": "Piaskowy",
+  "Colors for Show notes, saved for each screen on this computer.": "Kolory kartek z „Pokaż notatki”, zapamiętywane dla każdego ekranu na tym komputerze.",
+  "Rose": "Różowy",
+  "Task note color screen": "Ekran dla kolorów notatek"
 }

@@ -1,5 +1,5 @@
 import { noteCapacity, noteLayout, noteMinimum } from "./task-note-layout.mjs";
-import { animationDelays, importance, layoutSettings, normalRegion, noteGroups, pixelRegion, refOf, validRegion, workspaceLayout } from "./task-note-workspace.mjs";
+import { animationDelays, importance, layoutSettings, normalRegion, noteColor, noteGroups, pixelRegion, refOf, validRegion, workspaceLayout } from "./task-note-workspace.mjs";
 import { createNoteMotion } from "./task-note-motion.mjs";
 
 // Independent task notes, with shared visibility controls in the planner.
@@ -63,7 +63,7 @@ export function createTaskWindows({ BrowserWindow, screen, origin, preload, them
   function publish(note) {
     if (note.window.isDestroyed()) return;
     const settings = config(note.scope, displayOf(note));
-    note.window.webContents.send("pacedmind:task-note-style", { size: settings.size, emphasis: settings.emphasis ? importance(note.meta) : "normal" });
+    note.window.webContents.send("pacedmind:task-note-style", { size: settings.size, emphasis: settings.emphasis ? importance(note.meta) : "normal", color: noteColor(note.meta, settings.color) });
   }
   function reveal(note, delay) {
     if (!note.ready || note.hidden) return;
@@ -195,10 +195,11 @@ export function createTaskWindows({ BrowserWindow, screen, origin, preload, them
       const text = key => typeof meta[key] === "string" ? meta[key].replace(/[\u0000-\u001f\u007f]/g, " ").slice(0, key === "title" ? 300 : 100) : null;
       const first = !note.meta;
       note.meta = Object.fromEntries(["title", "projectId", "projectName", "areaId", "areaName", "priority", "status", "dueDate", "plannedDate"].map(k => [k, text(k)]));
+      for (const key of ["projectColor", "areaColor"]) note.meta[key] = typeof meta[key] === "string" && /^#[\da-f]{6}$/i.test(meta[key]) ? meta[key] : null;
       if (Number.isInteger(meta.priority)) note.meta.priority = ["none", "urgent", "high", "medium", "low"][meta.priority] ?? "none";
       note.reducedMotion = meta.reducedMotion === true;
       publish(note);
-      const signature = JSON.stringify({ ...note.meta, title: undefined, day: new Date().toDateString() });
+      const signature = JSON.stringify({ ...note.meta, title: undefined, projectColor: undefined, areaColor: undefined, day: new Date().toDateString() });
       if (signature !== note.layoutSignature) scheduleArrange(note.scope, displayOf(note), first);
       note.layoutSignature = signature;
       return true;
