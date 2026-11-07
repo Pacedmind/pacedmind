@@ -1571,6 +1571,31 @@ begin
     reset role;
   exception when others then out := out || '33o ERROR ' || sqlerrm || E'\n'; end;
 
+  -- 34. team workspaces (their behaviour is checked in workspaces.sql): RLS and the two-factor policy on every table,
+  -- nothing for anon, no invitation token or webhook secret readable, and another account sees nothing of one.
+  select count(*) into n from pg_class where oid in ('public.workspaces'::regclass, 'public.workspace_members'::regclass,
+    'public.workspace_invites'::regclass, 'public.workspace_domains'::regclass, 'public.member_webhooks'::regclass,
+    'public.webhook_deliveries'::regclass) and relrowsecurity;
+  out := out || '34 workspace tables with RLS=' || n || ' (want 6)' || E'\n';
+  select count(*) into n from pg_policies where schemaname = 'public' and permissive = 'RESTRICTIVE' and tablename in
+    ('workspaces', 'workspace_members', 'workspace_invites', 'workspace_domains', 'member_webhooks', 'webhook_deliveries');
+  out := out || '34b workspace two-factor policies=' || n || ' (want 6)' || E'\n';
+  select count(*) into n from information_schema.role_table_grants where grantee = 'anon' and table_schema = 'public' and table_name in
+    ('workspaces', 'workspace_members', 'workspace_invites', 'workspace_domains', 'member_webhooks', 'webhook_deliveries');
+  out := out || '34c anon grants on workspace tables=' || n || ' (want 0)' || E'\n';
+  select count(*) into n from information_schema.column_privileges where grantee = 'authenticated' and privilege_type = 'SELECT'
+    and ((table_name = 'workspace_invites' and column_name = 'token_digest') or (table_name = 'member_webhooks' and column_name = 'secret'));
+  out := out || '34d readable invitation tokens and webhook secrets=' || n || ' (want 0)' || E'\n';
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    perform public.create_workspace('Security check');
+    reset role;
+    perform set_config('request.jwt.claims', claims_b_old, true); set local role authenticated;
+    select count(*) into n from public.workspaces; out := out || '34e another account sees workspaces=' || n || ' (want 0)' || E'\n';
+    select count(*) into n from public.workspace_members; out := out || '34f another account sees members=' || n || ' (want 0)' || E'\n';
+    reset role;
+  exception when others then out := out || '34e ERROR ' || sqlerrm || E'\n'; end;
+
   -- 12. revoking the device ends its session at once
   begin
     perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;

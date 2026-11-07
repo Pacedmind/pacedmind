@@ -55,6 +55,8 @@ try {
   await db.exec(await read("supabase/tests/google_calendar.sql"));
   console.log("google_calendar.sql: account isolation, agent denial, CAS and reset safety passed.");
   console.log("hidden_projects.sql: visibility, account isolation, preserved tasks and copy restoration passed; fixtures rolled back.");
+  await db.exec(await read("supabase/tests/workspaces.sql"));
+  console.log("workspaces.sql: membership isolation, invitations, domains, roles, keys, assignees, billing, leaving, account deletion, copies and webhooks passed; fixtures rolled back.");
   const { rows } = await db.query("select count(*)::int as accounts from auth.users");
   if (rows[0].accounts !== 0) throw new Error("SQL test fixtures were not rolled back.");
   console.log("Auth HTTP/OAuth integration and hosted security advisors still require a Supabase test stack.");
