@@ -69,6 +69,18 @@ const EFFECT: Record<string, string> = {
   delete_event: "deletes a calendar event, or every occurrence of a weekly one",
   start_session: "asks one of the user's computers to start Claude Code or Codex on a task",
   request_changes: "asks to reopen an agent session on the user's computer with the changes the user wants",
+  list_workspaces: "the team workspaces the user is in, with their role, members and shared areas",
+  get_workspace: "one team workspace's members, waiting invitations, domains and shared areas",
+  list_webhooks: "the user's own webhooks in their team workspaces",
+  create_workspace: "adds a team workspace with the user as its owner",
+  invite_member: "adds an invitation for one email address and returns its link; nothing is emailed",
+  update_member: "changes a member's role in a team workspace",
+  remove_member: "removes a member from a team workspace, or the user themselves, which deletes the workspace when they were its last member",
+  set_workspace_domain: "lets people with confirmed addresses at the user's own email domain join a team workspace as members",
+  remove_workspace_domain: "stops a domain letting people join a team workspace",
+  share_area: "moves one of the user's own areas, with its projects and tasks, into a team workspace for all its members",
+  set_webhook: "adds or changes one of the user's own webhooks in a team workspace",
+  delete_webhook: "deletes one of the user's own webhooks",
 };
 /** For open-world tools: what they reach outside the account. */
 const OUTSIDE: Record<string, string> = {
@@ -80,10 +92,11 @@ const OUTSIDE: Record<string, string> = {
   show_task_note: "a window on one of the user's own computers",
   start_session: "an agent session on one of the user's own computers",
   request_changes: "an agent session on one of the user's own computers",
+  set_webhook: "the https address the user gives, which PacedMind's database calls with signed task events from then on",
 };
 // Deletes whose descriptions tell the assistant to ask the user first, and other changes that can't be undone.
-const ASKS_FIRST = new Set(["delete_area", "delete_project", "delete_task", "delete_event"]);
-const FINAL = new Set(["close_session", "disconnect_tasks"]);
+const ASKS_FIRST = new Set(["delete_area", "delete_project", "delete_task", "delete_event", "remove_member", "delete_webhook"]);
+const FINAL = new Set(["close_session", "disconnect_tasks", "remove_workspace_domain", "share_area"]);
 const LAUNCHES = new Set(["start_session", "request_changes"]);
 
 const problems: string[] = [];

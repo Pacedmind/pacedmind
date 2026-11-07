@@ -48,6 +48,7 @@ const TOOL_GROUPS = (tx: Translator): [string, string[]][] => ([
   [tx("Projects"), ["list_projects", "get_project", "create_project", "update_project", "delete_project", "reorder_tasks"]],
   [tx("Tasks"), ["list_tasks", "get_task", "create_task", "create_tasks", "update_task", "bulk_update_tasks", "connect_tasks", "disconnect_tasks", "delete_task"]],
   [tx("Calendar"), ["list_events", "create_event", "update_event", "delete_event", "get_agenda", "reschedule_day"]],
+  [tx("Team workspaces"), ["list_workspaces", "create_workspace", "get_workspace", "invite_member", "update_member", "remove_member", "set_workspace_domain", "remove_workspace_domain", "share_area", "list_webhooks", "set_webhook", "delete_webhook"]],
   [tx("Computers"), ["list_computers", "set_folder"]],
   [tx("Task notes"), ["list_task_note_displays", "show_task_note"]],
   [tx("Sessions"), ["list_sessions", "start_session", "close_session", "request_changes", "get_next_task", "start_task", "attach_image", "report_progress", "ask_user", "finish_task"]],

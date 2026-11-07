@@ -44,7 +44,8 @@ export const DEFAULT_AREAS = [
 ];
 
 /**
- * Deletes the account's areas, projects, tasks (with their sessions, reports and connections) and events. Settings stay.
+ * Deletes the account's areas, projects, tasks (with their sessions, reports and connections) and events. Settings stay,
+ * and so does everything in team workspaces, what the account wrote there too: it's the team's.
  * `kept`: a copy of them stays in the account, so this computer keeps their images and folders for putting it back.
  */
 async function clearAccount(db: SupabaseClient, kept = false) {
@@ -52,11 +53,12 @@ async function clearAccount(db: SupabaseClient, kept = false) {
   // Otherwise the images this computer keeps for the account's tasks go with them, and so do its folders.
   const device = deviceConfig().deviceId;
   const files = device && !kept ? (check(await db.from("attachments").select("file").eq("device_id", device)) as Row[]).map((r) => String(r.file)) : [];
-  const projects = (check(await db.from("projects").select("id")) as Row[]).map((r) => String(r.id));
-  const areas = (check(await db.from("areas").select("id")) as Row[]).map((r) => String(r.id));
+  const projects = (check(await db.from("projects").select("id").is("workspace_id", null)) as Row[]).map((r) => String(r.id));
+  const areas = (check(await db.from("areas").select("id").is("workspace_id", null)) as Row[]).map((r) => String(r.id));
   // Deleting tasks takes their sub-tasks, sessions, reports, images and connections along; areas take their projects.
   for (const table of ["google_calendar_connections", "tasks", "events", "projects", "areas", "key_counters"]) {
-    check(await db.from(table).delete().eq("user_id", id));
+    const rows = db.from(table).delete().eq("user_id", id);
+    check(await (["tasks", "projects", "areas"].includes(table) ? rows.is("workspace_id", null) : rows));
   }
   if (kept) return;
   removeImageFiles(files);
@@ -109,8 +111,10 @@ export async function deleteAccountCopy(id: string) {
 /** How much the account holds. */
 export async function accountSummary(): Promise<DataSummary> {
   const db = await supabase();
+  // The account's own data: what's in team workspaces is the team's.
   const count = async (table: string) => {
-    const r = await db.from(table).select("id", { count: "exact", head: true });
+    const q = db.from(table).select("id", { count: "exact", head: true });
+    const r = await (table === "events" ? q : q.is("workspace_id", null));
     if (r.error) throw new Error(r.error.message);
     return r.count ?? 0;
   };
@@ -263,8 +267,8 @@ export async function legacySummary(): Promise<{ file: string; areas: number; pr
 export async function importLegacy(): Promise<{ areas: number; projects: number; tasks: number }> {
   const db = await supabase();
   const { id: userId } = (await requirePlannerAccess()).user;
-  const busy = check(await db.from("tasks").select("id").limit(1)) as Row[];
-  const projectsNow = check(await db.from("projects").select("id").limit(1)) as Row[];
+  const busy = check(await db.from("tasks").select("id").is("workspace_id", null).limit(1)) as Row[];
+  const projectsNow = check(await db.from("projects").select("id").is("workspace_id", null).limit(1)) as Row[];
   if (busy.length || projectsNow.length) throw new Error("Your account already has projects or tasks. Importing works on an empty account.");
 
   const file = localDbPath();
@@ -567,10 +571,13 @@ async function everyRow(db: SupabaseClient, table: string, order: string): Promi
 export async function moveToThisComputer(): Promise<{ areas: number; projects: number; tasks: number }> {
   const db = await supabase();
   await requirePlannerAccess();
+  // Only the account's own: team workspaces stay in PacedMind Cloud, and so do sessions on their tasks.
+  const own = (rows: Row[]) => rows.filter((r) => r.workspace_id == null);
   const [areas, projects, tasks, subtasks, events, sessions, sessionEvents, edges, reports, attachments, settings, preferences] = await Promise.all([
-    everyRow(db, "areas", "sort"), everyRow(db, "projects", "sort"), everyRow(db, "tasks", "id"), everyRow(db, "subtasks", "id"),
-    everyRow(db, "events", "id"), everyRow(db, "sessions", "started_at"), everyRow(db, "session_events", "id"), everyRow(db, "edges", "id"),
-    everyRow(db, "reports", "id"), everyRow(db, "attachments", "created_at"), everyRow(db, "settings", "key"), everyRow(db, "preferences", "id"),
+    everyRow(db, "areas", "sort").then(own), everyRow(db, "projects", "sort").then(own), everyRow(db, "tasks", "id").then(own),
+    everyRow(db, "subtasks", "id").then(own), everyRow(db, "events", "id"), everyRow(db, "sessions", "started_at"), everyRow(db, "session_events", "id"),
+    everyRow(db, "edges", "id").then(own), everyRow(db, "reports", "id").then(own), everyRow(db, "attachments", "created_at").then(own),
+    everyRow(db, "settings", "key"), everyRow(db, "preferences", "id"),
   ]);
 
   const conn = localDb();

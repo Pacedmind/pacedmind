@@ -23,6 +23,10 @@ export interface TaskFilter {
   areaId?: string | null;
   /** A project's tasks, or with null the tasks without a project. */
   projectId?: string | null;
+  /** The tasks assigned to this person (a user id; `ME` locally). */
+  assigneeId?: string;
+  /** A team workspace's tasks, or with null your own. */
+  workspaceId?: string | null;
 }
 
 export interface TaskInput {
@@ -46,6 +50,8 @@ export interface TaskInput {
   needs?: string[];
   agent?: Doer | null;
   runIn?: Surface | null;
+  /** The person it's assigned to (a member of its workspace; for your own tasks, you), or null. */
+  assigneeId?: string | null;
 }
 
 export type TaskPatch = Partial<TaskInput & {
@@ -434,3 +440,9 @@ export interface PreferencePatch {
 
 /** In their topics' order, then as they were added. */
 export const byTopic = (a: Preference, b: Preference) => topicOrder(a.topic, b.topic) || a.id - b.id;
+
+/** What the local store answers for everything about team workspaces: they're PacedMind Cloud's. */
+export const CLOUD_ONLY_WORKSPACES = "Team workspaces need PacedMind Cloud: sign in to use them.";
+
+/** An invitation's link: the app's /join page with its token. */
+export const inviteLink = (origin: string, token: string) => `${origin.replace(/\/$/, "")}/join/${encodeURIComponent(token)}`;

@@ -40,7 +40,8 @@ CREATE TABLE IF NOT EXISTS tasks (
   priority INTEGER NOT NULL DEFAULT 0, due_date TEXT, planned_date TEXT, planned_time TEXT, related_project_id TEXT, repeat TEXT, estimate_min INTEGER NOT NULL DEFAULT 60,
   labels TEXT NOT NULL DEFAULT '[]', reminder TEXT, agent TEXT, sort_order INTEGER NOT NULL DEFAULT 0,
   flow_x REAL, flow_y REAL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, completed_at TEXT,
-  run_in TEXT, device_id TEXT, folder TEXT, done_when TEXT NOT NULL DEFAULT '[]', needs TEXT NOT NULL DEFAULT '[]', model_settings TEXT
+  run_in TEXT, device_id TEXT, folder TEXT, done_when TEXT NOT NULL DEFAULT '[]', needs TEXT NOT NULL DEFAULT '[]', model_settings TEXT,
+  assignee_id TEXT CHECK (assignee_id IS NULL OR assignee_id = 'me')
 );
 CREATE TABLE IF NOT EXISTS subtasks (
   id INTEGER PRIMARY KEY AUTOINCREMENT, task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
@@ -155,7 +156,7 @@ function migrate(conn: DatabaseSync) {
   const added: Record<string, [string, string][]> = {
     areas: [["icon", "TEXT"], ["picture", "TEXT"], ["repo", "TEXT"], ["hidden", "INTEGER NOT NULL DEFAULT 0 CHECK (hidden IN (0, 1))"]],
     projects: [["color", "TEXT"], ["device_id", "TEXT"], ["codex_env", "TEXT"], ["repo", "TEXT"], ["hidden", "INTEGER NOT NULL DEFAULT 0 CHECK (hidden IN (0, 1))"]],
-    tasks: [["run_in", "TEXT"], ["device_id", "TEXT"], ["folder", "TEXT"], ["done_when", "TEXT NOT NULL DEFAULT '[]'"], ["needs", "TEXT NOT NULL DEFAULT '[]'"], ["model_settings", "TEXT"], ["planned_time", "TEXT"], ["related_project_id", "TEXT"], ["repeat", "TEXT"]],
+    tasks: [["run_in", "TEXT"], ["device_id", "TEXT"], ["folder", "TEXT"], ["done_when", "TEXT NOT NULL DEFAULT '[]'"], ["needs", "TEXT NOT NULL DEFAULT '[]'"], ["model_settings", "TEXT"], ["planned_time", "TEXT"], ["related_project_id", "TEXT"], ["repeat", "TEXT"], ["assignee_id", "TEXT CHECK (assignee_id IS NULL OR assignee_id = 'me')"]],
     sessions: [["surface", "TEXT NOT NULL DEFAULT 'terminal'"], ["device_id", "TEXT"], ["url", "TEXT"], ["usage", "TEXT"]],
     reports: [["changes", "TEXT"], ["changes_at", "TEXT"], ["diff", "TEXT"]],
     events: [["done_on", "TEXT NOT NULL DEFAULT '[]'"], ["calendar_data", "TEXT"]],

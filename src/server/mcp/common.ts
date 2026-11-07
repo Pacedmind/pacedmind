@@ -248,14 +248,29 @@ export function iconFrom(input: string): AreaIcon {
 
 /* ---------- describing things ---------- */
 
-/** Name lookups for one tool call. */
+/** Name lookups for one tool call, with the people of the user's team workspaces. */
 export async function names() {
-  const [areaList, projectList] = await Promise.all([repo.listAreas(), repo.listProjects()]);
+  const [areaList, projectList, workspaceList, memberList, me] = await Promise.all([
+    repo.listAreas(), repo.listProjects(), repo.listWorkspaces().catch(() => []), repo.listWorkspaceMembers().catch(() => []),
+    repo.currentUserId().catch(() => null),
+  ]);
   const areas = new Map(areaList.map((a) => [a.id, a]));
   const projects = new Map(projectList.map((p) => [p.id, p]));
+  const workspaces = new Map(workspaceList.map((w) => [w.id, w]));
+  const people = new Map(memberList.map((m) => [m.userId, m]));
   return {
     areas,
     projects,
+    workspaces,
+    me,
+    /** A person by id: their name (and "the user" for the user), or someone who has left. */
+    person: (id: string | null) => {
+      if (!id) return null;
+      const m = people.get(id);
+      if (id === me) return m ? `${m.name} (the user)` : "the user";
+      return m ? `${m.name} <${m.email}>` : "someone no longer in the workspace";
+    },
+    workspace: (id: string | null) => (id ? workspaces.get(id)?.name ?? id : null),
     area: (id: string | null) => (id ? areas.get(id)?.name ?? id : "Inbox"),
     project: (id: string | null) => (id ? projects.get(id)?.name ?? id : null),
     /** Where a task lives: its project, else its area, else the Inbox. */
@@ -276,6 +291,7 @@ export function taskLine(t: Task, n: Names): string {
   if (t.plannedDate) parts.push(`planned ${plannedWhen(t)}`);
   if (t.repeat) parts.push(REPEAT_LABEL[t.repeat].toLowerCase());
   if (t.relatedProjectId) parts.push(`about ${n.project(t.relatedProjectId)}`);
+  if (t.assigneeId) parts.push(`assigned to ${n.person(t.assigneeId)}`);
   if (t.labels.length) parts.push(t.labels.map((l) => `#${l}`).join(" "));
   return parts.join(" · ");
 }
@@ -295,6 +311,8 @@ export async function describeTask(t: Task, given?: Names): Promise<string> {
     `${t.key} · ${t.title}`,
     `Status: ${STATUS_LABEL[t.status]} · Priority: ${PRIORITY_LABEL[t.priority]}`,
     `Where: ${project ? `project ${project.name} (${project.id}) in ${n.area(project.areaId)}` : t.areaId ? `area ${n.area(t.areaId)}` : "Inbox"}`,
+    t.workspaceId ? `Team workspace: ${n.workspace(t.workspaceId)} (its members see and change it)` : null,
+    `Assigned to: ${t.assigneeId ? n.person(t.assigneeId) : "nobody"}`,
     t.relatedProjectId ? `About: project ${n.project(t.relatedProjectId)} (${t.relatedProjectId}), without being part of it` : null,
     t.dueDate || t.plannedDate ? `Due: ${t.dueDate ? fmtWhen(t.dueDate) : "none"} · Planned for: ${t.plannedDate ? plannedWhen(t) : "none"}` : null,
     t.repeat ? `Repeats: ${REPEAT_LABEL[t.repeat].toLowerCase()}; done, it comes back as a new task at its next date` : null,

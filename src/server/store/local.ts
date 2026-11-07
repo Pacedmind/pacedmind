@@ -13,7 +13,7 @@ import {
 import { repoIdentity } from "../git-remote";
 import { db, tx } from "./local-db";
 import {
-  DEFAULT_SETTINGS, SESSION_URL, SETTING_KEYS, areaPictureOf, byTopic, cleanDoneWhen, cleanPreference, codexEnvProblem, criteriaOf, deriveKey, doneDaysOf,
+  CLOUD_ONLY_WORKSPACES, DEFAULT_SETTINGS, SESSION_URL, SETTING_KEYS, areaPictureOf, byTopic, cleanDoneWhen, cleanPreference, codexEnvProblem, criteriaOf, deriveKey, doneDaysOf,
   expandOccurrences, withDoneDay, linksOf, pictureHash, preferenceOf, renamedKey, repoOf, strings,
   type AskInput, type PreferenceInput, type PreferencePatch, type PushSubscriptionRow, type ReportInput, type SessionFilter, type TaskFilter, type TaskInput,
   type TaskPatch, usageOf, diffOf,
@@ -21,7 +21,9 @@ import {
 import { areaIconOf, type AreaIcon } from "@/lib/area-icons";
 import { nowStamp, toDateStr } from "@/lib/dates";
 import {
-  repeatOf, taskHref,
+  ME, repeatOf, taskHref,
+  type InviteInfo, type JoinableWorkspace, type MemberWebhook, type NewInvite, type WebhookEvent, type Workspace, type WorkspaceDetails,
+  type WorkspaceMember, type WorkspaceRole,
   type AgentId, type Area, type AskStatus, type Attachment, type CalEvent, type ConnectedAgent, type Dependency, type Device, type Doer, type EventOccurrence,
   type FolderRequest, type LaunchRequest, type Preference, type Priority, type Project, type Report, type ReportOutcome, type Session,
   type PushSubscriptionInput, type SessionAsk, type SessionEvent, type SessionStatus, type Settings, type Status, type Subtask, type Surface,
@@ -103,7 +105,7 @@ const slug = (name: string, fallback: string) => name.toLowerCase().replace(/[^a
 const toArea = (r: Row): Area => ({
   hidden: r.hidden === 1,
   id: String(r.id), name: String(r.name), key: String(r.key), color: String(r.color), icon: areaIconOf(r.icon),
-  picture: pictureHash(r.picture), sort: Number(r.sort), folder: areaFolder(String(r.id)), repo: repoOf(r.repo),
+  picture: pictureHash(r.picture), sort: Number(r.sort), folder: areaFolder(String(r.id)), repo: repoOf(r.repo), workspaceId: null,
 });
 const areasNow = () => all("SELECT * FROM areas ORDER BY sort").map(toArea);
 
@@ -116,7 +118,8 @@ export async function areaPicture(id: string): Promise<string | null> {
   return areaPictureOf(get("SELECT picture FROM areas WHERE id = ?", id)?.picture);
 }
 
-export async function createArea(input: { name: string; color: string; icon?: AreaIcon | null }): Promise<Area> {
+export async function createArea(input: { name: string; color: string; icon?: AreaIcon | null; workspaceId?: string | null }): Promise<Area> {
+  if (input.workspaceId) throw new Error(CLOUD_ONLY_WORKSPACES);
   const areas = areasNow();
   const base = slug(input.name, "area");
   const ids = new Set(areas.map((a) => a.id));
@@ -184,7 +187,7 @@ const toProject = (r: Row): Project => ({
   hidden: r.hidden === 1,
   id: String(r.id), areaId: String(r.area_id), name: String(r.name), color: s(r.color), startDate: s(r.start_date), targetDate: s(r.target_date),
   folder: projectFolder(String(r.id)), deviceId: null, codexEnv: s(r.codex_env), repo: repoOf(r.repo), agent: s(r.agent) as AgentId | null,
-  afterProjectId: s(r.after_project_id), sort: Number(r.sort),
+  afterProjectId: s(r.after_project_id), sort: Number(r.sort), workspaceId: null,
 });
 
 export async function listProjects(): Promise<Project[]> {
@@ -305,6 +308,7 @@ const toTask = (r: Row, subs: Subtask[]): Task => ({
   modelSettings: modelSelectionOf(json(r.model_settings, null)),
   sortOrder: Number(r.sort_order),
   createdAt: String(r.created_at), updatedAt: String(r.updated_at), completedAt: s(r.completed_at), subtasks: subs,
+  workspaceId: null, assigneeId: r.assignee_id === ME ? ME : null,
 });
 
 function tasksWhere(where: string, ...params: Value[]): Task[] {
@@ -326,6 +330,12 @@ export async function listTasks(filter: TaskFilter = {}): Promise<Task[]> {
     where.push("project_id = ?");
     params.push(filter.projectId);
   }
+  if (filter.assigneeId !== undefined) {
+    where.push("assignee_id = ?");
+    params.push(filter.assigneeId);
+  }
+  // This computer's tasks are all your own.
+  if (filter.workspaceId) return [];
   return tasksWhere(where.join(" AND "), ...params);
 }
 
@@ -346,21 +356,29 @@ function nextKey(areaId: string | null): string {
   return `${prefix}-${max + 1}`;
 }
 
+/** Without an account, a task can only be assigned to you. */
+function assigneeOf(id: string | null | undefined): string | null {
+  if (!id) return null;
+  if (id !== ME) throw new Error(CLOUD_ONLY_WORKSPACES);
+  return ME;
+}
+
 /** Creates a task at the end of its project (or of the loose tasks). */
 export async function createTask(input: TaskInput): Promise<Task> {
+  const assignee = assigneeOf(input.assigneeId);
   const project = input.projectId ? projectNow(input.projectId) : null;
   const areaId = input.areaId ?? project?.areaId ?? null;
   const stamp = nowStamp();
   const sort = Number(get("SELECT COALESCE(MAX(sort_order), 0) + 1 AS n FROM tasks WHERE project_id IS ?", input.projectId ?? null)!.n);
   const r = run(
     `INSERT INTO tasks (key, area_id, project_id, title, description, status, priority, due_date, planned_date, planned_time, estimate_min,
-       labels, done_when, needs, agent, run_in, sort_order, created_at, updated_at, model_settings, related_project_id, repeat)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       labels, done_when, needs, agent, run_in, sort_order, created_at, updated_at, model_settings, related_project_id, repeat, assignee_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     nextKey(areaId), areaId, input.projectId ?? null, input.title.trim(), input.description ?? "", input.status ?? "todo", input.priority ?? 0,
     input.dueDate ?? null, input.plannedDate ?? null, (input.plannedDate && input.plannedTime) || null, input.estimateMin ?? 60, JSON.stringify(input.labels ?? []),
     JSON.stringify(cleanDoneWhen(input.doneWhen ?? [])), JSON.stringify(cleanNeeds(input.needs ?? [])), input.agent ?? project?.agent ?? null,
     input.agent === "human" ? null : input.runIn ?? null, sort, stamp, stamp, JSON.stringify(checkedModelSelection(input.modelSettings)),
-    input.relatedProjectId ?? null, input.repeat ?? null,
+    input.relatedProjectId ?? null, input.repeat ?? null, assignee,
   );
   return taskNow(Number(r.lastInsertRowid))!;
 }
@@ -379,6 +397,7 @@ export async function updateTask(id: number, patch: TaskPatch) {
     if (problem) throw new Error(`Can't use the folder ${patch.folder}: ${problem}`);
   }
   const values = columns(patch, TASK_COLS);
+  if (patch.assigneeId !== undefined) values.assignee_id = assigneeOf(patch.assigneeId);
   if (patch.modelSettings !== undefined) values.model_settings = JSON.stringify(checkedModelSelection(patch.modelSettings));
   if (patch.plannedDate === null) values.planned_time = null;
   if (patch.labels) values.labels = JSON.stringify(patch.labels);
@@ -956,6 +975,47 @@ export async function disconnectAgent(id: string): Promise<void> {
 /* ---------- live refresh ---------- */
 
 /** A number that grows with every write to this computer's data (all of them go through this one connection). */
+/* ---------- team workspaces: PacedMind Cloud's ---------- */
+
+/** Without an account there's one person: you. */
+export async function currentUserId(): Promise<string | null> {
+  return ME;
+}
+export async function listWorkspaces(): Promise<Workspace[]> {
+  return [];
+}
+export async function listWorkspaceMembers(): Promise<(WorkspaceMember & { workspaceId: string })[]> {
+  return [];
+}
+export async function getWorkspace(): Promise<WorkspaceDetails | null> {
+  return null;
+}
+export async function joinableWorkspaces(): Promise<JoinableWorkspace[]> {
+  return [];
+}
+export async function listWebhooks(): Promise<MemberWebhook[]> {
+  return [];
+}
+export async function inviteDetails(): Promise<InviteInfo> {
+  throw new Error(CLOUD_ONLY_WORKSPACES);
+}
+const cloudOnly = async (): Promise<never> => {
+  throw new Error(CLOUD_ONLY_WORKSPACES);
+};
+export const createWorkspace: (name: string) => Promise<Workspace> = cloudOnly;
+export const renameWorkspace: (id: string, name: string) => Promise<void> = cloudOnly;
+export const inviteMember: (workspaceId: string, email: string, role: "admin" | "member") => Promise<NewInvite> = cloudOnly;
+export const revokeInvite: (id: string) => Promise<void> = cloudOnly;
+export const acceptInvite: (token: string) => Promise<string> = cloudOnly;
+export const joinWorkspace: (id: string) => Promise<void> = cloudOnly;
+export const setMemberRole: (workspaceId: string, userId: string, role: WorkspaceRole) => Promise<void> = cloudOnly;
+export const removeMember: (workspaceId: string, userId: string) => Promise<void> = cloudOnly;
+export const addWorkspaceDomain: (workspaceId: string, domain: string) => Promise<void> = cloudOnly;
+export const removeWorkspaceDomain: (workspaceId: string, domain: string) => Promise<void> = cloudOnly;
+export const shareArea: (areaId: string, workspaceId: string) => Promise<{ projects: number; tasks: number }> = cloudOnly;
+export const setWebhook: (input: { workspaceId: string; url: string; events: WebhookEvent[]; id?: string; enabled?: boolean }) => Promise<{ id: string; secret: string | null }> = cloudOnly;
+export const deleteWebhook: (id: string) => Promise<void> = cloudOnly;
+
 export async function stateVersion(): Promise<number> {
   return Number(get("SELECT total_changes() AS n")!.n);
 }
