@@ -42,7 +42,7 @@ import { READ_ONLY_MESSAGE, type BillingPeriod } from "@/lib/billing";
 import { areaPictureProblem } from "@/lib/area-picture";
 import { addDaysStr, dateOnly, dayDiff, fmtDay, parseLocal, timeOf, toDateTimeStr } from "@/lib/dates";
 import {
-  AGENT_LABEL, CONNECT_CARD_COOKIE, LIVE_STATUSES, WEBHOOK_EVENTS, agentOf, deviceOnline, isLiveSession,
+  AGENT_LABEL, CONNECT_CARD_COOKIE, JOIN_PROMPT_COOKIE, LIVE_STATUSES, WEBHOOK_EVENTS, agentOf, deviceOnline, isLiveSession,
   type WebhookEvent, type WorkspaceRole,
   type AgentId, type Device, type LaunchRequestKind, type Project, type RemoteStart, type Settings, type Surface,
   type TerminalId,
@@ -1280,6 +1280,13 @@ export async function acceptInviteAction(token: string): Promise<Result> {
   const r = await changing(() => repo.acceptInvite(token));
   if (!r.ok) return r;
   redirect("/today");
+}
+
+/** Not now, for the prompt to join the team workspaces your email domain offers: this browser asks again in 30 days. */
+export async function dismissJoinPromptAction(): Promise<Result> {
+  await guard();
+  (await cookies()).set(JOIN_PROMPT_COOKIE, "1", { path: "/", maxAge: 30 * 24 * 60 * 60, httpOnly: true, sameSite: "lax", secure: MODE === "web" });
+  return done();
 }
 
 /** Joins a workspace that your confirmed email address's domain lets you into. */

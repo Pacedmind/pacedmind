@@ -31,6 +31,7 @@ import { MarkdownEditor } from "./markdown-editor";
 import { AnswerForm, Gallery, ReportBody, RequestChangesForm, SessionPlan, SessionReport, sameText } from "./report";
 import { Button, IconButton, Menu, cx, useAction } from "./ui";
 import { FloatTaskButton } from "./float-task-button";
+import { PersonMark, assignable, useAssignee } from "./people";
 
 /** "in a terminal", "in the Claude app" or "in Claude Code on the web". */
 const placeOf = (agent: AgentId, surface: Surface, tx: Translator = createTranslator("en")) =>
@@ -114,6 +115,10 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
   const [newLabel, setNewLabel] = useState("");
   const area = ctx.areas.find((a) => a.id === task.areaId) ?? null;
   const project = ctx.projects.find((p) => p.id === task.projectId) ?? null;
+  const people = assignable(task, ctx);
+  // A team workspace's task stays in that workspace; your own can go anywhere, a shared area too.
+  const stays = (x: { workspaceId: string | null }) => !task.workspaceId || x.workspaceId === task.workspaceId;
+  const assignee = useAssignee(task, ctx);
   const related = ctx.projects.find((p) => p.id === task.relatedProjectId) ?? null;
   const session = ctx.sessions[task.id] ?? null;
   const use = ctx.agentUse?.[task.id];
@@ -391,12 +396,13 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
           )}
           <Prop label={tx("Area")}>
             <Menu trigger={<button type="button" className={pv}>{area ? <AreaMark area={area} size={14} dot={8} /> : <Icon name="inbox" size={14} />}{area?.name ?? tx("Inbox")}</button>}
-              items={[{ value: null as string | null, label: tx("Inbox, no area") }, ...ctx.areas.map((a) => ({ value: a.id as string | null, label: a.name, icon: <AreaMark area={a} size={14} dot={8} /> }))]}
+              items={[...(task.workspaceId ? [] : [{ value: null as string | null, label: tx("Inbox, no area") }]),
+                ...ctx.areas.filter(stays).map((a) => ({ value: a.id as string | null, label: a.name, icon: <AreaMark area={a} size={14} dot={8} /> }))]}
               onSelect={(v) => save({ areaId: v, ...(project && project.areaId !== v ? { projectId: null } : {}) })} />
           </Prop>
           <Prop label={tx("Project")}>
             <Menu trigger={<button type="button" className={cx(pv, !project && "text-mut2")}><Icon name="layers" size={14} />{project?.name ?? tx("Add to project")}</button>}
-              items={[{ value: null as string | null, label: tx("No project") }, ...ctx.projects.map((p) => ({ value: p.id as string | null, label: p.name }))]}
+              items={[{ value: null as string | null, label: tx("No project") }, ...ctx.projects.filter(stays).map((p) => ({ value: p.id as string | null, label: p.name }))]}
               onSelect={(v) => save({ projectId: v, modelSettings: null, ...(v ? { areaId: ctx.projects.find((p) => p.id === v)?.areaId ?? task.areaId } : {}) })} />
           </Prop>
           {/* Outside a project, a task can still be about one: its page lists it under Related, and it counts nowhere there. */}
@@ -425,6 +431,19 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
               items={doerItems}
               onSelect={chooseDoer} />
           </Prop>
+          {/* Who among the people: a member of the task's team workspace, or for your own task you. */}
+          {people.length > 0 && <Prop label={tx("Assignee")}>
+            <Menu width={260}
+              trigger={<button type="button" disabled={pending} aria-label={tx("Change assignee")} className={cx(pv, !assignee && "text-mut2")}>
+                {assignee ? <PersonMark name={assignee.name || tx("You")} email={assignee.email} size={16} /> : <Icon name="user" size={14} />}
+                {assignee ? (assignee.you ? tx("You") : assignee.name) : tx("Nobody")}
+              </button>}
+              items={[{ value: null as string | null, label: tx("Nobody") }, ...people.map((p) => ({
+                value: p.userId as string | null, label: p.userId === ctx.people?.me ? tx("You") : p.name, hint: p.email,
+                icon: <PersonMark name={p.name || tx("You")} email={p.email} size={16} />,
+              }))]}
+              onSelect={(v) => save({ assigneeId: v })} />
+          </Prop>}
           <Prop label={tx("Labels")}>
             <div className="flex min-h-7 flex-wrap items-center gap-1.5 px-2">
               {task.labels.map((l) => (

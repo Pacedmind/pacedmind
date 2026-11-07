@@ -22,8 +22,11 @@ export function nextStep(state: AuthState | null): AuthStep | null {
  */
 const CONTINUE_TO = new Set(["/today", "/login/new-password", "/settings/security", "/settings/account"]);
 const CONSENT = /^\/oauth\/consent\?authorization_id=[A-Za-z0-9_-]{1,200}$/;
+/** A team workspace's invitation link, which sends you to sign in or create an account first. */
+export const JOIN = /^\/join\/[0-9a-f]{64}$/;
 
-export const safeNext = (next: string | null | undefined): string => (next && (CONTINUE_TO.has(next) || CONSENT.test(next)) ? next : "/today");
+export const safeNext = (next: string | null | undefined): string =>
+  (next && (CONTINUE_TO.has(next) || CONSENT.test(next) || JOIN.test(next)) ? next : "/today");
 
 /** A sign-in step, keeping where to continue afterwards when that isn't Today. */
 export const withNext = (step: AuthStep, next: string | null | undefined): string => {

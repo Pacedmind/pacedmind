@@ -132,7 +132,8 @@ export async function proxy(request: NextRequest) {
     if (path.startsWith("/api/")) return withHeaders(NextResponse.json({ error: "Sign in first" }, { status: 401 }), csp);
     const login = request.nextUrl.clone();
     login.pathname = "/login";
-    login.search = "";
+    // An invitation link comes back once signed in (or after creating an account).
+    login.search = /^\/join\/[0-9a-f]{64}$/.test(path) ? `?next=${encodeURIComponent(path)}` : "";
     return withHeaders(NextResponse.redirect(login), csp);
   }
   const result = withHeaders(response, csp);

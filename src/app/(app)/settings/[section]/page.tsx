@@ -7,6 +7,7 @@ import { ComputersSettings } from "@/components/computers-settings";
 import { GoogleCalendarSettings } from "@/components/google-calendar-settings";
 import { googleCalendarStatus } from "@/server/google-calendar";
 import { HiddenProjectsSettings } from "@/components/hidden-projects-settings";
+import { WorkspaceSettings } from "@/components/workspace-settings";
 import {
   AccountSettings, AppearanceSettings, ComputerSettings, DataSettings, McpSettings, NotificationSettings, PlanSettings,
   PlanningSettings, PreferencesSettings, ProjectSettings, SecuritySettings, SessionSettings, SettingsContent, type AccountView,
@@ -86,6 +87,16 @@ async function body(section: SettingsSection, state: Auth | null, desktop: boole
       return state && <SecuritySettings account={accountView(state, tx)} />;
     case "computers":
       return <ComputersSettings />;
+    case "team": {
+      const [list, me, areas, hooks, joinable] = await Promise.all([
+        repo.listWorkspaces(), repo.currentUserId(), repo.listAreas(), repo.listWebhooks().catch(() => []), repo.joinableWorkspaces().catch(() => []),
+      ]);
+      const workspaces = (await Promise.all(list.map((w) => repo.getWorkspace(w.id)))).filter((w) => w !== null);
+      // Your own address's domain, once confirmed: the one a workspace can let people join with.
+      const email = state?.user.email_confirmed_at ? state.user.email ?? "" : "";
+      return <WorkspaceSettings cloud={!!state} workspaces={workspaces} me={me} areas={areas} hooks={hooks} joinable={joinable}
+        emailDomain={email.includes("@") ? email.split("@")[1].toLowerCase() : null} />;
+    }
     case "data": {
       const [legacy, sessions, summary, copies] = await Promise.all([
         state && desktop ? legacySummary() : null, repo.listAllSessions(), dataSummary(),

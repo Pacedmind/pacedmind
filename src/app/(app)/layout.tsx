@@ -31,7 +31,8 @@ import { approvalItems } from "@/server/requests";
 import { readPlan } from "@/server/billing";
 import { usage } from "@/server/views";
 import { dateOnly, todayStr } from "@/lib/dates";
-import { CONNECT_CARD_COOKIE, type FoundFolder } from "@/lib/types";
+import { CONNECT_CARD_COOKIE, JOIN_PROMPT_COOKIE, type FoundFolder } from "@/lib/types";
+import { JoinPrompt } from "@/components/workspace-settings";
 import { isNativeCompanion } from "@/lib/native-client";
 
 export const dynamic = "force-dynamic";
@@ -51,9 +52,12 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
   const user = state?.user ?? null;
   // The web app shows how to connect an agent until the account has one, or this browser said Not now.
   const askConnect = MODE === "web" && !(await cookies()).get(CONNECT_CARD_COOKIE);
-  const [areas, projects, tasks, waiting, all, plan, agentsIn] = await Promise.all([
+  const [areas, projects, tasks, waiting, all, plan, agentsIn, userId, teams, joinable] = await Promise.all([
     repo.listAreas(), repo.listProjects(), repo.listTasks(), repo.listSessions({ status: ["finished"] }), repo.listDevices(), readPlan(),
     askConnect ? repo.listConnectedAgents().catch(() => null) : null,
+    repo.currentUserId().catch(() => null), repo.listWorkspaces().catch(() => []),
+    // Team workspaces the account's confirmed email domain lets it join, until this browser said Not now.
+    state && !(await cookies()).get(JOIN_PROMPT_COOKIE) ? repo.joinableWorkspaces().catch(() => []) : [],
   ]);
   // Where "Start on a computer" can send a session: in the desktop app, the other computers.
   const me = MODE === "desktop" ? deviceConfig().deviceId : null;
@@ -68,6 +72,8 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
     inbox: tasks.filter((t) => !t.areaId && !t.projectId && open(t)).length,
     today: tasks.filter((t) => open(t) && ((t.dueDate && dateOnly(t.dueDate) <= today) || t.plannedDate === today)).length,
     sessions: waiting.length,
+    assigned: tasks.filter((t) => open(t) && t.assigneeId !== null && t.assigneeId === userId).length,
+    teams: teams.length > 0,
   };
   const approvals = MODE === "desktop" ? approvalItems(tasks, new Set(projects.map((p) => p.id)), new Set(areas.map((a) => a.id))) : [];
   // Signed in on the desktop, after the import's first offer: the agents here not yet on PacedMind Cloud's MCP server.
@@ -97,6 +103,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
         <Link href="/login/setup?next=%2Fsettings%2Fsecurity" className="shrink-0 text-fg2 underline underline-offset-2">{tx("Set up 2FA")}</Link>
       </div>}
       {plan?.enforced && <BillingBanner plan={plan} desktop={MODE === "desktop"} nativeCompanion={nativeCompanion} />}
+      {joinable.length > 0 && <JoinPrompt workspaces={joinable} />}
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <Sidebar areas={areas} projects={projects} counts={counts} usage={usage(areas, projects, tasks)} desktop={MODE === "desktop"} />
         {/* On a phone the sidebar is a panel over the page, and the page takes the whole width. */}

@@ -14,7 +14,11 @@ import { NO_USE, addUse, sessionUse, type AgentUse } from "@/lib/usage";
 
 export async function taskContext(tasks: Task[]): Promise<TaskContext> {
   const ids = new Set(tasks.map((t) => t.id));
-  const [all, areas, projects] = await Promise.all([repo.listSessions(), repo.listAreas(), repo.listProjects()]);
+  const [all, areas, projects, me, members] = await Promise.all([
+    repo.listSessions(), repo.listAreas(), repo.listProjects(), repo.currentUserId().catch(() => null), repo.listWorkspaceMembers().catch(() => []),
+  ]);
+  const people: NonNullable<TaskContext["people"]> = { me, members: {} };
+  for (const m of members) (people.members[m.workspaceId] ??= []).push({ userId: m.userId, name: m.name, email: m.email });
   const sessions: Record<number, Session> = {};
   for (const s of all) {
     if (ids.has(s.taskId) && !sessions[s.taskId]) sessions[s.taskId] = s;
@@ -43,6 +47,7 @@ export async function taskContext(tasks: Task[]): Promise<TaskContext> {
     asksTrust: MODE === "desktop" ? asksTrust(tasks, sessions, projects) : undefined,
     tools: await accountTools(),
     agentUse,
+    people,
   };
 }
 

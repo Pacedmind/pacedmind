@@ -828,6 +828,9 @@ export interface MemberWebhook {
   createdAt: string;
 }
 
+/** This browser said Not now to joining the team workspaces its email domain offers. */
+export const JOIN_PROMPT_COOKIE = "pm_join_prompt";
+
 /** The person a local task (no account) can be assigned to: you. */
 export const ME = "me";
 
@@ -917,6 +920,11 @@ export interface TaskContext {
   tools?: { name: string; on: string[] }[];
   /** Per task id with sessions: what all its sessions used and how long they ran (src/lib/usage.ts). */
   agentUse?: Record<number, AgentUse>;
+  /**
+   * Who tasks can be assigned to: the signed-in person (`ME` without an account) and the members of each team
+   * workspace, by its id.
+   */
+  people?: { me: string | null; members: Record<string, { userId: string; name: string; email: string }[]> };
 }
 
 /** Task counts per area and project, for the sidebar, the overview and delete confirmations. */
