@@ -1,7 +1,7 @@
 import { createTranslator, type Translator } from "./i18n";
 /** Settings' pages, each at /settings/<id> (src/app/(app)/settings/[section]). */
 export type SettingsSection =
-  | "account" | "plan" | "security" | "computers" | "data"
+  | "account" | "plan" | "security" | "team" | "computers" | "data"
   | "appearance" | "notifications" | "planning" | "calendar" | "preferences" | "hidden-projects"
   | "computer" | "sessions" | "projects" | "mcp";
 
@@ -33,6 +33,7 @@ export function settingsMenu({ account, plan, desktop }: { account: boolean; pla
           : page("account", "Account", "Use PacedMind on your other computers and in the browser too."),
         ...(account && plan ? [page("plan", "Plan", "Your PacedMind Cloud trial or subscription, and paying for it.")] : []),
         ...(account ? [page("security", "Security", "Two-factor sign-in and your password.")] : []),
+        ...(account ? [page("team", "Team workspaces", "Areas you share with your team, its people, invitations and your webhooks.")] : []),
         page("computers", "Computers", "Your computers, their agents and sessions."),
         page("data", "Data", account ? "What your account holds, moving it, and starting over." : "What this computer keeps, and starting over."),
       ],

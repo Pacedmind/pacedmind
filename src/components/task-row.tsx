@@ -8,6 +8,7 @@ import { AGENT_LABEL, PRIORITY_LABEL, REPEAT_LABEL, type Task, type TaskContext 
 import { Icon, PriorityIcon, StatusIcon } from "./icons";
 import { cx, useAction } from "./ui";
 import { FloatTaskButton } from "./float-task-button";
+import { AssigneeChip } from "./people";
 
 const DUE_TONE = { overdue: "text-danger", today: "text-fg2", soon: "text-fg3", later: "text-mut" } as const;
 
@@ -98,6 +99,7 @@ export function TaskRow({ task, ctx, selected, onSelect }: { task: Task; ctx: Ta
           <span className="h-1.5 w-1.5 rounded-full bg-mut2" />{l}
         </span>
       ))}
+      <AssigneeChip task={task} ctx={ctx} />
       <DueChip due={task.dueDate} done={done} />
       <FloatTaskButton task={task} scope={ctx.floatingScope} />
     </div>

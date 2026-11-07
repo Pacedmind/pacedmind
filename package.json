@@ -6,6 +6,7 @@
   "scripts": {
     "test:calendar": "node --conditions=react-server --import tsx --test tests/google-calendar.test.ts tests/google-calendar-integration.test.ts",
     "test:projects": "node --conditions=react-server --import tsx --test tests/hidden-projects.test.ts",
+    "test:workspaces": "node --conditions=react-server --import tsx --test tests/team-workspaces.test.ts",
     "test:auth": "node --conditions=react-server --import tsx --test tests/auth-access.test.ts tests/auth-state.test.ts tests/native-auth.test.ts",
     "test:sql": "node scripts/test-sql-security.mjs",
     "test:connectors": "node --conditions=react-server --import tsx --test tests/connector-contract.test.ts",

@@ -18,9 +18,11 @@ import { SIDEBAR_DEFAULT, SIDEBAR_MIN, clampWidth, setSidebarLayout, toggleSideb
 import { cx, useAction } from "./ui";
 import { ThemeToggle } from "./theme";
 
-const NAV = (tx: Translator): { href: string; label: string; icon: IconName; count?: "inbox" | "today" | "sessions" }[] => ([
+const NAV = (tx: Translator, assigned: boolean): { href: string; label: string; icon: IconName; count?: "inbox" | "today" | "sessions" | "assigned" }[] => ([
   { href: "/inbox", label: tx("Inbox"), icon: "inbox", count: "inbox" },
   { href: "/today", label: tx("Today"), icon: "sun", count: "today" },
+  // With a team workspace (or a task assigned to you): what's assigned to you, everywhere.
+  ...(assigned ? [{ href: "/assigned", label: tx("Assigned to me"), icon: "user" as IconName, count: "assigned" as const }] : []),
   { href: "/upcoming", label: tx("Upcoming"), icon: "clock" },
   { href: "/calendar", label: tx("Calendar"), icon: "calendar" },
   { href: "/timeline", label: tx("Timeline"), icon: "timeline" },
@@ -129,7 +131,7 @@ type Draft = { kind: "area" } | { kind: "project"; areaId: string } | null;
 export function Sidebar({ areas: savedAreas, projects: savedProjects, counts, usage, desktop }: {
   areas: Area[];
   projects: Project[];
-  counts: { inbox: number; today: number; sessions: number };
+  counts: { inbox: number; today: number; sessions: number; assigned: number; teams: boolean };
   usage: Usage;
   desktop: boolean;
 }) {
@@ -427,7 +429,7 @@ export function Sidebar({ areas: savedAreas, projects: savedProjects, counts, us
         </div>
 
         <div className="flex flex-col gap-px">
-          {NAV(tx).map((n) => (
+          {NAV(tx, counts.teams || counts.assigned > 0).map((n) => (
             <Link key={n.href} href={n.href} className={cx(item, active(n.href) && "bg-sel text-strong")}>
               <Icon name={n.icon} />
               <span className="flex-1">{n.label}</span>

@@ -31,6 +31,7 @@ export default async function LoginPage(props: PageProps<"/login">) {
   }
   return (
     <AuthShell note={next?.startsWith("/oauth/consent") ? tx("Sign in to PacedMind to connect your agent.")
+      : next?.startsWith("/join/") ? tx("Sign in, or create an account, with the email address you were invited at to join your team.")
       : MODE === "desktop"
         ? tx("Sign in to PacedMind Cloud to use your tasks on all your computers, or use PacedMind on this computer without an account.")
         : tx("Sign in to plan your week and follow your agent sessions.")}>
