@@ -459,6 +459,10 @@ export function Sidebar({ areas: savedAreas, projects: savedProjects, counts, us
                     group={{ expanded: !shut, onToggle: () => setCollapsed((c) => ({ ...c, [a.id]: !shut })), onAdd: () => newProject(a.id) }}>
                     <AreaDot area={a} />
                     <span className="flex-1 truncate">{a.name}</span>
+                    {/* Shared with a team workspace: everyone in it sees and changes what's inside. */}
+                    {a.workspaceId && <span title={tx("Shared with your team")} aria-label={tx("Shared with your team")} className="shrink-0 text-mut2">
+                      <Icon name="users" size={13} />
+                    </span>}
                   </MenuRow>
                 )}
                 {!shut && <div className="ml-7 flex flex-col gap-px border-l border-line pl-2" {...listDrop("project", a.id)}>

@@ -2347,5 +2347,6 @@
   "This team workspace is read-only: its owner's PacedMind Cloud has ended.": "Ten zespół jest tylko do odczytu: PacedMind Cloud jego właściciela się skończył.",
   "New name for {0}": "Nowa nazwa dla {0}",
   "Only the workspace's owners and admins change or delete its areas.": "Obszary zespołu zmieniają i usuwają tylko jego właściciele i administratorzy.",
-  "Only the workspace's owners and admins rename it.": "Nazwę zespołu zmieniają tylko jego właściciele i administratorzy."
+  "Only the workspace's owners and admins rename it.": "Nazwę zespołu zmieniają tylko jego właściciele i administratorzy.",
+  "Shared with your team": "Wspólne z zespołem"
 }
