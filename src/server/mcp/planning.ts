@@ -13,6 +13,7 @@ import { nextColor } from "@/lib/colors";
 import { MAX_NEEDS } from "@/lib/needs";
 import { addDaysStr, dateOnly, timeOf, toDateStr } from "@/lib/dates";
 import { AGENT_LABEL, LIVE_STATUSES, STATUS_LABEL, type Doer, type Preference, type Repeat, type Status, type Task } from "@/lib/types";
+import { assigneeFilter, assigneeFor, assigneeSchema, findWorkspace, workspaceFilter, workspaceOfPlace, workspaceRef } from "./workspaces";
 import {
   AREA_ICON_EXAMPLES, PALETTE_NAMES, agentSchema, areaRef, colorFrom, colorName, dateInput, dateTimeInput, describeTask, doerSchema, eventLine, fail, iconFrom,
   findArea, findAreaOrInbox, findProject, findTask, fmtWhen, isOpen, names, prioritySchema, priorityOf, projectLine,
@@ -41,13 +42,13 @@ function sessionMayCreate(status: string | undefined) {
 }
 
 function sessionMayUpdate(
-  t: Task, changes: { status?: unknown; agent?: unknown; project?: unknown; area?: unknown; runs_in?: unknown; folder?: unknown; needs?: unknown },
+  t: Task, changes: { status?: unknown; agent?: unknown; project?: unknown; area?: unknown; runs_in?: unknown; folder?: unknown; needs?: unknown; assignee?: unknown },
 ) {
   const me = callerSession();
   if (!me) return;
   if (t.id !== me.taskId) fail(`This session can only change its own task, not ${t.key}. Create a new task for follow-up work instead.`);
-  if (changes.status !== undefined || changes.agent !== undefined || changes.project !== undefined || changes.area !== undefined) {
-    fail("A session can't change its task's status, agent, project or area. Call finish_task when the work is ready to check.");
+  if (changes.status !== undefined || changes.agent !== undefined || changes.project !== undefined || changes.area !== undefined || changes.assignee !== undefined) {
+    fail("A session can't change its task's status, agent, assignee, project or area. Call finish_task when the work is ready to check.");
   }
   if (changes.runs_in !== undefined || changes.folder !== undefined || changes.needs !== undefined) {
     fail("A session can't change where or in which folder its task's sessions run, or what they need.");
@@ -85,6 +86,7 @@ const newTaskFields = {
   related_project: projectRef.optional()
     .describe("A project the task is about without being part of it, for small things like replying to an email about it: the task stays in its area (give area, not project), and the project's page lists it under Related"),
   repeat: repeatSchema.optional(),
+  assignee: assigneeSchema.optional(),
 };
 
 const cleanLabels = (labels: string[]) => [...new Set(labels.map((l) => l.trim().replace(/^#/, "").toLowerCase()).filter(Boolean))];
@@ -92,13 +94,15 @@ const cleanLabels = (labels: string[]) => [...new Set(labels.map((l) => l.trim()
 type NewTask = {
   title: string; description?: string; done_when?: string[]; needs?: string[]; status?: (typeof STATUS_NAMES)[number]; priority?: (typeof PRIORITY_NAMES)[number];
   due?: string; planned?: string; estimate_minutes?: number; labels?: string[]; subtasks?: string[]; agent?: Doer;
-  related_project?: string; repeat?: Repeat;
+  related_project?: string; repeat?: Repeat; assignee?: string | null;
 };
 
 /** Creates a task. The caller runs afterTaskDone for tasks created as done. */
 async function createOne(input: NewTask, place: { projectId: string | null; areaId: string | null }): Promise<Task> {
   if (!input.title.trim()) fail("A task needs a title.");
+  const assigneeId = input.assignee === undefined ? null : await assigneeFor(input.assignee, await workspaceOfPlace(place));
   const t = await repo.createTask({
+    assigneeId,
     title: input.title,
     description: input.description?.trim() ?? "",
     doneWhen: input.done_when,
@@ -191,9 +195,10 @@ export function registerPlanningTools(server: McpServer) {
   }, async () => {
     const now = new Date();
     const today = toDateStr(now);
-    const [n, tasks, events, eventList, waiting, running, preferences] = await Promise.all([
+    const [n, tasks, events, eventList, waiting, running, preferences, workspaces] = await Promise.all([
       names(), repo.listTasks(), repo.occurrences(today, today), repo.listEvents(),
       repo.listSessions({ status: ["finished"] }), repo.listSessions({ status: LIVE_STATUSES }), repo.listPreferences().catch(() => []),
+      repo.listWorkspaces().catch(() => []),
     ]);
     const areas = [...n.areas.values()];
     const projects = [...n.projects.values()];
@@ -203,6 +208,8 @@ export function registerPlanningTools(server: McpServer) {
     const dueToday = open.filter((t) => t.dueDate && dateOnly(t.dueDate) === today);
     const plannedToday = open.filter((t) => t.plannedDate === today && !dueToday.includes(t));
     const inbox = open.filter((t) => !t.areaId && !t.projectId);
+    const assigned = open.filter((t) => t.assigneeId !== null && t.assigneeId === n.me);
+    const shared = (id: string | null) => (id ? ` · shared in ${n.workspace(id)}` : "");
     const weekly = new Set(eventList.filter((e) => e.recurrence === "weekly").map((e) => e.id));
     const keys = new Map(tasks.map((t) => [t.id, t.key]));
     const keyOf = (id: number) => keys.get(id) ?? `#${id}`;
@@ -210,7 +217,12 @@ export function registerPlanningTools(server: McpServer) {
     return [
       todayLine(now),
       preferencesPart(preferences),
-      section("Areas", areas.map((a) => `${a.name} (id ${a.id}, key ${a.key}, ${colorName(a.color)}) · ${plural(u.areas[a.id]?.open ?? 0, "open task")} · ${plural(u.areas[a.id]?.projects ?? 0, "project")}`)),
+      section("Areas", areas.map((a) => `${a.name} (id ${a.id}, key ${a.key}, ${colorName(a.color)}) · ${plural(u.areas[a.id]?.open ?? 0, "open task")} · ${plural(u.areas[a.id]?.projects ?? 0, "project")}${shared(a.workspaceId)}`)),
+      ...(workspaces.length ? [section("Team workspaces", workspaces.map((w) => {
+        const mine = assigned.filter((t) => t.workspaceId === w.id);
+        return `${w.name} (address ${w.slug}, id ${w.id}) · ${w.role} · ${plural(mine.length, "open task")} assigned to the user`;
+      }))] : []),
+      ...(assigned.length ? [section("Assigned to the user", assigned.slice(0, 20).map((t) => taskLine(t, n)).concat(assigned.length > 20 ? [`…and ${assigned.length - 20} more: list_tasks with assignee "me"`] : []))] : []),
       section("Projects", projects.map((p) => projectLine(p, n, u.projects[p.id]))),
       `Inbox: ${plural(inbox.length, "open task")} without an area`,
       section("Overdue", overdue.map((t) => taskLine(t, n))),
@@ -243,14 +255,17 @@ export function registerPlanningTools(server: McpServer) {
       name: z.string(),
       color: z.string().optional().describe("Palette name or hex; defaults to an unused palette color"),
       icon: z.string().optional().describe("One of the icons; without one the area shows a dot"),
+      workspace: workspaceRef.optional().describe("Make it a shared area of this team workspace (its owners and admins), for all its members"),
     }),
     kind: "create",
-  }, async ({ name, color, icon }) => {
+  }, async ({ name, color, icon, workspace }) => {
     if (!name.trim()) fail("An area needs a name.");
+    const ws = workspace ? await findWorkspace(workspace) : null;
     const a = await repo.createArea({
       name, color: color ? colorFrom(color) : nextColor((await repo.listAreas()).map((x) => x.color)), icon: icon ? iconFrom(icon) : null,
+      workspaceId: ws?.id ?? null,
     });
-    return `Created area ${a.name} · id ${a.id} · key ${a.key} · ${colorName(a.color)}${a.icon ? ` · icon ${a.icon}` : ""}.`;
+    return `Created area ${a.name} · id ${a.id} · key ${a.key} · ${colorName(a.color)}${a.icon ? ` · icon ${a.icon}` : ""}${ws ? ` · shared in ${ws.name}` : ""}.`;
   });
 
   tool(server, "update_area", {
@@ -272,7 +287,7 @@ export function registerPlanningTools(server: McpServer) {
 
   tool(server, "delete_area", {
     title: "Delete area",
-    description: "Delete an area and its projects. Its tasks are kept and move to the Inbox. It can't be undone.",
+    description: "Delete an area and its projects. Its tasks are kept and move to the Inbox; a team workspace's area (only its owners and admins delete one) takes its tasks along. It can't be undone.",
     input: z.object({ area: areaRef }),
     kind: "delete",
   }, async ({ area }) => {
@@ -281,7 +296,8 @@ export function registerPlanningTools(server: McpServer) {
     const ids = new Set(projects.map((p) => p.id));
     const tasks = (await repo.listTasks()).filter((t) => t.areaId === a.id || (t.projectId !== null && ids.has(t.projectId)));
     await repo.deleteArea(a.id);
-    return `Deleted area ${a.name}. ${projects.length ? `Deleted its projects: ${projects.map((p) => p.name).join(", ")}. ` : ""}${plural(tasks.length, "task")} moved to the Inbox.`;
+    if ((await repo.listAllAreas()).some((x) => x.id === a.id)) fail(`${a.name} is a team workspace's area: only its owners and admins delete it.`);
+    return `Deleted area ${a.name}. ${projects.length ? `Deleted its projects: ${projects.map((p) => p.name).join(", ")}. ` : ""}${plural(tasks.length, "task")} ${a.workspaceId ? "deleted with it" : "moved to the Inbox"}.`;
   });
 
   /* ---------- projects ---------- */
@@ -413,7 +429,7 @@ export function registerPlanningTools(server: McpServer) {
   tool(server, "list_tasks", {
     title: "List tasks",
     description:
-      "Find tasks. Without filters it lists every open task. Combine filters to narrow down; dates accept words like \"today\" or \"friday\".",
+      "Find tasks. Without filters it lists every open task, the user's own and their team workspaces'. Combine filters to narrow down (assignee \"me\" for what's assigned to the user); dates accept words like \"today\" or \"friday\".",
     input: z.object({
       project: projectRef.optional(),
       area: areaRef.optional().describe('Area name, key or id, or "inbox" for tasks without an area'),
@@ -427,6 +443,8 @@ export function registerPlanningTools(server: McpServer) {
       planned_to: dateInput.optional(),
       overdue: z.boolean().optional().describe("Only open tasks past their due date"),
       unscheduled: z.boolean().optional().describe("Only tasks with neither a due date nor a planned day"),
+      assignee: z.string().optional().describe('Only tasks assigned to this person: "me" (the user), a team member\'s email address or user id, or "nobody"'),
+      workspace: z.string().optional().describe('Only the tasks of this team workspace (name, address or id), or "personal" for the user\'s own'),
       include_done: z.boolean().optional().describe("Also include done and canceled tasks"),
       limit: z.number().int().min(1).max(500).optional().describe("Default 100"),
     }),
@@ -446,7 +464,11 @@ export function registerPlanningTools(server: McpServer) {
     const planned = range(args.planned_from, args.planned_to);
     const inRange = (v: string | null, r: { from: string | null; to: string | null }) =>
       (!r.from && !r.to) || (!!v && (!r.from || dateOnly(v) >= r.from) && (!r.to || dateOnly(v) <= r.to));
+    const byAssignee = args.assignee ? await assigneeFilter(args.assignee) : null;
+    const byWorkspace = args.workspace ? await workspaceFilter(args.workspace) : null;
     const found = (await repo.listTasks()).filter((t) =>
+      (!byAssignee || byAssignee(t)) &&
+      (!byWorkspace || byWorkspace(t)) &&
       (!p || t.projectId === p.id) &&
       (!inboxOnly || (!t.areaId && !t.projectId)) &&
       (!a || t.areaId === a.id) &&
@@ -466,7 +488,7 @@ export function registerPlanningTools(server: McpServer) {
 
   tool(server, "get_task", {
     title: "Get task",
-    description: "A task's full details: description, numbered Done when items and sub-tasks, dates, estimate, labels, the tasks it waits for and that wait for it, latest session and the latest report an agent handed back.",
+    description: "A task's full details: description, numbered Done when items and sub-tasks, dates, estimate, labels, its team workspace and who it's assigned to, the tasks it waits for and that wait for it, latest session and the latest report an agent handed back.",
     input: z.object({ task: taskRef }),
     kind: "read",
   }, async ({ task }) => describeTask(await findTask(task)));
@@ -474,7 +496,7 @@ export function registerPlanningTools(server: McpServer) {
   tool(server, "create_task", {
     title: "Create task",
     description:
-      "Add a task with as much detail as you know. Put it in a project, or an area, or leave both out for the Inbox. Returns the new task key.",
+      "Add a task with as much detail as you know. Put it in a project, or an area, or leave both out for the Inbox; in a team workspace's area it can be assigned to a member. Returns the new task key.",
     input: z.object({
       title: z.string(),
       project: projectRef.optional(),
@@ -518,7 +540,7 @@ export function registerPlanningTools(server: McpServer) {
   tool(server, "update_task", {
     title: "Update task",
     description:
-      "Change anything about a task: title, description (replace or append), Done when, status, priority, dates, estimate, labels, project or area, agent, where its agent sessions run, their folder and what they need from the computer, and sub-tasks (by number from get_task, or title). Pass null to clear a date, project, area, agent, runs_in or folder.",
+      "Change anything about a task: title, description (replace or append), Done when, status, priority, dates, estimate, labels, project or area, agent, assignee, where its agent sessions run, their folder and what they need from the computer, and sub-tasks (by number from get_task, or title). Pass null to clear a date, project, area, agent, assignee, runs_in or folder. A team workspace's task stays in that workspace.",
     input: z.object({
       task: taskRef,
       title: z.string().optional(),
@@ -539,6 +561,7 @@ export function registerPlanningTools(server: McpServer) {
       project: projectRef.nullable().optional().describe("Move to this project (and its area), or null to take it out of its project"),
       area: areaRef.nullable().optional().describe('Move to this area without a project, or null / "inbox" for the Inbox'),
       agent: doerSchema.nullable().optional().describe("human makes it the user's own: it never gets an agent session"),
+      assignee: assigneeSchema.optional(),
       runs_in: z.enum(["terminal", "desktop", "cloud"]).nullable().optional()
         .describe("Where its agent sessions run: a terminal or the agent's desktop app on the user's computer, or the agent's cloud. null: a terminal when the agent's CLI is installed, else its desktop app"),
       folder: z.string().nullable().optional().describe("Absolute folder its sessions work in, when it isn't the project's; null for the project's folder"),
@@ -572,7 +595,10 @@ export function registerPlanningTools(server: McpServer) {
     const status = args.status ? statusOf(args.status) : undefined;
     const dueDate = clearable(args.due, (v) => when(v));
     const planned = clearable(args.planned, plannedOf);
+    const assigneeId = args.assignee === undefined ? undefined
+      : await assigneeFor(args.assignee, await workspaceOfPlace({ projectId: projectId === undefined ? t.projectId : projectId, areaId: areaId === undefined ? t.areaId : areaId }));
     await repo.updateTask(t.id, {
+      assigneeId,
       title: args.title?.trim(),
       description,
       doneWhen: args.done_when,
@@ -609,7 +635,7 @@ export function registerPlanningTools(server: McpServer) {
   tool(server, "bulk_update_tasks", {
     title: "Update several tasks",
     description:
-      "Apply the same change to several tasks: status, priority, due or planned date, move by a number of days, project or area, labels. Good for rescheduling and triage.",
+      "Apply the same change to several tasks: status, priority, due or planned date, move by a number of days, project or area, assignee, labels. Good for rescheduling and triage.",
     input: z.object({
       tasks: z.array(taskRef).min(1).max(100),
       status: statusSchema.optional(),
@@ -621,6 +647,7 @@ export function registerPlanningTools(server: McpServer) {
       area: areaRef.nullable().optional(),
       add_labels: z.array(z.string()).optional(),
       remove_labels: z.array(z.string()).optional(),
+      assignee: assigneeSchema.optional(),
     }),
     kind: "write",
   }, async (args) => {
@@ -631,6 +658,11 @@ export function registerPlanningTools(server: McpServer) {
     const status = args.status ? statusOf(args.status) : undefined;
     const drop = new Set(cleanLabels(args.remove_labels ?? []));
     const moves = await Promise.all(tasks.map((t) => moveTarget(t, args.project, args.area)));
+    // Every assignee is checked before anything changes.
+    const assignees = await Promise.all(tasks.map(async (t, i) => args.assignee === undefined ? undefined : assigneeFor(args.assignee,
+      await workspaceOfPlace({
+        projectId: moves[i].projectId === undefined ? t.projectId : moves[i].projectId, areaId: moves[i].areaId === undefined ? t.areaId : moves[i].areaId,
+      }))));
     for (const [i, t] of tasks.entries()) {
       const { projectId, areaId } = moves[i];
       const labels = args.add_labels || args.remove_labels
@@ -646,6 +678,7 @@ export function registerPlanningTools(server: McpServer) {
         projectId,
         areaId,
         labels,
+        assigneeId: assignees[i],
       });
     }
     if (status === "done") for (const t of tasks) if (t.status !== "done") await afterTaskDone(t.id);

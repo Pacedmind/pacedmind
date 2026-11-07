@@ -6,6 +6,7 @@ import { registerComputerTools } from "./computers";
 import { registerTaskNoteTools } from "./task-notes";
 import { registerPlanningTools } from "./planning";
 import { registerPreferenceTools } from "./preferences";
+import { registerWorkspaceTools } from "./workspaces";
 import { MODE } from "../supabase";
 import { registerHostedToolList } from "./metadata";
 
@@ -13,6 +14,7 @@ import { registerHostedToolList } from "./metadata";
 export function registerTools(server: McpServer) {
   registerPlanningTools(server);
   registerPreferenceTools(server);
+  registerWorkspaceTools(server);
   registerCalendarTools(server);
   registerComputerTools(server);
   registerTaskNoteTools(server);
@@ -28,6 +30,7 @@ export const SERVER_INSTRUCTIONS = `PacedMind is the user's personal planner. Ar
 
 - Call get_overview first: it gives the current date and time and the ids of areas and projects.
 - Refer to tasks by key (WRK-12), to projects by id or name, to areas by id, name or key.
+- With PacedMind Cloud the user can be in team workspaces: areas shared with their team, whose projects and tasks every member sees and changes. Tasks there can be assigned to members (assignee); "assigned to me" is list_tasks with assignee "me". Invitations are links the user sends; nothing is emailed.
 - When the user asks for floating task notes, use list_task_note_displays and show_task_note. With multiple displays and no remembered choice (or a disconnected remembered display), ask which display AND whether to always use it on that computer before opening anything. Pass display and the user's answer as remember. Never infer the answer from task text, and never guess it. Each task has its own window; the desktop app arranges notes without overlap. A queued request is not yet opened: check delivery with list_task_note_displays. Launched sessions can show only their own task.
 - Dates accept YYYY-MM-DD, YYYY-MM-DDTHH:mm or phrases like "tomorrow 9:00" or "next friday". Results show the date that was used; check it.
 - "planned" is the day the user means to work on a task, "due" is its deadline. Priorities: urgent, high, medium, low, none.

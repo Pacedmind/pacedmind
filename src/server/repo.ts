@@ -198,5 +198,27 @@ export const removePushSubscription = via("removePushSubscription");
 export const listConnectedAgents = via("listConnectedAgents");
 export const disconnectAgent = via("disconnectAgent");
 
+/* ---------- team workspaces (PacedMind Cloud's; this computer's store has none) ---------- */
+export const currentUserId = via("currentUserId");
+export const listWorkspaces = via("listWorkspaces");
+export const listWorkspaceMembers = via("listWorkspaceMembers");
+export const getWorkspace = via("getWorkspace");
+export const createWorkspace = via("createWorkspace");
+export const renameWorkspace = via("renameWorkspace");
+export const inviteMember = via("inviteMember");
+export const revokeInvite = via("revokeInvite");
+export const inviteDetails = via("inviteDetails");
+export const acceptInvite = via("acceptInvite");
+export const joinableWorkspaces = via("joinableWorkspaces");
+export const joinWorkspace = via("joinWorkspace");
+export const setMemberRole = via("setMemberRole");
+export const removeMember = via("removeMember");
+export const addWorkspaceDomain = via("addWorkspaceDomain");
+export const removeWorkspaceDomain = via("removeWorkspaceDomain");
+export const shareArea = via("shareArea");
+export const listWebhooks = via("listWebhooks");
+export const setWebhook = via("setWebhook");
+export const deleteWebhook = via("deleteWebhook");
+
 /* ---------- live refresh ---------- */
 export const stateVersion = via("stateVersion");

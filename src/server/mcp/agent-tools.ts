@@ -20,6 +20,8 @@ export const AGENT_ALLOWED_TOOLS = [
   "show_task_note",
   "get_settings",
   "get_preferences",
+  "list_workspaces",
+  "get_workspace",
   "get_next_task",
   "start_task",
   "attach_image",

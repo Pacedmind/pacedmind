@@ -28,6 +28,9 @@ import { changePreferences, type PreferenceChanges } from "@/server/preferences"
 import { approveFolder, isFolderApproval, refuseFolder } from "@/server/folder-requests";
 import { STEP_UP_REFUSED, codeFreshUntil, refusedStepUp, verifyCode } from "@/server/step-up";
 import { MODE, readAuthState, supabase } from "@/server/supabase";
+import { cloudOrigin } from "@/server/supabase-config";
+import { CLOUD_ONLY_WORKSPACES, inviteLink } from "@/server/store/shared";
+import { nextColor } from "@/lib/colors";
 import { guardAction as guard } from "@/server/guard";
 import { computerAccessProblem } from "@/server/computer-access";
 import { answerHere, askedHere, withdrawHere } from "@/server/asks";
@@ -39,7 +42,8 @@ import { READ_ONLY_MESSAGE, type BillingPeriod } from "@/lib/billing";
 import { areaPictureProblem } from "@/lib/area-picture";
 import { addDaysStr, dateOnly, dayDiff, fmtDay, parseLocal, timeOf, toDateTimeStr } from "@/lib/dates";
 import {
-  AGENT_LABEL, CONNECT_CARD_COOKIE, LIVE_STATUSES, agentOf, deviceOnline, isLiveSession,
+  AGENT_LABEL, CONNECT_CARD_COOKIE, LIVE_STATUSES, WEBHOOK_EVENTS, agentOf, deviceOnline, isLiveSession,
+  type WebhookEvent, type WorkspaceRole,
   type AgentId, type Device, type LaunchRequestKind, type Project, type RemoteStart, type Settings, type Surface,
   type TerminalId,
 } from "@/lib/types";
@@ -705,7 +709,9 @@ export async function deleteAreaAction(id: string) {
   const own = new Set(projects.filter((p) => p.areaId === id).map((p) => p.id));
   const kept = tasks.filter((t) => t.areaId === id || (t.projectId !== null && own.has(t.projectId))).length;
   await repo.deleteArea(id);
-  return done({ ok: true, message: kept ? `Deleted ${a.name}. Its tasks moved to the Inbox.` : `Deleted ${a.name}` });
+  // A team workspace's area is deleted by its owners and admins only: for anyone else the database leaves it.
+  if (a.workspaceId && (await repo.listAllAreas()).some((x) => x.id === id)) return { ok: false, error: "Only the workspace's owners and admins delete its areas." };
+  return done({ ok: true, message: a.workspaceId ? `Deleted ${a.name} with its tasks` : kept ? `Deleted ${a.name}. Its tasks moved to the Inbox.` : `Deleted ${a.name}` });
 }
 
 const isIdList = (ids: unknown): ids is string[] => Array.isArray(ids) && ids.every((id) => typeof id === "string");
@@ -1182,4 +1188,101 @@ export async function importLegacyAction(): Promise<Result> {
   } catch (e) {
     return { ok: false, error: errorOf(e) };
   }
+}
+
+/* ---------- team workspaces (PacedMind Cloud) ---------- */
+
+const ROLE_NAMES = new Set<string>(["owner", "admin", "member"]);
+
+/** Runs a workspace change and refreshes the page; what the database refuses comes back as the message. */
+async function changing<T>(fn: () => Promise<T>, message?: (value: T) => string): Promise<Result & { value?: T }> {
+  await guard();
+  if (!(await usesCloud())) return { ok: false, error: CLOUD_ONLY_WORKSPACES };
+  try {
+    const value = await fn();
+    return done({ ok: true, value, ...(message ? { message: message(value) } : {}) });
+  } catch (e) {
+    return { ok: false, error: errorOf(e) };
+  }
+}
+
+export async function createWorkspaceAction(name: string): Promise<Result & { id?: string }> {
+  if (typeof name !== "string" || !name.trim()) return { ok: false, error: "Give the workspace a name" };
+  const r = await changing(() => repo.createWorkspace(name), (w) => `Created ${w.name}`);
+  return { ok: r.ok, error: r.error, message: r.message, id: r.value?.id };
+}
+
+export async function renameWorkspaceAction(id: string, name: string): Promise<Result> {
+  if (typeof name !== "string" || !name.trim()) return { ok: false, error: "Give the workspace a name" };
+  return changing(() => repo.renameWorkspace(id, name));
+}
+
+/** Invites an email address and answers the invitation's link, which the person who invites sends: PacedMind emails nothing. */
+export async function inviteMemberAction(workspaceId: string, email: string, role: "admin" | "member"): Promise<Result & { link?: string }> {
+  if (typeof email !== "string" || !email.trim()) return { ok: false, error: "Enter their email address" };
+  if (role !== "admin" && role !== "member") return { ok: false, error: "Invite people as admin or member; make an owner from the members." };
+  const r = await changing(() => repo.inviteMember(workspaceId, email, role));
+  return { ok: r.ok, error: r.error, link: r.value ? inviteLink(cloudOrigin(), r.value.token) : undefined };
+}
+
+export async function revokeInviteAction(id: string): Promise<Result> {
+  return changing(() => repo.revokeInvite(id), () => "Invitation withdrawn");
+}
+
+export async function setMemberRoleAction(workspaceId: string, userId: string, role: string): Promise<Result> {
+  if (!ROLE_NAMES.has(role)) return { ok: false, error: "A role is owner, admin or member." };
+  return changing(() => repo.setMemberRole(workspaceId, userId, role as WorkspaceRole));
+}
+
+/** Removes someone, or with your own id leaves the workspace. */
+export async function removeMemberAction(workspaceId: string, userId: string): Promise<Result> {
+  return changing(() => repo.removeMember(workspaceId, userId));
+}
+
+export async function addWorkspaceDomainAction(workspaceId: string, domain: string): Promise<Result> {
+  if (typeof domain !== "string" || !domain.trim()) return { ok: false, error: "Enter a domain like example.com." };
+  return changing(() => repo.addWorkspaceDomain(workspaceId, domain), () => `People at ${domain.trim().replace(/^@/, "").toLowerCase()} can join`);
+}
+
+export async function removeWorkspaceDomainAction(workspaceId: string, domain: string): Promise<Result> {
+  return changing(() => repo.removeWorkspaceDomain(workspaceId, domain));
+}
+
+/** Moves one of your own areas, with its projects and tasks, into a workspace you manage. */
+export async function shareAreaAction(areaId: string, workspaceId: string): Promise<Result> {
+  return changing(() => repo.shareArea(areaId, workspaceId), (n) => `Shared with the team: ${n.projects} projects and ${n.tasks} tasks`);
+}
+
+/** A new area of a workspace (its owners and admins). */
+export async function createWorkspaceAreaAction(workspaceId: string, name: string): Promise<Result & { id?: string }> {
+  if (typeof name !== "string" || !name.trim()) return { ok: false, error: "Give the area a name" };
+  const colors = (await repo.listAreas()).map((a) => a.color);
+  const r = await changing(() => repo.createArea({ name, color: nextColor(colors), workspaceId }), (a) => `Created ${a.name} (${a.key})`);
+  return { ok: r.ok, error: r.error, message: r.message, id: r.value?.id };
+}
+
+/** Adds one of your webhooks (answering its secret, shown once) or changes one. */
+export async function setWebhookAction(input: { workspaceId: string; url: string; events: string[]; id?: string; enabled?: boolean }): Promise<Result & { secret?: string | null }> {
+  const events = Array.isArray(input.events) ? input.events.filter((e): e is WebhookEvent => (WEBHOOK_EVENTS as readonly string[]).includes(e)) : [];
+  if (!events.length) return { ok: false, error: "Choose at least one event." };
+  if (typeof input.url !== "string" || !input.url.trim()) return { ok: false, error: "Enter the webhook's https address." };
+  const r = await changing(() => repo.setWebhook({ workspaceId: input.workspaceId, url: input.url, events, id: input.id, enabled: input.enabled }));
+  return { ok: r.ok, error: r.error, secret: r.value?.secret ?? null };
+}
+
+export async function deleteWebhookAction(id: string): Promise<Result> {
+  return changing(() => repo.deleteWebhook(id), () => "Webhook deleted");
+}
+
+/** Accepts an invitation with the signed-in account (its confirmed address must be the invited one). */
+export async function acceptInviteAction(token: string): Promise<Result> {
+  if (typeof token !== "string") return { ok: false, error: "That invitation link is incomplete." };
+  const r = await changing(() => repo.acceptInvite(token));
+  if (!r.ok) return r;
+  redirect("/today");
+}
+
+/** Joins a workspace that your confirmed email address's domain lets you into. */
+export async function joinWorkspaceAction(id: string): Promise<Result> {
+  return changing(() => repo.joinWorkspace(id), () => "You joined the team");
 }

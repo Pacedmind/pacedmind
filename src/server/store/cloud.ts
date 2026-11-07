@@ -5,7 +5,7 @@ import { noteDisplaysOf, type NoteDisplays, type TaskNoteInput, type TaskNoteReq
 import { checkedModelSelection, modelSelectionOf, modelCatalogOf } from "@/lib/agent-models";
 import crypto from "node:crypto";
 import type { PostgrestError } from "@supabase/supabase-js";
-import { MODE, NotSignedIn, authState, supabase } from "../supabase";
+import { MODE, NotSignedIn, authState, currentUser, supabase } from "../supabase";
 import { canUsePlanner } from "@/lib/auth-access";
 import { removeImageFiles, type StoredImage } from "../attachments";
 import { removeDiffFiles } from "../diff";
@@ -24,12 +24,14 @@ import { areaIconOf, type AreaIcon } from "@/lib/area-icons";
 import { CloudReadOnly } from "@/lib/billing";
 import { nowStamp, toDateStr } from "@/lib/dates";
 import {
-  NO_AGENT_TOOLS, repeatOf, taskHref,
+  NO_AGENT_TOOLS, WEBHOOK_EVENTS, WORKSPACE_ROLES, repeatOf, taskHref,
   type AgentId, type AgentTools, type Area, type AskStatus, type Attachment, type CalEvent, type ConnectedAgent, type Dependency, type Device, type Doer, type EventOccurrence,
   type FolderRequest, type FolderRequestStatus,
   type LaunchRequest, type LaunchRequestKind, type LaunchRequestStatus, type OtherSession, type Preference, type Priority, type Project,
   type RemoteStart, type Report, type ReportOutcome, type Session, type SessionEvent, type SessionStatus, type Settings, type Status,
   type PushSubscriptionInput, type SessionAsk, type Subtask, type Surface, type Task,
+  type InviteInfo, type JoinableWorkspace, type MemberWebhook, type NewInvite, type WebhookEvent, type Workspace, type WorkspaceDetails,
+  type WorkspaceInvite, type WorkspaceMember, type WorkspaceRole,
 } from "@/lib/types";
 import { cleanNeeds } from "@/lib/needs";
 
@@ -144,6 +146,7 @@ const toArea = (r: Row): Area => ({
   hidden: r.hidden === true,
   id: String(r.id), name: String(r.name), key: String(r.key), color: String(r.color), icon: areaIconOf(r.icon),
   picture: pictureHash(r.picture), sort: Number(r.sort), folder: MODE === "desktop" ? areaFolder(String(r.id)) : null, repo: repoOf(r.repo),
+  workspaceId: s(r.workspace_id),
 });
 
 export async function listAreas(): Promise<Area[]> {
@@ -160,7 +163,9 @@ export async function areaPicture(id: string): Promise<string | null> {
 }
 
 
-export async function createArea(input: { name: string; color: string; icon?: AreaIcon | null }): Promise<Area> {
+/** `workspaceId` makes it a team workspace's area (its owners and admins only; the database checks). */
+export async function createArea(input: { name: string; color: string; icon?: AreaIcon | null; workspaceId?: string | null }): Promise<Area> {
+  if (input.workspaceId && !isUuid(input.workspaceId)) throw new Error("Unknown team workspace");
   const db = await accountDb();
   const areas = await listAreas();
   const icon = areaIconOf(input.icon);
@@ -169,6 +174,7 @@ export async function createArea(input: { name: string; color: string; icon?: Ar
     key: deriveKey(input.name, new Set(areas.map((a) => a.key))),
     color: input.color,
     ...(icon ? { icon } : {}),
+    ...(input.workspaceId ? { workspace_id: input.workspaceId } : {}),
     sort: areas.reduce((m, a) => Math.max(m, a.sort), 0) + 1,
   }).select().single());
   return toArea(r!);
@@ -204,7 +210,10 @@ export async function updateArea(id: string, patch: { name?: string; color?: str
   check(await db.from("areas").update(values).eq("id", id));
 }
 
-/** Deletes an area and its projects. Tasks are kept and move to the Inbox (the database's references do it). */
+/**
+ * Deletes an area and its projects. Your own area's tasks are kept and move to the Inbox (the database's references do
+ * it); a team workspace's area takes its tasks along (the database does that too).
+ */
 export async function deleteArea(id: string) {
   if (!isUuid(id)) return;
   const db = await accountDb();
@@ -225,7 +234,7 @@ const toProject = (r: Row): Project => ({
   id: String(r.id), areaId: String(r.area_id), name: String(r.name), color: s(r.color), startDate: s(r.start_date), targetDate: s(r.target_date),
   folder: MODE === "desktop" ? projectFolder(String(r.id)) : null, deviceId: s(r.device_id), codexEnv: s(r.codex_env), repo: repoOf(r.repo),
   agent: s(r.agent) as AgentId | null, afterProjectId: s(r.after_project_id),
-  sort: Number(r.sort),
+  sort: Number(r.sort), workspaceId: s(r.workspace_id),
 });
 
 export async function listProjects(): Promise<Project[]> {
@@ -356,30 +365,43 @@ const toTask = (r: Row): Task => ({
   sortOrder: Number(r.sort_order),
   createdAt: String(r.created_at), updatedAt: String(r.updated_at), completedAt: s(r.completed_at),
   subtasks: ((r.subtasks as Row[] | undefined) ?? []).map(toSubtask).sort((a, b) => a.sort - b.sort || a.id - b.id),
+  workspaceId: s(r.workspace_id), assigneeId: s(r.assignee_id),
 });
 
 const TASK_SELECT = "*, subtasks(*)";
 
 
 export async function listTasks(filter: TaskFilter = {}): Promise<Task[]> {
-  if ((filter.areaId && !isUuid(filter.areaId)) || (filter.projectId && !isUuid(filter.projectId))) return [];
+  if ((filter.areaId && !isUuid(filter.areaId)) || (filter.projectId && !isUuid(filter.projectId))
+    || (filter.assigneeId !== undefined && !isUuid(filter.assigneeId)) || (filter.workspaceId && !isUuid(filter.workspaceId))) return [];
   const db = await accountDb();
   const rows = await all((from, to) => {
     let q = db.from("tasks").select(TASK_SELECT);
     if (filter.areaId !== undefined) q = filter.areaId === null ? q.is("area_id", null) : q.eq("area_id", filter.areaId);
     if (filter.projectId !== undefined) q = filter.projectId === null ? q.is("project_id", null) : q.eq("project_id", filter.projectId);
+    if (filter.assigneeId !== undefined) q = q.eq("assignee_id", filter.assigneeId);
+    if (filter.workspaceId !== undefined) q = filter.workspaceId === null ? q.is("workspace_id", null) : q.eq("workspace_id", filter.workspaceId);
     return q.order("sort_order").order("id").range(from, to);
   });
   return rows.map(toTask);
 }
 
-/** A task by id, or by key ("DEV-12", any case). */
+/**
+ * A task by id, or by key ("DEV-12", any case). A key is unique among your own tasks and within each team workspace;
+ * when one of yours and a workspace's share it, the key can't say which, and the id has to.
+ */
 export async function getTask(idOrKey: number | string): Promise<Task | null> {
   const db = await accountDb();
   const byKey = typeof idOrKey === "string" && !/^\d+$/.test(idOrKey);
-  const q = db.from("tasks").select(TASK_SELECT);
-  const r = one(await (byKey ? q.eq("key", String(idOrKey).toUpperCase()) : q.eq("id", Number(idOrKey))).maybeSingle());
-  return r ? toTask(r) : null;
+  if (!byKey) {
+    const r = one(await db.from("tasks").select(TASK_SELECT).eq("id", Number(idOrKey)).maybeSingle());
+    return r ? toTask(r) : null;
+  }
+  const rows = many(await db.from("tasks").select(TASK_SELECT).eq("key", String(idOrKey).toUpperCase()).order("id").limit(5));
+  if (rows.length > 1) {
+    throw new Error(`${String(idOrKey).toUpperCase()} is the key of ${rows.length} tasks (yours and a team workspace's): use the task's id, ${rows.map((r) => r.id).join(" or ")}.`);
+  }
+  return rows[0] ? toTask(rows[0]) : null;
 }
 
 /** Creates a task at the end of its project (or of the loose tasks). The database gives it its key. */
@@ -404,6 +426,7 @@ export async function createTask(input: TaskInput): Promise<Task> {
     run_in: input.agent === "human" ? null : input.runIn ?? null,
     model_settings: checkedModelSelection(input.modelSettings),
     device_id: input.agent === "human" ? null : input.deviceId ?? null,
+    ...(input.assigneeId ? { assignee_id: input.assigneeId } : {}),
   }).select(TASK_SELECT).single());
   return toTask(r!);
 }
@@ -412,7 +435,7 @@ const TASK_COLS: Record<string, string> = {
   areaId: "area_id", projectId: "project_id", title: "title", description: "description", status: "status", priority: "priority",
   dueDate: "due_date", plannedDate: "planned_date", plannedTime: "planned_time", estimateMin: "estimate_min", labels: "labels", doneWhen: "done_when",
   relatedProjectId: "related_project_id", repeat: "repeat",
-  reminder: "reminder", agent: "agent", runIn: "run_in", deviceId: "device_id", sortOrder: "sort_order",
+  reminder: "reminder", agent: "agent", runIn: "run_in", deviceId: "device_id", sortOrder: "sort_order", assigneeId: "assignee_id",
 };
 
 
@@ -425,6 +448,7 @@ export async function updateTask(id: number, patch: TaskPatch) {
   }
   if (patch.deviceId !== undefined && patch.deviceId !== null && !isUuid(patch.deviceId)) throw new Error("Unknown computer");
   if (patch.relatedProjectId != null && !isUuid(patch.relatedProjectId)) throw new Error("Unknown project");
+  if (patch.assigneeId != null && !isUuid(patch.assigneeId)) throw new Error("Assign the task to a member of its workspace.");
   const values = columns(patch, TASK_COLS);
   if (patch.modelSettings !== undefined) values.model_settings = checkedModelSelection(patch.modelSettings);
   if (patch.plannedDate === null) values.planned_time = null;
@@ -1266,6 +1290,186 @@ export async function disconnectAgent(id: string): Promise<void> {
   const db = await accountDb();
   const { error } = await db.rpc("revoke_agent_login", { login: id });
   if (error) throw new Error(/already disconnected/i.test(error.message) ? "That agent is already disconnected." : error.message);
+}
+
+/* ---------- team workspaces ---------- */
+
+/** The signed-in account's id, which assignees and members are named by. */
+export async function currentUserId(): Promise<string | null> {
+  return (await currentUser())?.id ?? null;
+}
+
+const ROLES = new Set<string>(WORKSPACE_ROLES);
+const roleOf = (v: unknown): WorkspaceRole => (ROLES.has(String(v)) ? String(v) as WorkspaceRole : "member");
+
+/** Calls one of the workspace functions; what it refuses comes back in its own words, written for people. */
+async function rpc<T = unknown>(name: string, args: Record<string, unknown> = {}): Promise<T> {
+  const db = await accountDb();
+  const { data, error } = await db.rpc(name, args);
+  if (error) throw failure(error);
+  return data as T;
+}
+
+/** The workspaces you're in, with your role in each. */
+export async function listWorkspaces(): Promise<Workspace[]> {
+  const me = await currentUserId();
+  if (!me) return [];
+  const db = await accountDb();
+  const [spaces, mine] = await Promise.all([
+    db.from("workspaces").select("id, name, slug, created_at").order("created_at").then(many),
+    db.from("workspace_members").select("workspace_id, role").eq("user_id", me).then(many),
+  ]);
+  const role = new Map(mine.map((m) => [String(m.workspace_id), roleOf(m.role)]));
+  return spaces.filter((w) => role.has(String(w.id))).map((w) => ({
+    id: String(w.id), name: String(w.name), slug: String(w.slug), role: role.get(String(w.id))!, createdAt: String(w.created_at),
+  }));
+}
+
+const toMember = (r: Row): WorkspaceMember => ({
+  userId: String(r.user_id), name: String(r.name), email: String(r.email), role: roleOf(r.role), joinedAt: String(r.joined_at),
+  joinedVia: r.joined_via === "invite" || r.joined_via === "domain" ? r.joined_via : "created",
+});
+
+/** Everyone in your workspaces (each person once per workspace), for names and assignees. */
+export async function listWorkspaceMembers(): Promise<(WorkspaceMember & { workspaceId: string })[]> {
+  const db = await accountDb();
+  return many(await db.from("workspace_members").select("workspace_id, user_id, name, email, role, joined_at, joined_via").order("joined_at"))
+    .map((r) => ({ ...toMember(r), workspaceId: String(r.workspace_id) }));
+}
+
+/** A workspace with its people, its open invitations (owners and admins only) and its domains. */
+export async function getWorkspace(id: string): Promise<WorkspaceDetails | null> {
+  if (!isUuid(id)) return null;
+  const workspace = (await listWorkspaces()).find((w) => w.id === id);
+  if (!workspace) return null;
+  const db = await accountDb();
+  const [members, invites, domains] = await Promise.all([
+    db.from("workspace_members").select("user_id, name, email, role, joined_at, joined_via").eq("workspace_id", id).order("joined_at").then(many),
+    workspace.role === "member" ? Promise.resolve([] as Row[]) : db.from("workspace_invites").select("id, email, role, created_at, expires_at, invited_by")
+      .eq("workspace_id", id).is("accepted_at", null).is("revoked_at", null).gt("expires_at", new Date().toISOString())
+      .order("created_at", { ascending: false }).then(many),
+    db.from("workspace_domains").select("domain").eq("workspace_id", id).order("domain").then(many),
+  ]);
+  return {
+    ...workspace,
+    members: members.map(toMember),
+    invites: invites.map((r): WorkspaceInvite => ({
+      id: String(r.id), email: String(r.email), role: r.role === "admin" ? "admin" : "member", createdAt: String(r.created_at),
+      expiresAt: String(r.expires_at), invitedBy: s(r.invited_by),
+    })),
+    domains: domains.map((r) => String(r.domain)),
+  };
+}
+
+export async function createWorkspace(name: string): Promise<Workspace> {
+  const id = String(await rpc("create_workspace", { ws_name: name.trim() }));
+  return (await listWorkspaces()).find((w) => w.id === id) ?? { id, name: name.trim(), slug: "", role: "owner", createdAt: new Date().toISOString() };
+}
+
+export async function renameWorkspace(id: string, name: string) {
+  if (!isUuid(id)) throw new Error("Unknown team workspace");
+  await rpc("rename_workspace", { ws: id, ws_name: name.trim() });
+}
+
+/** Invites an email address; the answer's token is shown once, for the link. */
+export async function inviteMember(workspaceId: string, email: string, role: "admin" | "member"): Promise<NewInvite> {
+  if (!isUuid(workspaceId)) throw new Error("Unknown team workspace");
+  const r = await rpc<Row>("invite_member", { ws: workspaceId, invite_email: email, invite_role: role });
+  return { id: String(r.id), token: String(r.token), email: String(r.email), role: r.role === "admin" ? "admin" : "member", expiresAt: String(r.expires_at) };
+}
+
+export async function revokeInvite(id: string) {
+  if (!isUuid(id)) throw new Error("Unknown invitation");
+  await rpc("revoke_invite", { invite: id });
+}
+
+const TOKEN = /^[0-9a-f]{64}$/;
+
+export async function inviteDetails(token: string): Promise<InviteInfo> {
+  const unknown: InviteInfo = {
+    status: "unknown", workspace: null, workspaceId: null, role: null, email: null, invitedBy: null, expiresAt: null,
+    matches: false, confirmed: false, member: false,
+  };
+  if (!TOKEN.test(token)) return unknown;
+  const r = await rpc<Row | null>("invite_details", { token });
+  if (!r || r.status === "unknown") return unknown;
+  const status = ["open", "expired", "revoked", "accepted"].includes(String(r.status)) ? String(r.status) as InviteInfo["status"] : "unknown";
+  return {
+    status, workspace: s(r.workspace), workspaceId: s(r.workspace_id), role: r.role === "admin" ? "admin" : "member", email: s(r.email),
+    invitedBy: s(r.invited_by), expiresAt: s(r.expires_at), matches: r.matches === true, confirmed: r.confirmed === true, member: r.member === true,
+  };
+}
+
+export async function acceptInvite(token: string): Promise<string> {
+  if (!TOKEN.test(token)) throw new Error("This invitation has expired or was withdrawn. Ask for a new one.");
+  return String(await rpc("accept_invite", { token }));
+}
+
+export async function joinableWorkspaces(): Promise<JoinableWorkspace[]> {
+  const rows = (await rpc<Row[] | null>("joinable_workspaces")) ?? [];
+  return rows.map((r) => ({ id: String(r.id), name: String(r.name), slug: String(r.slug), domain: String(r.domain) }));
+}
+
+export async function joinWorkspace(id: string) {
+  if (!isUuid(id)) throw new Error("Unknown team workspace");
+  await rpc("join_workspace", { ws: id });
+}
+
+export async function setMemberRole(workspaceId: string, userId: string, role: WorkspaceRole) {
+  if (!isUuid(workspaceId) || !isUuid(userId)) throw new Error("They aren't a member of the workspace.");
+  await rpc("set_member_role", { ws: workspaceId, member: userId, new_role: role });
+}
+
+/** Removes someone, or with your own id leaves. The last member leaving deletes the workspace. */
+export async function removeMember(workspaceId: string, userId: string) {
+  if (!isUuid(workspaceId) || !isUuid(userId)) throw new Error("They aren't a member of the workspace.");
+  await rpc("remove_member", { ws: workspaceId, member: userId });
+}
+
+export async function addWorkspaceDomain(workspaceId: string, domain: string) {
+  if (!isUuid(workspaceId)) throw new Error("Unknown team workspace");
+  await rpc("add_workspace_domain", { ws: workspaceId, domain_name: domain });
+}
+
+export async function removeWorkspaceDomain(workspaceId: string, domain: string) {
+  if (!isUuid(workspaceId)) throw new Error("Unknown team workspace");
+  await rpc("remove_workspace_domain", { ws: workspaceId, domain_name: domain });
+}
+
+/** Moves one of your own areas, with its projects and tasks, into a workspace you manage. */
+export async function shareArea(areaId: string, workspaceId: string): Promise<{ projects: number; tasks: number }> {
+  if (!isUuid(areaId) || !isUuid(workspaceId)) throw new Error("Unknown area or team workspace");
+  const r = await rpc<Row>("share_area", { area: areaId, ws: workspaceId });
+  return { projects: Number(r?.projects ?? 0), tasks: Number(r?.tasks ?? 0) };
+}
+
+const EVENTS = new Set<string>(WEBHOOK_EVENTS);
+
+/** Your own webhooks, in one workspace or all of yours. */
+export async function listWebhooks(workspaceId?: string): Promise<MemberWebhook[]> {
+  if (workspaceId !== undefined && !isUuid(workspaceId)) return [];
+  const db = await accountDb();
+  let q = db.from("member_webhooks").select("id, workspace_id, url, events, enabled, created_at");
+  if (workspaceId) q = q.eq("workspace_id", workspaceId);
+  return many(await q.order("created_at")).map((r) => ({
+    id: String(r.id), workspaceId: String(r.workspace_id), url: String(r.url),
+    events: strings(r.events).filter((e): e is WebhookEvent => EVENTS.has(e)), enabled: r.enabled !== false, createdAt: String(r.created_at),
+  }));
+}
+
+/** Adds a webhook (answering its secret, once) or changes one of yours. */
+export async function setWebhook(input: { workspaceId: string; url: string; events: WebhookEvent[]; id?: string; enabled?: boolean }): Promise<{ id: string; secret: string | null }> {
+  if (!isUuid(input.workspaceId)) throw new Error("Unknown team workspace");
+  if (input.id && !isUuid(input.id)) throw new Error("That webhook isn't one of yours.");
+  const r = await rpc<Row>("set_webhook", {
+    ws: input.workspaceId, hook_url: input.url, hook_events: input.events, hook: input.id ?? null, hook_enabled: input.enabled ?? true,
+  });
+  return { id: String(r.id), secret: s(r.secret) };
+}
+
+export async function deleteWebhook(id: string) {
+  if (!isUuid(id)) throw new Error("That webhook isn't one of yours.");
+  await rpc("delete_webhook", { hook: id });
 }
 
 /* ---------- live refresh ---------- */

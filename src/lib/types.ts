@@ -74,6 +74,8 @@ export interface Area {
    * from its workspace on a computer, so your other computers can offer their copy of it. Null until one saw it.
    */
   repo: string | null;
+  /** The team workspace it's shared with (everything in it is the team's), or null for one of your own (Cloud only). */
+  workspaceId: string | null;
 }
 
 /**
@@ -134,6 +136,8 @@ export interface Project {
   agent: AgentId | null;
   afterProjectId: string | null;
   sort: number;
+  /** Its area's team workspace, or null. */
+  workspaceId: string | null;
 }
 
 export interface Subtask {
@@ -190,6 +194,13 @@ export interface Task {
   updatedAt: string;
   completedAt: string | null;
   subtasks: Subtask[];
+  /** Its area's team workspace, or null for one of your own. */
+  workspaceId: string | null;
+  /**
+   * The person it's assigned to: a member of its workspace, or for one of your own tasks you (`ME` locally). Who
+   * does the work in the app is `agent`.
+   */
+  assigneeId: string | null;
 }
 
 export interface CalEvent {
@@ -729,6 +740,105 @@ export interface AskView {
 
 /** A browser's push subscription (PushSubscription.toJSON), as the account keeps it for notifications (push.ts). */
 /** An agent you allowed to use PacedMind Cloud's MCP server (OAuth), as Settings lists it. */
+/* ---------- team workspaces (PacedMind Cloud) ---------- */
+
+/** Owners and admins manage the workspace (people, invitations, domains, shared areas); members work in it. */
+export type WorkspaceRole = "owner" | "admin" | "member";
+export const WORKSPACE_ROLES: readonly WorkspaceRole[] = ["owner", "admin", "member"];
+export const manages = (role: WorkspaceRole | null | undefined) => role === "owner" || role === "admin";
+
+/** A team workspace you're in, with your role. */
+export interface Workspace {
+  id: string;
+  name: string;
+  slug: string;
+  role: WorkspaceRole;
+  createdAt: string;
+}
+
+export interface WorkspaceMember {
+  userId: string;
+  name: string;
+  email: string;
+  role: WorkspaceRole;
+  joinedAt: string;
+  joinedVia: "created" | "invite" | "domain";
+}
+
+/** An invitation waiting to be accepted (only owners and admins see them). */
+export interface WorkspaceInvite {
+  id: string;
+  email: string;
+  role: "admin" | "member";
+  createdAt: string;
+  expiresAt: string;
+  invitedBy: string | null;
+}
+
+export interface WorkspaceDetails extends Workspace {
+  members: WorkspaceMember[];
+  invites: WorkspaceInvite[];
+  /** People whose confirmed email address is at one of these may join as members. */
+  domains: string[];
+}
+
+/** A workspace your confirmed email address's domain lets you join. */
+export interface JoinableWorkspace {
+  id: string;
+  name: string;
+  slug: string;
+  domain: string;
+}
+
+/** What an invitation link is, for the signed-in person who opened it. */
+export interface InviteInfo {
+  status: "open" | "expired" | "revoked" | "accepted" | "unknown";
+  workspace: string | null;
+  workspaceId: string | null;
+  role: "admin" | "member" | null;
+  email: string | null;
+  invitedBy: string | null;
+  expiresAt: string | null;
+  /** Whether it's for the signed-in account's confirmed address. */
+  matches: boolean;
+  /** Whether the signed-in account's address is confirmed at all. */
+  confirmed: boolean;
+  member: boolean;
+}
+
+/** A freshly made invitation: its token is shown once, in the link the person who invited sends. */
+export interface NewInvite {
+  id: string;
+  token: string;
+  email: string;
+  role: "admin" | "member";
+  expiresAt: string;
+}
+
+export const WEBHOOK_EVENTS = ["task.assigned", "task.status_changed", "task.created"] as const;
+export type WebhookEvent = (typeof WEBHOOK_EVENTS)[number];
+
+/** One of your own webhooks in a workspace. Its secret is shown once, when it's made. */
+export interface MemberWebhook {
+  id: string;
+  workspaceId: string;
+  url: string;
+  events: WebhookEvent[];
+  enabled: boolean;
+  createdAt: string;
+}
+
+/** The person a local task (no account) can be assigned to: you. */
+export const ME = "me";
+
+/** Two letters for a person: their initials, or the start of their email address. */
+export function initialsOf(name: string | null | undefined, email?: string | null): string {
+  const words = (name ?? "").trim().split(/[\s._-]+/).filter((w) => /^\p{L}/u.test(w));
+  if (words.length >= 2) return (words[0][0] + words[words.length - 1][0]).toUpperCase();
+  const one = words[0] ?? (email ?? "").split("@")[0] ?? "";
+  return (one.replace(/[^\p{L}\p{N}]/gu, "").slice(0, 2) || "?").toUpperCase();
+}
+
 export interface ConnectedAgent {
   id: string;
   /** The name the agent registered itself with (Claude Code, Codex…): plain text, never trusted. */
