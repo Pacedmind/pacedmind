@@ -18,7 +18,7 @@ import {
   deriveKey, doneDaysOf, expandOccurrences, withDoneDay, extrasOf, linksOf, loginOf, otherSessionsOf, pictureHash, renamedKey, repoOf, strings,
   type AskInput, type FolderRequestFilter, type FolderRequestInput, type LaunchRequestFilter, type LaunchRequestInput, type PreferenceInput,
   type PreferencePatch, type PushSubscriptionRow,
-  type ReportInput, type SessionFilter, type TaskFilter, type TaskInput, type TaskPatch, preferenceOf, usageOf, diffOf,
+  type ReportInput, type SessionFilter, type TaskFilter, type TaskInput, type TaskPatch, preferenceOf, usageOf, diffOf, Refused,
 } from "./shared";
 import { areaIconOf, type AreaIcon } from "@/lib/area-icons";
 import { CloudReadOnly } from "@/lib/billing";
@@ -93,9 +93,15 @@ type Result<T> = { data: T | null; error: PostgrestError | null };
 const s = (v: unknown) => (v == null ? null : String(v));
 const n = (v: unknown) => (v == null ? null : Number(v));
 
-/** What a failed query throws: CloudReadOnly when the database refused a write because the account's Cloud has ended. */
+/** The SQLSTATEs the database's own rules raise with a sentence for people (permission, references, checks, limits, not found). */
+const REFUSALS = new Set(["42501", "23503", "23505", "23514", "22023", "54000", "P0002"]);
+
+/**
+ * What a failed query throws: CloudReadOnly when the database refused a write because the account's Cloud has ended,
+ * Refused for one of its rules, which says why in words meant for people.
+ */
 function failure(error: PostgrestError): Error {
-  return error.code === "PT402" ? new CloudReadOnly() : new Error(error.message);
+  return error.code === "PT402" ? new CloudReadOnly() : REFUSALS.has(error.code) ? new Refused(error.message) : new Error(error.message);
 }
 
 function many(res: Result<Row[]>): Row[] {
@@ -399,7 +405,8 @@ export async function getTask(idOrKey: number | string): Promise<Task | null> {
   }
   const rows = many(await db.from("tasks").select(TASK_SELECT).eq("key", String(idOrKey).toUpperCase()).order("id").limit(5));
   if (rows.length > 1) {
-    throw new Error(`${String(idOrKey).toUpperCase()} is the key of ${rows.length} tasks (yours and a team workspace's): use the task's id, ${rows.map((r) => r.id).join(" or ")}.`);
+    throw new Refused(`${String(idOrKey).toUpperCase()} is the key of ${rows.length} tasks, one of yours and one of a team workspace's: use the task's id, ${
+      rows.map((r) => `${r.id} (${r.workspace_id ? "the team's" : "yours"}: ${String(r.title).slice(0, 60)})`).join(" or ")}.`);
   }
   return rows[0] ? toTask(rows[0]) : null;
 }
@@ -1462,7 +1469,7 @@ export async function setWebhook(input: { workspaceId: string; url: string; even
   if (!isUuid(input.workspaceId)) throw new Error("Unknown team workspace");
   if (input.id && !isUuid(input.id)) throw new Error("That webhook isn't one of yours.");
   const r = await rpc<Row>("set_webhook", {
-    ws: input.workspaceId, hook_url: input.url, hook_events: input.events, hook: input.id ?? null, hook_enabled: input.enabled ?? true,
+    ws: input.workspaceId, hook_url: input.url, hook_events: input.events, hook: input.id ?? null, hook_enabled: input.enabled ?? null,
   });
   return { id: String(r.id), secret: s(r.secret) };
 }

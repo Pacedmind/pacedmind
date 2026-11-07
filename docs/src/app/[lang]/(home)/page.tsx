@@ -63,8 +63,14 @@ const sections: Record<Lang, Tile[]> = {
       icon: 'clock',
     },
     {
+      title: 'Team workspaces',
+      description: 'Share areas with your team in PacedMind Cloud, invite people, assign tasks to each other, and follow them with webhooks.',
+      href: '/team-workspaces',
+      icon: 'users',
+    },
+    {
       title: 'MCP server',
-      description: 'Connect Claude Code and Codex to PacedMind, and a reference for all 42 MCP tools.',
+      description: 'Connect Claude Code and Codex to PacedMind, and a reference for all 56 MCP tools.',
       href: '/mcp',
       icon: 'link',
     },

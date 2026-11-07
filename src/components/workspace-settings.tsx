@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import {
-  acceptInviteAction, addWorkspaceDomainAction, createWorkspaceAction, createWorkspaceAreaAction, deleteWebhookAction, dismissJoinPromptAction, inviteMemberAction,
+  acceptInviteAction, addWorkspaceDomainAction, createWorkspaceAction, renameWorkspaceAction, createWorkspaceAreaAction, deleteWebhookAction, dismissJoinPromptAction, inviteMemberAction,
   joinWorkspaceAction, removeMemberAction, removeWorkspaceDomainAction, revokeInviteAction, setMemberRoleAction, setWebhookAction,
   shareAreaAction,
 } from "@/app/actions";
@@ -100,12 +100,17 @@ function Workspace({ workspace: w, me, ownAreas, shared, hooks, emailDomain }: {
   const [areaName, setAreaName] = useState("");
   const alone = w.members.length === 1;
   return <div className="flex flex-col gap-5">
-    <Box title={`${w.name} · ${tx(ROLE_LABEL[w.role])}`} action={
+    <Box title={`${w.name} · ${tx(ROLE_LABEL[w.role])}`} action={<span className="flex items-center gap-2">
+      {admin && <Button size="sm" disabled={pending} onClick={() => {
+        const name = prompt(tx("New name for {0}", [w.name]), w.name)?.trim();
+        if (name && name !== w.name) run(() => renameWorkspaceAction(w.id, name));
+      }}>{tx("Rename")}</Button>}
       <Button size="sm" disabled={pending} onClick={() => confirm(alone
         ? tx("Leave {0}? You're its last member: the workspace and everything shared in it are deleted.", [w.name])
         : tx("Leave {0}? You lose access to its shared areas at once.", [w.name])) && run(() => removeMemberAction(w.id, me ?? ""))}>
         {tx("Leave")}
-      </Button>}>
+      </Button>
+    </span>}>
       {w.members.map((m) => <Line key={m.userId}>
         <PersonMark name={m.name} email={m.email} />
         <div className="min-w-0 flex-1">

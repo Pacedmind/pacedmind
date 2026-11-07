@@ -12,6 +12,7 @@ import { caller } from "./principal";
 import { rememberHostedTool, toolMetadata, type ToolKind } from "./metadata";
 import { findAreaIcons, isAreaIcon, type AreaIcon } from "@/lib/area-icons";
 import { CloudReadOnly } from "@/lib/billing";
+import { Refused } from "../store/shared";
 import { PALETTE } from "@/lib/colors";
 import { dateOnly, parseLocal, timeOf, toDateStr, toDateTimeStr } from "@/lib/dates";
 import {
@@ -75,7 +76,7 @@ export function tool<S extends z.ZodObject>(
         if (who.kind === "session" && name !== "ask_user") await noteAgentActivity(who.sessionId).catch(() => {});
         return { content: [{ type: "text" as const, text: await run(args) }] };
       } catch (e) {
-        const text = e instanceof ToolError || e instanceof CloudReadOnly ? e.message : `Something went wrong: ${e instanceof Error ? e.message : String(e)}`;
+        const text = e instanceof ToolError || e instanceof CloudReadOnly || e instanceof Refused ? e.message : `Something went wrong: ${e instanceof Error ? e.message : String(e)}`;
         return { content: [{ type: "text" as const, text }], isError: true };
       }
     }) as never,
@@ -113,8 +114,12 @@ const listNames = (xs: string[]) => (xs.length ? xs.join(", ") : "none yet");
 export async function findArea(query: string): Promise<Area> {
   const q = query.trim().toLowerCase();
   const areas = await repo.listAreas();
-  const exact = areas.find((a) => a.id === q || a.key.toLowerCase() === q || a.name.toLowerCase() === q);
-  if (exact) return exact;
+  const byId = areas.find((a) => a.id === q);
+  if (byId) return byId;
+  // A key is unique among your own areas and within each team workspace, so one of yours and a workspace's can share it.
+  const exact = areas.filter((a) => a.key.toLowerCase() === q || a.name.toLowerCase() === q);
+  if (exact.length > 1) fail(`"${query}" matches ${exact.length} areas: ${exact.map((a) => `${a.name} (${a.workspaceId ? "shared" : "yours"}, id ${a.id})`).join(", ")}. Use the id.`);
+  if (exact.length) return exact[0];
   const partial = areas.filter((a) => a.name.toLowerCase().includes(q));
   if (partial.length === 1) return partial[0];
   if (partial.length) fail(`"${query}" matches several areas: ${partial.map((a) => a.name).join(", ")}. Be more specific.`);

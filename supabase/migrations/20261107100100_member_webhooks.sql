@@ -9,13 +9,17 @@
 --    to pg_net (net.http_post), which sends it after the transaction commits. Where pg_net isn't installed the rows
 --    wait as pending, and private.send_webhook_deliveries() sends them once it is.
 -- 3. What's sent is the task's key, title, status, priority, dates and who it's assigned to and by: never its
---    description, sub-tasks, reports or anything personal. Addresses are https on a public name: no IP addresses,
+--    description, sub-tasks, reports or anything personal. Statuses and priorities by the names the MCP tools use. Addresses are https on a public name: no IP addresses,
 --    ports, credentials, localhost or internal names. When a member leaves, their webhooks go.
 
 do $$
 begin
   if exists (select 1 from pg_available_extensions where name = 'pg_net') then
-    create extension if not exists pg_net;
+    if exists (select 1 from pg_namespace where nspname = 'extensions') then
+      create extension if not exists pg_net with schema extensions;
+    else
+      create extension if not exists pg_net;
+    end if;
   end if;
 end $$;
 
@@ -176,6 +180,16 @@ create trigger webhook_deliveries_send after insert on public.webhook_deliveries
 
 /* ---------- 3. what triggers them ---------- */
 
+-- A status and a priority as the MCP tools name them (in_progress, high...).
+create function private.status_name(status text) returns text
+language sql immutable set search_path = '' as $$
+  select case status when 'progress' then 'in_progress' when 'review' then 'in_review' else status end
+$$;
+create function private.priority_name(priority smallint) returns text
+language sql immutable set search_path = '' as $$
+  select (array['none', 'urgent', 'high', 'medium', 'low'])[priority + 1]
+$$;
+
 -- A shared task was created, assigned to someone, or changed status: a delivery for each webhook that wants it.
 -- Created: every member's; assigned: the new assignee's; status: the assignee's and the author's.
 create function private.task_webhooks() returns trigger
@@ -207,9 +221,9 @@ begin
       'at', to_char(now() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
       'workspace', jsonb_build_object('id', v_ws.id, 'name', v_ws.name, 'slug', v_ws.slug),
       'task', jsonb_build_object(
-        'id', new.id, 'key', new.key, 'title', new.title, 'status', new.status, 'priority', new.priority,
+        'id', new.id, 'key', new.key, 'title', new.title, 'status', private.status_name(new.status), 'priority', private.priority_name(new.priority),
         'due_date', new.due_date, 'planned_date', new.planned_date, 'area_id', new.area_id, 'project_id', new.project_id,
-        'previous_status', case when tg_op = 'UPDATE' then old.status end,
+        'previous_status', case when tg_op = 'UPDATE' then private.status_name(old.status) end,
         'assignee', (select jsonb_build_object('id', m.user_id, 'name', m.name, 'email', m.email)
                      from public.workspace_members m where m.workspace_id = new.workspace_id and m.user_id = new.assignee_id),
         'author', (select jsonb_build_object('id', m.user_id, 'name', m.name)
@@ -291,6 +305,7 @@ begin
 end $$;
 
 revoke execute on function private.hmac_sha256(bytea, bytea), private.webhook_url_ok(text), private.send_webhook_delivery(bigint),
+  private.status_name(text), private.priority_name(smallint),
   private.send_webhook_deliveries(), private.webhook_delivery_added(), private.task_webhooks()
   from public, anon, authenticated;
 revoke execute on function public.set_webhook(uuid, text, text[], uuid, boolean), public.delete_webhook(uuid) from public, anon;

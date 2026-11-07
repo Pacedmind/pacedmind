@@ -1,6 +1,6 @@
 ---
 title: Settings
-description: "Every page of PacedMind's Settings, in the order of its menu: the account and the data, the theme, the work hours and how you work, and this computer's name and agents, how sessions start, project folders with their MCP servers and importing them, and the MCP server."
+description: "Every page of PacedMind's Settings, in the order of its menu: the account, team workspaces and the data, the theme, the work hours and how you work, and this computer's name and agents, how sessions start, project folders with their MCP servers and importing them, and the MCP server."
 ---
 
 **Settings**, at the bottom of the sidebar, has a menu of pages on the left. On a narrow window the menu becomes a row above the page, without the group names, and scrolls sideways. Opening **Settings** shows its first page, **Account**. Each page starts with its name and a line on what it holds, and most fields save as soon as they're changed or lose focus, confirmed by *Saved*.
@@ -15,7 +15,7 @@ In the desktop app, without an account, the menu has these pages:
 | **Preferences** | **[Appearance](#appearance)**, **[Planning](#planning)**, **[Hidden areas and projects](#hidden-areas-and-projects)**, **[How you work](#how-you-work)** |
 | **This computer** | **[General](#general)**, **[Sessions](#sessions)**, **[Projects](#projects)**, **[MCP server](#mcp-server)** |
 
-Signed in to PacedMind Cloud, the menu adds **[Plan](#plan)** (once paid plans are on) and **[Security](#security)** after **Account**, and **[Notifications](#notifications)** after **Appearance**. The web app has no computer of its own: in place of **This computer**, its group **Agents** has **Sessions**, which says that sessions are *Handled by the desktop app*, **Projects**, with each project's default agent only (*Folders are set in the desktop app, on the computer where the sessions run.*), and **MCP server**, for connecting agents to PacedMind Cloud. See [Accounts and Cloud](/accounts-and-cloud).
+Signed in to PacedMind Cloud, the menu adds **[Plan](#plan)** (once paid plans are on), **[Security](#security)** and **[Team workspaces](#team-workspaces)** after **Account**, and **[Notifications](#notifications)** after **Appearance**. The web app has no computer of its own: in place of **This computer**, its group **Agents** has **Sessions**, which says that sessions are *Handled by the desktop app*, **Projects**, with each project's default agent only (*Folders are set in the desktop app, on the computer where the sessions run.*), and **MCP server**, for connecting agents to PacedMind Cloud. See [Accounts and Cloud](/accounts-and-cloud).
 
 ## Account
 
@@ -23,7 +23,7 @@ Signed in to PacedMind Cloud, the menu adds **[Plan](#plan)** (once paid plans a
 
 Without an account, the page has one section, **PacedMind Cloud**. Its **Account** row reads *Not signed in*, and **Sign in** opens the sign-in screen. The note below says: *Your tasks, projects and calendar are stored on this computer. Sign in to PacedMind Cloud to use them on your other computers and in the browser too. Once you're signed in, Settings → Data moves them into your account.* See [Accounts and Cloud](/accounts-and-cloud).
 
-Signed in, the page shows who you're signed in as, with **Sign out**, and **Sign out all** for every browser and computer, this one too. A **Computers** section counts the computers signed in to the account and those online, names the default one, and has **Open Computers**, which opens **Settings → Computers**. **Delete account** deletes the account and everything in it, after you type your email and a two-factor code.
+Signed in, the page shows who you're signed in as, with **Sign out**, and **Sign out all** for every browser and computer, this one too. A **Computers** section counts the computers signed in to the account and those online, names the default one, and has **Open Computers**, which opens **Settings → Computers**. **Delete account** deletes the account and everything in it, after you type your email and a two-factor code. What you wrote in team workspaces stays there, and the last owner of a workspace with other members makes one of them an owner first: see [Team workspaces](/team-workspaces#what-happens-to-the-data).
 
 ## Plan
 
@@ -36,6 +36,22 @@ The **Plan** row says where the account stands, such as *Free trial, 12 days lef
 *Two-factor sign-in and your password.* Only when signed in.
 
 **Two-factor sign-in** lists your authenticator apps, with **Add authenticator** and, while there's more than one, **Remove**, which needs a code from another one. **Password** changes the password with the current one, the new one twice and a two-factor code (**Change password**), and signs out your other devices.
+
+## Team workspaces
+
+*Areas you share with your team, its people, invitations and your webhooks.* Only when signed in.
+
+**Join your team** comes first when your confirmed email address's domain lets you into a workspace, with **Join** for each. Then each workspace you're in, under its name and your role, such as **Acme · Owner**, with **Leave**:
+
+| Box | Holds |
+| --- | --- |
+| The members | Each member's name and email address, and their role. Owners and admins change a role from it, and have **Remove**. |
+| **Invite people** | Owners and admins only: an email address, **Member** or **Admin**, and **Invite**, then **Copy link** for the link you send yourself. The invitations still waiting, with **Withdraw**. |
+| **Domains** | The email domains whose people may join as members, and, for owners and admins, **Add domain** and **Remove**. |
+| **Shared areas** | The workspace's areas with their keys, and, for owners and admins, **Create area** and **Share an area**. |
+| **My webhooks** | Your own webhooks in the workspace, with a switch and **Delete**, and **Add webhook** with its address and events. |
+
+**New team workspace**, at the end, makes one with you as its owner: type the team's name and select **Create**. See [Team workspaces](/team-workspaces).
 
 ## Computers
 
@@ -75,7 +91,7 @@ Both resets replace all areas, projects, tasks, activities and sessions. The que
 
 Each reset keeps a copy of what was there first. **Copies** lists them, newest first: **Put back** asks *Put this copy back?* and puts one back in place of the data (*Copy put back*), after keeping what was there as a copy in turn; **Delete** asks *Delete this copy?* and deletes one for good (*Copy deleted*). The newest ten stay. See [Where your data lives](/getting-started/data#copies).
 
-Signed in, the page resets the account's data instead. In the desktop app, while this computer still keeps tasks or projects from before you signed in, a **This computer** row counts them, and **Move to account** moves them into the account. **Your account** → **Move to this computer** copies everything in the account to this computer and signs out, so PacedMind keeps working without an account.
+Signed in, the page resets the account's data instead. In the desktop app, while this computer still keeps tasks or projects from before you signed in, a **This computer** row counts them, and **Move to account** moves them into the account. **Your account** → **Move to this computer** copies everything in the account to this computer and signs out, so PacedMind keeps working without an account. Signed in, resets, copies and **Move to this computer** cover your own data only: [team workspaces](/team-workspaces#what-happens-to-the-data) stay as they are, in PacedMind Cloud.
 
 ## Appearance
 
@@ -266,7 +282,7 @@ Use **Connect** from the copy of PacedMind the agents should report to, normally
 
 ### Tools agents can use
 
-The MCP tools by group: **Overview**, **Preferences**, **Areas**, **Projects**, **Tasks**, **Calendar**, **Computers** and **Sessions**. The note below them says: *Sessions started from PacedMind may read, add and update tasks, and report on their own task; nothing else, whatever they're asked. Starting a session or sending one back with changes over MCP waits for you to allow it here. Run npm run skills to install the PacedMind skills for Claude Code and Codex.* See the [tool reference](/mcp/tools) and [Agent skills](/skills).
+The MCP tools by group: **Overview**, **Preferences**, **Areas**, **Projects**, **Tasks**, **Calendar**, **Team workspaces**, **Computers**, **Task notes** and **Sessions**. The note below them says: *Sessions started from PacedMind may read, add and update tasks, and report on their own task; nothing else, whatever they're asked. Starting a session or sending one back with changes over MCP waits for you to allow it here. Run npm run skills to install the PacedMind skills for Claude Code and Codex.* See the [tool reference](/mcp/tools) and [Agent skills](/skills).
 
 ## Hidden areas and projects
 

@@ -645,9 +645,19 @@ export async function createAreaAction(input: { name: string; color: string }): 
   return { ok: true, id: a.id, message: `Created ${a.name} (${a.key})` };
 }
 
+/** Whether you may change or delete an area: your own, or a team workspace's as its owner or admin. */
+async function mayManageArea(id: string): Promise<string | null> {
+  const area = (await repo.listAllAreas()).find((a) => a.id === id);
+  if (!area?.workspaceId) return null;
+  const role = (await repo.listWorkspaces()).find((w) => w.id === area.workspaceId)?.role;
+  return role === "owner" || role === "admin" ? null : "Only the workspace's owners and admins change or delete its areas.";
+}
+
 /** `icon: null` puts the area's dot back. */
 export async function updateAreaAction(id: string, patch: { name?: string; color?: string; icon?: string | null; hidden?: boolean }) {
   await guard();
+  const refusedHere = await mayManageArea(id);
+  if (refusedHere) return { ok: false, error: refusedHere };
   if (patch.icon != null && !isAreaIcon(patch.icon)) return { ok: false, error: "Pick one of the icons" };
   if (patch.hidden !== undefined && typeof patch.hidden !== "boolean") return { ok: false, error: "Choose whether to hide the area." };
   await repo.updateArea(id, { name: patch.name, color: patch.color, icon: patch.icon === undefined ? undefined : areaIconOf(patch.icon), hidden: patch.hidden });
@@ -708,9 +718,9 @@ export async function deleteAreaAction(id: string) {
   if (!a) return { ok: false, error: "Area not found" };
   const own = new Set(projects.filter((p) => p.areaId === id).map((p) => p.id));
   const kept = tasks.filter((t) => t.areaId === id || (t.projectId !== null && own.has(t.projectId))).length;
+  const refusedHere = await mayManageArea(id);
+  if (refusedHere) return { ok: false, error: refusedHere };
   await repo.deleteArea(id);
-  // A team workspace's area is deleted by its owners and admins only: for anyone else the database leaves it.
-  if (a.workspaceId && (await repo.listAllAreas()).some((x) => x.id === id)) return { ok: false, error: "Only the workspace's owners and admins delete its areas." };
   return done({ ok: true, message: a.workspaceId ? `Deleted ${a.name} with its tasks` : kept ? `Deleted ${a.name}. Its tasks moved to the Inbox.` : `Deleted ${a.name}` });
 }
 

@@ -2,13 +2,13 @@
 
 Every tool the `pacedmind` MCP server offers, grouped by purpose. The tool descriptions and parameter schemas the client shows you have the details. Tools marked (read) never change anything.
 
-A session that PacedMind started gets a smaller set: the read tools (`get_preferences` too), `create_task`, `update_task` for its own task (not its status, agent, place, or where and in which folder its sessions run and what they need), `start_task`, `attach_image`, `report_progress`, `ask_user` and `finish_task`. The rest are there for the user's own Claude Code or Codex.
+A session that PacedMind started gets a smaller set: the read tools (`get_preferences`, `list_workspaces` and `get_workspace` too, but not `list_webhooks`), `create_task`, `update_task` for its own task (not its status, agent, assignee, place, or where and in which folder its sessions run and what they need), `start_task`, `attach_image`, `report_progress`, `ask_user` and `finish_task`. The rest are there for the user's own Claude Code or Codex.
 
 PacedMind Cloud's server (`https://app.pacedmind.com/api/mcp`, which agents sign in to with the user's account) has every tool but `attach_image` and `ask_user`: it can't read files from your computer, so `finish_task` takes no `images` there, and you ask the user in the conversation instead. Its `start_session` asks one of the user's computers, which does what its own settings say; a computer that takes such requests only with the user's two-factor code, and `request_changes`, give a link where the user does it with their code. Its `set_folder` asks a computer, which the user allows there.
 
 ## Orientation
 
-- `get_overview` (read): the current date and time, the user's preferences (while they're short), areas and projects with their ids, the Inbox count, what's overdue, due or planned today, today's calendar, and sessions waiting for review or running. Start here.
+- `get_overview` (read): the current date and time, the user's preferences (while they're short), areas and projects with their ids, the user's team workspaces and the open tasks assigned to the user, the Inbox count, what's overdue, due or planned today, today's calendar, and sessions waiting for review or running. Start here.
 - `get_settings` (read): work hours, break and work days, how sessions start, and the MCP address.
 - `update_settings`: work hours, break and work days, which the auto-planner uses.
 
@@ -22,9 +22,9 @@ How the user likes to work, in their own words: one short sentence each, under a
 ## Areas
 
 - `list_areas` (read): id, key, color, icon (when set, or *its own picture* for an area with an uploaded one) and counts.
-- `create_area`: a name, an optional color (palette name or hex) and an optional icon (one of the names the tool lists). The key is made from the name.
+- `create_area`: a name, an optional color (palette name or hex) and an optional icon (one of the names the tool lists). The key is made from the name. With `workspace`, it's a shared area of that team workspace, for all its members (its owners and admins add one).
 - `update_area`: rename, recolor, or change the icon (`none` shows the dot again). A new name gives the area the key made from it, for its new tasks; existing task keys don't change. An icon replaces the area's own picture; pictures (such as a company logo) are uploaded in the app only.
-- `delete_area`: deletes the area and its projects; their tasks go to the Inbox. Ask first.
+- `delete_area`: deletes the area and its projects; their tasks go to the Inbox. A team workspace's area (only its owners and admins delete one) takes its tasks along. Ask first.
 
 ## Projects
 
@@ -37,22 +37,23 @@ How the user likes to work, in their own words: one short sentence each, under a
 
 ## Tasks
 
-- `list_tasks` (read): filters for project, area (`"inbox"` for no area), status list, priority list, label, search words, due_from/due_to, planned_from/planned_to, overdue, unscheduled, include_done and limit.
-- `get_task` (read): everything about one task, including its numbered Done when items and sub-tasks, the tasks it waits for and that wait for it, the latest session and the latest report an agent handed back.
+- `list_tasks` (read): every open task, the user's own and their team workspaces'; filters for project, area (`"inbox"` for no area), status list, priority list, label, search words, due_from/due_to, planned_from/planned_to, overdue, unscheduled, `assignee` (`"me"`, a member's email, user id or name, or `"nobody"`), `workspace` (a team workspace, or `"personal"` for the user's own), include_done and limit. What's assigned to the user is `assignee: "me"`.
+- `get_task` (read): everything about one task, including its team workspace and who it's assigned to, its numbered Done when items and sub-tasks, the tasks it waits for and that wait for it, the latest session and the latest report an agent handed back.
 - `create_task`: title, project or area, description, done_when, needs, status, priority, due, planned, estimate_minutes, labels, subtasks and agent. `planned` with a time ("friday 10:00") puts the task at that time, for its estimate: a block in the week calendar that the auto-planner leaves alone. Without a time it's a day only. `related_project` makes a task outside a project (in an area's To-dos) about that project, listed under Related on its page; `repeat` (`day`, `weekday`, `week`, `month`) makes a done task come back at its next date, which suits chores like logging hours. `update_task` takes both too.
   - `done_when` lists what must be true when the task is finished, one checkable outcome per item. Agents answer each item when they hand the task back.
   - `needs` lists what its agent needs from the computer its session runs on: MCP servers or claude.ai connectors by name, such as `["supabase", "Gmail"]`. PacedMind offers a computer that has them. Only what differs between the user's computers: a project's own folder brings its servers everywhere.
   - `agent` is who does the task: `claude`, `codex`, or `human` when only the user can do it. Tasks that are the user's (`human`) can't start agent sessions, and the auto-planner puts them in the user's time. Left out, the task gets the project's default agent.
+  - `assignee` is the person it's assigned to: `"me"` (the user), or, in a team workspace's area or project, a member by email, user id or name; the user's own tasks only `"me"`. `null` clears it. `update_task` and `bulk_update_tasks` take it too.
 - `create_tasks`: up to 50 tasks at once in one project or area.
 - `update_task`:
   - title, description (replace or `append_to_description`), done_when (replaces the list), status, priority, due, planned and estimate;
   - labels (replace, add or remove);
-  - move to a project or area;
-  - agent (`human` makes it the user's own: no agent sessions);
+  - move to a project or area (a team workspace's task stays in its workspace; one of the user's own moved into a shared area joins it for good);
+  - agent (`human` makes it the user's own: no agent sessions), and `assignee`;
   - where its agent sessions run (`runs_in`: `terminal`, `desktop` for the agent's desktop app, or `cloud`) and its own `folder`, when it shouldn't work in the project's folder (null goes back to the project's);
   - `needs`, what its agent needs from the computer (replaces the list, `[]` clears it);
   - sub-tasks: add, complete, reopen or remove, by number or title.
-- `bulk_update_tasks`: the same status, priority, due, planned, `shift_days`, project, area or label change for up to 100 tasks.
+- `bulk_update_tasks`: the same status, priority, due, planned, `shift_days`, project, area, assignee or label change for up to 100 tasks.
 - `connect_tasks`: from → to, both in the same project: `to` waits for `from` (a dependency, an arrow on the Timeline). It's ready once `from` is done, or handed back for review unless that hand-back was partial or blocked. It only orders the work: nothing starts by itself. `get_next_task` and `get_project` follow it. Never a loop.
 - `disconnect_tasks`: `to` stops waiting for `from`.
 - `delete_task`: prefer status canceled when a record is useful. Ask first.
@@ -65,6 +66,22 @@ How the user likes to work, in their own words: one short sentence each, under a
 - `delete_event`: removes every occurrence of a weekly event. Ask first.
 - `get_agenda` (read): day by day, up to 14 days. Shows events, tasks due and planned, auto-planned focus blocks, free focus time, overdue tasks and what didn't fit.
 - `reschedule_day`: moves one day's planned tasks and one-off events to another day. Add `move_deadlines` to move deadlines too. Weekly events stay where they are.
+
+## Team workspaces (PacedMind Cloud)
+
+A team workspace is a company's shared areas, with the people in them: every member sees and works on the shared areas' projects and tasks; everything else stays each person's own. Roles are `owner`, `admin` and `member`: owners and admins manage people, invitations, domains and which areas are shared; members work on everything inside. Name a workspace by its name, address (slug) or id, and a member by `"me"`, their email or their user id. Without an account they answer that team workspaces need PacedMind Cloud.
+
+- `list_workspaces` (read): the workspaces the user is in, with their role, members, shared areas and how many open tasks are assigned to the user.
+- `get_workspace` (read): one workspace's members with roles and ids, waiting invitations (owners and admins), domains, shared areas and task counts.
+- `create_workspace`: a name; the user is its owner, and their Cloud plan covers it.
+- `invite_member`: an email and `role` (`member`, the default, or `admin`). Returns a link valid 14 days that only an account with that confirmed email can accept. PacedMind emails nothing: give the link to the user to send. A new invitation to the same address replaces the old link.
+- `update_member`: a member's role (`owner`, `admin`, `member`). Only an owner makes or unmakes owners; the workspace always keeps one.
+- `remove_member`: removes someone, or with `"me"` leaves. Their assignments there are cleared; what they wrote stays. The last owner can't leave while others are in it, and the last member leaving deletes the workspace. Ask first.
+- `set_workspace_domain` / `remove_workspace_domain`: let everyone whose confirmed email is at a domain join as a member, or stop it (those who joined stay). Only the domain of the user's own confirmed email, never a public mail provider's.
+- `share_area`: moves one of the user's own areas into a workspace they manage, for good, with its projects, tasks, sub-tasks, dependencies and reports. Links to work outside it are dropped, a key the workspace has changes, and computers stay personal. Ask first.
+- `list_webhooks` (read), `set_webhook`, `delete_webhook`: the user's own webhooks in a workspace. `set_webhook` takes an https address on a public name and `events` (`task.assigned`, `task.status_changed`, `task.created`), or `webhook` to change one (its address and events are replaced) and `enabled: false` to switch it off. PacedMind posts the task's key, title, status, priority, dates and people, never its description, signed with `X-PacedMind-Signature: sha256=` and the HMAC-SHA256 of the body with the webhook's secret, which is shown only when it's added. Deleting asks first.
+
+Accepting an invitation and joining through a domain are the user's to do, in the app.
 
 ## Computers
 
