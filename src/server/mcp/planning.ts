@@ -55,6 +55,13 @@ function sessionMayUpdate(
   }
 }
 
+/** A team workspace's area is changed and deleted by its owners and admins only (the database holds that too). */
+async function mayManageArea(a: { name: string; workspaceId: string | null }) {
+  if (!a.workspaceId) return;
+  const w = (await repo.listWorkspaces()).find((x) => x.id === a.workspaceId);
+  if (w?.role !== "owner" && w?.role !== "admin") fail(`${a.name} is a team workspace's area: only its owners and admins change or delete it.`);
+}
+
 /** For fields that can be cleared: undefined leaves them alone, null or "" clears them. */
 const clearable = <T>(v: string | null | undefined, read: (s: string) => T): T | null | undefined =>
   v === undefined ? undefined : v && v.trim() ? read(v) : null;
@@ -278,6 +285,7 @@ export function registerPlanningTools(server: McpServer) {
     kind: "write",
   }, async ({ area, name, color, icon }) => {
     const a = await findArea(area);
+    await mayManageArea(a);
     if (name !== undefined && !name.trim()) fail("The name can't be empty.");
     const nextIcon = icon === undefined ? undefined : icon.trim().toLowerCase() === "none" ? null : iconFrom(icon);
     await repo.updateArea(a.id, { name, color: color ? colorFrom(color) : undefined, icon: nextIcon });
@@ -292,11 +300,11 @@ export function registerPlanningTools(server: McpServer) {
     kind: "delete",
   }, async ({ area }) => {
     const a = await findArea(area);
+    await mayManageArea(a);
     const projects = (await repo.listProjects()).filter((p) => p.areaId === a.id);
     const ids = new Set(projects.map((p) => p.id));
     const tasks = (await repo.listTasks()).filter((t) => t.areaId === a.id || (t.projectId !== null && ids.has(t.projectId)));
     await repo.deleteArea(a.id);
-    if ((await repo.listAllAreas()).some((x) => x.id === a.id)) fail(`${a.name} is a team workspace's area: only its owners and admins delete it.`);
     return `Deleted area ${a.name}. ${projects.length ? `Deleted its projects: ${projects.map((p) => p.name).join(", ")}. ` : ""}${plural(tasks.length, "task")} ${a.workspaceId ? "deleted with it" : "moved to the Inbox"}.`;
   });
 
@@ -523,12 +531,14 @@ export function registerPlanningTools(server: McpServer) {
     kind: "create",
   }, async (args) => {
     const place = await placeFor(args.project, args.area);
-    // Check every title and date first, so a bad one doesn't leave half the tasks created.
+    // Check every title, date and assignee first, so a bad one doesn't leave half the tasks created.
+    const workspace = await workspaceOfPlace(place);
     for (const t of args.tasks) {
       sessionMayCreate(t.status);
       if (!t.title.trim()) fail("Every task needs a title.");
       if (t.due) when(t.due);
       if (t.planned) when(t.planned);
+      if (t.assignee !== undefined) await assigneeFor(t.assignee, workspace);
     }
     const created: Task[] = [];
     for (const t of args.tasks) created.push(await createOne(t, place));

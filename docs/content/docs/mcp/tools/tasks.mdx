@@ -7,7 +7,7 @@ description: "Reference for the task tools: list_tasks, get_task, create_task, c
 
 **Read-only. Allowed without asking.**
 
-Finds tasks. Without filters, it lists every open task. Filters combine: a task must match all of them.
+Finds tasks. Without filters, it lists every open task: the user's own and those of their [team workspaces](/mcp/tools/team-workspaces). Filters combine: a task must match all of them.
 
 | Parameter | Type | Description |
 | --- | --- | --- |
@@ -21,16 +21,18 @@ Finds tasks. Without filters, it lists every open task. Filters combine: a task 
 | `planned_from`, `planned_to` | date | Planned dates in this range, inclusive. |
 | `overdue` | boolean | Only open tasks past their due date. |
 | `unscheduled` | boolean | Only tasks with neither a due date nor a planned date. |
+| `assignee` | string | Only tasks assigned to this person: `me` (the user), a team member's email address, user id or name, or `nobody` for tasks assigned to no one. |
+| `workspace` | string | Only the tasks of this team workspace (its name, address or id), or `personal` for the user's own. |
 | `include_done` | boolean | Also include done and canceled tasks. |
 | `limit` | number | 1 to 500. Default 100. |
 
-Returns the number of matches and one line per task. When there are more than the limit: *…and 12 more. Narrow the filters or raise the limit.*
+Returns the number of matches and one line per task; a task that's assigned says who to, such as `assigned to Sam Lee <sam@acme.com>` or `assigned to Alex Kim (the user)`. When there are more than the limit: *…and 12 more. Narrow the filters or raise the limit.*
 
 ## `get_task`
 
 **Read-only. Allowed without asking.**
 
-Everything about one task: title, status, priority, where it lives, due and planned dates, estimate, who does it, labels, its folder (its own, marked *(its own)*, else the project's), where its sessions run when that's set, what they need from the computer (*Needs on its computer: supabase, Gmail*), what its sessions' agents used once they reported it (*Agents used: 262k tokens · 1 min working · 1 session*), the description, the numbered **Done when** items, the numbered sub-tasks with their state, the tasks it waits for (*Waits for:*) and those that wait for it (*Before:*), the latest session, the latest report an agent handed back, and when it was created, updated and finished.
+Everything about one task: title, status, priority, where it lives, its team workspace (`Team workspace: Acme (its members see and change it)`) and who it's assigned to (`Assigned to: nobody`, `Assigned to: Sam Lee <sam@acme.com>` or `Assigned to: Alex Kim (the user)`), due and planned dates, estimate, who does it, labels, its folder (its own, marked *(its own)*, else the project's), where its sessions run when that's set, what they need from the computer (*Needs on its computer: supabase, Gmail*), what its sessions' agents used once they reported it (*Agents used: 262k tokens · 1 min working · 1 session*), the description, the numbered **Done when** items, the numbered sub-tasks with their state, the tasks it waits for (*Waits for:*) and those that wait for it (*Before:*), the latest session, the latest report an agent handed back, and when it was created, updated and finished.
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -44,6 +46,7 @@ For example, with the sample data:
 DEV-21 · MCP server skeleton
 Status: In review · Priority: High
 Where: project Organizer app (organizer) in Dev
+Assigned to: nobody
 Due: 2026-09-25 (Fri) · Planned for: none
 Estimate: 1h · Agent: Claude Code
 Labels: mcp
@@ -85,7 +88,7 @@ The sub-task numbers are the ones `update_task` accepts, and the Done when numbe
 
 **Changes data. Allowed without asking.**
 
-Adds a task. Without `project` and `area`, it goes to the Inbox.
+Adds a task. Without `project` and `area`, it goes to the Inbox. In a team workspace's area or project, it can be assigned to one of the workspace's members.
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -105,6 +108,7 @@ Adds a task. Without `project` and `area`, it goes to the Inbox.
 | `agent` | `claude`, `codex` or `human` | no | Who does it. Left out, the task gets the project's default agent. `human`: only the user can do it, and it never gets an agent session. |
 | `related_project` | project id or name | no | A project the task is about without being part of it. Give `area`, not `project`: the task is one of the area's to-dos, and the project's page lists it under **Related**. |
 | `repeat` | `day`, `weekday`, `week` or `month` | no | Marked done, the task comes back as a new one at its next date. |
+| `assignee` | string or `null` | no | Who it's assigned to: `me` (the user), or, in a team workspace's area or project, one of its members by email address, user id or name. One of the user's own tasks can only be assigned to `me`: *Only a team workspace's tasks can be assigned to someone else: this one is the user's own, so "me" or null.* |
 
 Returns the new task's line, with its key and the number of Done when items and sub-tasks: *Created DEV-43 · Todo · High · Add CSV export to the reports page · Organizer app · 4 Done when items · 3 sub-tasks.*
 
@@ -120,7 +124,7 @@ Adds up to 50 tasks at once, for example when breaking a project down. All go to
 | --- | --- | --- | --- |
 | `project` | string | no | The project for all tasks. |
 | `area` | string | no | The area for all tasks, when there's no project. |
-| `tasks` | list | yes | 1 to 50 tasks, each with `title` and any of the optional `create_task` fields, such as `description` and `done_when`. |
+| `tasks` | list | yes | 1 to 50 tasks, each with `title` and any of the optional `create_task` fields, such as `description`, `done_when` and `assignee`. |
 
 All dates are checked before anything is created, so one wrong date doesn't leave half the tasks behind.
 
@@ -128,7 +132,9 @@ All dates are checked before anything is created, so one wrong date doesn't leav
 
 **Changes data. Allowed without asking.**
 
-Changes anything about a task. Parameters left out keep their value; `null` clears a date, the project, the area, the agent, `runs_in` or `folder`, and an empty list, `[]`, clears `done_when` or `needs`. A session PacedMind started can't change its own task's `runs_in`, `folder` or `needs`.
+Changes anything about a task. Parameters left out keep their value; `null` clears a date, the project, the area, the agent, the assignee, `runs_in` or `folder`, and an empty list, `[]`, clears `done_when` or `needs`. A session PacedMind started changes only its own task, and not its `status`, `agent`, `assignee`, `project`, `area`, `runs_in`, `folder` or `needs`.
+
+A team workspace's task stays in that workspace: it moves to another of the workspace's areas or projects, and moving it to the Inbox or outside the workspace is refused. One of the user's own tasks moved into a team workspace's area joins that workspace for good.
 
 | Parameter | Type | Description |
 | --- | --- | --- |
@@ -148,6 +154,7 @@ Changes anything about a task. Parameters left out keep their value; `null` clea
 | `project` | string or `null` | Moves the task to this project and its area, or takes it out of its project. |
 | `area` | string or `null` | Moves the task to this area; `null` or `inbox` moves it to the Inbox. The task leaves its project when that project is in another area. With `project`, leave it out: a different area is refused. |
 | `agent` | `claude`, `codex`, `human` or `null` | Who does it. `human` makes it the user's own: it never gets an agent session. |
+| `assignee` | string or `null` | Who it's assigned to, as in `create_task`, in the task's team workspace after a move; `null` clears it. |
 | `related_project` | project id or name, or `null` | The project it's about without being part of it; `null` clears it. |
 | `repeat` | `day`, `weekday`, `week`, `month` or `null` | How it comes back once done; `null` stops it. Setting `status` to `done` on a repeating task adds the next one, and the answer names it: *It repeats: WRK-41 is the next one, planned 2026-10-01 (Thu).* |
 | `runs_in` | `terminal`, `desktop`, `cloud` or `null` | Where its agent sessions run: a terminal or the agent's desktop app on the user's computer, or the agent's cloud. `null`: a terminal when the agent's command-line tool is installed, else its desktop app. |
@@ -176,6 +183,7 @@ Applies the same change to up to 100 tasks, for rescheduling and triage.
 | `project` | string or `null` | Moves the tasks to this project, or out of their projects. |
 | `area` | string or `null` | Moves the tasks to this area, or to the Inbox. |
 | `add_labels`, `remove_labels` | string list | Adds or removes labels. |
+| `assignee` | string or `null` | The same assignee for all, as in `create_task`: a member of each task's team workspace, or `me`. `null` clears it. Every task's assignee is checked before anything changes. |
 
 `shift_days` can't be combined with `due` or `planned`. Setting `status` to `done` works as in `update_task`: finished sessions of those tasks count as reviewed, and a repeating task comes back as a new one.
 

@@ -1,0 +1,200 @@
+---
+title: Team workspaces
+description: "Reference for the team workspace tools: list_workspaces, create_workspace, get_workspace, invite_member, update_member, remove_member, set_workspace_domain, remove_workspace_domain, share_area, list_webhooks, set_webhook and delete_webhook."
+---
+
+[Team workspaces](/team-workspaces) are PacedMind Cloud's: areas a team shares, with the people in them. These tools find the workspaces the user is in, manage their people, invitations, domains and shared areas, and set up the user's own webhooks. What the user may do depends on their role, and PacedMind checks it: a refusal comes back with the reason, such as *Only the workspace's owners and admins invite people.*
+
+A workspace is named by its name, its address (the short name `list_workspaces` shows, such as `acme`) or its id; a member by `me`, their email address or their user id, from `get_workspace`. See [Referring to things](/mcp/tools#referring-to-things). Assigning tasks is part of the [task tools](/mcp/tools/tasks): `create_task`, `update_task` and the others take an `assignee`, and `list_tasks` filters by `assignee` and `workspace`.
+
+Without an account, the desktop app's server has no team workspaces: `list_workspaces` says so, and the tools that change them answer *Team workspaces need PacedMind Cloud: sign in to use them.* Only the user accepts an invitation or joins through a domain, in the app.
+
+## `list_workspaces`
+
+**Read-only. Allowed without asking.**
+
+The team workspaces the user is in, one line each: the name, the address, the id, the user's role, the number of members, the shared areas with their keys, and the open tasks, with how many are assigned to the user.
+
+No parameters.
+
+Each line reads, for example: `Acme · address acme · id 5b2e8c1a-3f4d-4e6b-9a7c-1d2e3f4a5b6c · owner · 4 members · areas: Sales (SLS), Support (SUP) · 23 open tasks, 5 assigned to the user`. Without any: *The user isn't in any team workspace yet. create_workspace makes one (PacedMind Cloud only).*
+
+## `create_workspace`
+
+**Changes data.**
+
+Makes a team workspace with the user as its owner, whose PacedMind Cloud plan covers it. Then `invite_member`, `set_workspace_domain`, and `share_area` or `create_area` with `workspace`, set it up.
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | string | yes | The team's name, such as the company's. Up to 80 characters. |
+
+Returns the workspace with its address, made from the name, and its id:
+
+```text
+Created team workspace Acme · address acme · id 5b2e8c1a-3f4d-4e6b-9a7c-1d2e3f4a5b6c. The user is its owner.
+```
+
+When another workspace has the address, the new one gets a number, such as `acme-2`. An account owns at most ten workspaces, and a read-only PacedMind Cloud makes none.
+
+## `get_workspace`
+
+**Read-only. Allowed without asking.**
+
+A team workspace's members with their roles and ids, the invitations still waiting (for owners and admins), its domains, its shared areas and its task counts.
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `workspace` | string | yes | The workspace's name, address or id. |
+
+For example:
+
+```text
+Acme · address acme · id 5b2e8c1a-3f4d-4e6b-9a7c-1d2e3f4a5b6c · the user is an owner
+Members (2):
+- Alex Kim <alex@acme.com> · owner · the user · id f1e2d3c4-b5a6-4978-8a6b-5c4d3e2f1a0b · joined 2026-11-02
+- Sam Lee <sam@acme.com> · member · id 0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d · joined 2026-11-03 through the domain
+Invitations waiting:
+- jo@acme.com as member · until 2026-11-17 · invitation 7c6b5a4d-3e2f-4a1b-9c8d-7e6f5a4b3c2d
+Domains (people whose confirmed email address is there may join as members): acme.com
+Shared areas: Sales (key SLS, id 9d8c7b6a-5f4e-4d3c-8b2a-1f0e9d8c7b6a)
+Tasks: 23 open tasks, 5 of them assigned to the user
+The user's webhooks here: 1
+```
+
+A member doesn't get the *Invitations waiting* line.
+
+## `invite_member`
+
+**Changes data.**
+
+Invites someone to a team workspace by email: owners and admins only. PacedMind sends no email: the answer has the invitation link, which the agent gives the user to send. The link is valid for 14 days, and only an account whose confirmed email address is the invited one can accept it. A new invitation to the same address replaces the old link.
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `workspace` | string | yes | The workspace's name, address or id. |
+| `email` | string | yes | Their email address. |
+| `role` | `member` or `admin` | no | `member` (the default) works on the shared areas; `admin` also manages people, domains and areas. Owners are made from members with `update_member`. |
+
+Returns, for example:
+
+```text
+Invited jo@acme.com to Acme as member, until 2026-11-21.
+Link: https://app.pacedmind.com/join/3f9a6c2e8b1d4f7a0c5e9b2d6f8a1c4e7b0d3f6a9c2e5b8d1f4a7c0e3b6d9f2a
+PacedMind doesn't email it: the user sends this link. It only works for that email address, once confirmed; anyone else who opens it gets nothing.
+```
+
+Refused for someone already in the workspace (*They are a member already.*) and when 100 invitations are waiting.
+
+## `update_member`
+
+**Changes data.**
+
+Changes a member's role. Owners and admins change roles; only an owner makes or unmakes owners, and the workspace always keeps one (*The workspace needs an owner: make someone else an owner first.*).
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `workspace` | string | yes | The workspace's name, address or id. |
+| `member` | string | yes | `me`, or the member's email address or user id. |
+| `role` | `owner`, `admin` or `member` | yes | The new role. |
+
+Returns `Sam Lee <sam@acme.com> is now an admin of Acme.` Someone who isn't in the workspace returns an error that lists its members.
+
+## `remove_member`
+
+**Deletes. Agents ask the user first.**
+
+Removes someone from a team workspace (owners and admins), or, with `me`, has the user leave it. They lose access to its shared areas at once and their assignments there are cleared; what they wrote stays. Only an owner removes an owner. The last owner can't leave while others are in the workspace, and the last member leaving deletes the workspace with everything shared in it.
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `workspace` | string | yes | The workspace's name, address or id. |
+| `member` | string | yes | `me` to leave, or the member's email address or user id. |
+
+Returns `Sam Lee <sam@acme.com> is no longer in Acme.`, or, when the user was the last member: *The user left Acme, its last member: the workspace and everything shared in it are deleted.*
+
+## `set_workspace_domain`
+
+**Changes data.**
+
+Lets everyone whose confirmed email address is at a domain join a team workspace as a member, without an invitation: owners and admins only. The domain has to be that of the user's own confirmed address, and never a public mail provider's, such as gmail.com. A domain lets people into one workspace only.
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `workspace` | string | yes | The workspace's name, address or id. |
+| `domain` | string | yes | The domain, such as `acme.com`. A leading `@` is dropped. |
+
+Returns *People whose confirmed email address is at acme.com can now join Acme as members, from Settings or the prompt PacedMind shows them.* Refusals include *Add the domain of your own confirmed email address.*, *Anyone can have an address at gmail.com: invite people instead.* and *Another workspace uses that domain.*
+
+## `remove_workspace_domain`
+
+**Deletes.**
+
+Stops a domain letting people join by themselves: owners and admins only. Members who joined through it stay.
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `workspace` | string | yes | The workspace's name, address or id. |
+| `domain` | string | yes | The domain. |
+
+Returns *acme.com no longer lets people join Acme.*
+
+## `share_area`
+
+**Changes data. Agents ask the user first.**
+
+Moves one of the user's own areas into a team workspace they own or administer, with all its projects and tasks and their sub-tasks, dependencies and reports. Every member then sees and works on them, and they can't be moved back. Links to work outside the area are dropped, a task key the workspace already has changes to the area's next one, and the projects and tasks no longer name a computer. See [Shared areas](/team-workspaces#shared-areas).
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `area` | string | yes | The user's own area: its id, name or key. |
+| `workspace` | string | yes | The workspace's name, address or id. |
+
+Returns *Shared Sales (SLS) with Acme: 2 projects and 14 tasks moved into the workspace, for all its members.* An area in a workspace already returns *Sales is already shared with a team workspace.*, and one whose key the workspace has *The workspace has an area with the key SLS already: rename one of them first.*
+
+## `list_webhooks`
+
+**Read-only.**
+
+The user's own webhooks in their team workspaces: the address PacedMind calls, the events, and whether each is on.
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `workspace` | string | no | Only this workspace's webhooks. |
+
+Each line reads, for example: `webhook 2d4f6a8c-1e3b-4d5f-9a7c-0b2d4f6a8c1e · Acme · https://hooks.example.com/pacedmind · task.assigned, task.status_changed · on`. Without any: *The user has no webhooks.*
+
+## `set_webhook`
+
+**Changes data.**
+
+Adds one of the user's own webhooks in a team workspace, or, with `webhook`, changes one. PacedMind then posts JSON to the address when a task is assigned to the user (`task.assigned`), when the status of a task assigned to the user or written by them changes (`task.status_changed`), or when any task is created in the workspace (`task.created`). The body has the task's key, title, status, priority, dates and people, never its description. Each call is signed: `X-PacedMind-Signature` is `sha256=` and the HMAC-SHA256 of the body with the webhook's secret. See [Webhooks](/team-workspaces#webhooks) for the body and how to check the signature.
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `workspace` | string | yes | The workspace's name, address or id. |
+| `url` | string | yes | An https address on a public name: no IP address, port, user name or password. |
+| `events` | list of `task.assigned`, `task.status_changed`, `task.created` | yes | One to three events. |
+| `webhook` | string | no | The id of one of the user's webhooks, from `list_webhooks`, to change it: its address and events become the ones given. |
+| `enabled` | boolean | no | `false` switches the webhook off without deleting it; `true` switches it on again. A new webhook is on. |
+
+A new webhook returns its secret, which is shown only this once:
+
+```text
+Added webhook 2d4f6a8c-1e3b-4d5f-9a7c-0b2d4f6a8c1e in Acme for task.assigned, task.status_changed.
+Secret (shown only now; it signs every call): 9b1c4e7a0d3f6b9c2e5a8d1f4b7c0e3a6d9f2b5c8e1a4d7f0b3c6e9a2d5f8b1c
+```
+
+A change returns its events, such as *Changed webhook 2d4f6a8c-1e3b-4d5f-9a7c-0b2d4f6a8c1e in Acme: task.assigned.*, with *, switched off* when `enabled` is `false`. A member has up to ten webhooks in each workspace.
+
+## `delete_webhook`
+
+**Deletes. Agents ask the user first.**
+
+Deletes one of the user's own webhooks.
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `webhook` | string | yes | Its id, from `list_webhooks`. |
+
+Returns *Deleted webhook 2d4f6a8c-1e3b-4d5f-9a7c-0b2d4f6a8c1e.*

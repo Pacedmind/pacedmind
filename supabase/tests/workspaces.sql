@@ -389,6 +389,8 @@ begin
   if n <> 1 then raise exception 'Expected one status delivery, got %', n; end if;
   if (select payload #>> '{task,assignee,email}' from public.webhook_deliveries where event = 'task.assigned' and task_id = t_owner)
      <> 'member@acme-team.invalid'
+     or (select payload #>> '{task,status}' from public.webhook_deliveries where event = 'task.status_changed' and task_id = t_owner) <> 'in_progress'
+     or (select payload #>> '{task,priority}' from public.webhook_deliveries where event = 'task.status_changed' and task_id = t_owner) <> 'none'
      or (select payload ? 'description' or payload -> 'task' ? 'description' from public.webhook_deliveries where event = 'task.assigned' and task_id = t_owner) then
     raise exception 'Unexpected delivery payload';
   end if;

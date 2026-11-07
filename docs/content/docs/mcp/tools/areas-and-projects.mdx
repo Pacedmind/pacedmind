@@ -22,8 +22,9 @@ Adds an area. Its key, used in task keys such as WRK-12, is made from the name.
 | `name` | string | yes | The area's name. |
 | `color` | string | no | A palette name or a hex color. Defaults to a palette color no other area uses. |
 | `icon` | string | no | One of the icon names (listed below). Without one, the area shows a dot. |
+| `workspace` | string | no | Makes it a shared area of this [team workspace](/mcp/tools/team-workspaces), for all its members: its name, address or id. Only the workspace's owners and admins add one. |
 
-Returns the new area with its id and key, such as *Created area Finance · id finance · key FNN · Olive.*
+Returns the new area with its id and key, such as *Created area Finance · id finance · key FNN · Olive.*, followed by *· shared in Acme* for a team workspace's area.
 
 ## `update_area`
 
@@ -46,13 +47,13 @@ An icon replaces the area's own picture. Pictures, such as a company logo, are c
 
 **Deletes. Agents ask the user first.**
 
-Deletes an area and its projects. Their tasks are kept and move to the Inbox.
+Deletes an area and its projects. Their tasks are kept and move to the Inbox. A team workspace's area takes its tasks along: they're deleted with it, and only the workspace's owners and admins delete one.
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
 | `area` | string | yes | The area's id, name or key. |
 
-Returns what happened, such as *Deleted area Learning. Deleted its projects: Spanish B1. 3 tasks moved to the Inbox.*
+Returns what happened, such as *Deleted area Learning. Deleted its projects: Spanish B1. 3 tasks moved to the Inbox.*, or, for a team workspace's area, *… 14 tasks deleted with it.* A member who isn't an owner or admin gets *Sales is a team workspace's area: only its owners and admins delete it.*
 
 ## `list_projects`
 

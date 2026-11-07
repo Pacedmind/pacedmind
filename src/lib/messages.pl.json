@@ -2344,5 +2344,8 @@
   "A personal task can only be assigned to its owner.": "Własne zadanie można przypisać tylko jego właścicielowi.",
   "A task in a team workspace stays in it: move it to another of its areas, or delete it.": "Zadanie zespołu zostaje w zespole: przenieś je do innego z jego obszarów albo je usuń.",
   "You own a team workspace with other members: make one of them an owner first.": "Jesteś właścicielem zespołu z innymi członkami: najpierw ustaw jednego z nich jako właściciela.",
-  "This team workspace is read-only: its owner's PacedMind Cloud has ended.": "Ten zespół jest tylko do odczytu: PacedMind Cloud jego właściciela się skończył."
+  "This team workspace is read-only: its owner's PacedMind Cloud has ended.": "Ten zespół jest tylko do odczytu: PacedMind Cloud jego właściciela się skończył.",
+  "New name for {0}": "Nowa nazwa dla {0}",
+  "Only the workspace's owners and admins change or delete its areas.": "Obszary zespołu zmieniają i usuwają tylko jego właściciele i administratorzy.",
+  "Only the workspace's owners and admins rename it.": "Nazwę zespołu zmieniają tylko jego właściciele i administratorzy."
 }

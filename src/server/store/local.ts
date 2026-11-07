@@ -13,7 +13,7 @@ import {
 import { repoIdentity } from "../git-remote";
 import { db, tx } from "./local-db";
 import {
-  CLOUD_ONLY_WORKSPACES, DEFAULT_SETTINGS, SESSION_URL, SETTING_KEYS, areaPictureOf, byTopic, cleanDoneWhen, cleanPreference, codexEnvProblem, criteriaOf, deriveKey, doneDaysOf,
+  CLOUD_ONLY_WORKSPACES, Refused, DEFAULT_SETTINGS, SESSION_URL, SETTING_KEYS, areaPictureOf, byTopic, cleanDoneWhen, cleanPreference, codexEnvProblem, criteriaOf, deriveKey, doneDaysOf,
   expandOccurrences, withDoneDay, linksOf, pictureHash, preferenceOf, renamedKey, repoOf, strings,
   type AskInput, type PreferenceInput, type PreferencePatch, type PushSubscriptionRow, type ReportInput, type SessionFilter, type TaskFilter, type TaskInput,
   type TaskPatch, usageOf, diffOf,
@@ -119,7 +119,7 @@ export async function areaPicture(id: string): Promise<string | null> {
 }
 
 export async function createArea(input: { name: string; color: string; icon?: AreaIcon | null; workspaceId?: string | null }): Promise<Area> {
-  if (input.workspaceId) throw new Error(CLOUD_ONLY_WORKSPACES);
+  if (input.workspaceId) throw new Refused(CLOUD_ONLY_WORKSPACES);
   const areas = areasNow();
   const base = slug(input.name, "area");
   const ids = new Set(areas.map((a) => a.id));
@@ -359,7 +359,7 @@ function nextKey(areaId: string | null): string {
 /** Without an account, a task can only be assigned to you. */
 function assigneeOf(id: string | null | undefined): string | null {
   if (!id) return null;
-  if (id !== ME) throw new Error(CLOUD_ONLY_WORKSPACES);
+  if (id !== ME) throw new Refused(CLOUD_ONLY_WORKSPACES);
   return ME;
 }
 
@@ -997,10 +997,10 @@ export async function listWebhooks(): Promise<MemberWebhook[]> {
   return [];
 }
 export async function inviteDetails(): Promise<InviteInfo> {
-  throw new Error(CLOUD_ONLY_WORKSPACES);
+  throw new Refused(CLOUD_ONLY_WORKSPACES);
 }
 const cloudOnly = async (): Promise<never> => {
-  throw new Error(CLOUD_ONLY_WORKSPACES);
+  throw new Refused(CLOUD_ONLY_WORKSPACES);
 };
 export const createWorkspace: (name: string) => Promise<Workspace> = cloudOnly;
 export const renameWorkspace: (id: string, name: string) => Promise<void> = cloudOnly;

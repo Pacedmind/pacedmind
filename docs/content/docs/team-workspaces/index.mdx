@@ -1,0 +1,239 @@
+---
+title: Team workspaces
+description: "Team workspaces in PacedMind Cloud: share areas with your team, invite people with a link or let your company's email domain in, assign tasks to each other, see what's assigned to you, and follow it with webhooks."
+---
+
+A team workspace is a company's or a team's shared place in PacedMind Cloud. Its areas, the **shared areas**, hold projects and tasks that every member of the workspace sees and works on. Everything else stays your own.
+
+| Shared with every member | Stays your own |
+| --- | --- |
+| The shared areas, with their projects and tasks, the tasks' sub-tasks and dependencies, and the reports agents hand back on them | Your own areas and everything in them, and the Inbox |
+| Who each shared task is assigned to | Your calendar activities |
+| The workspace's members, domains and shared areas | Your agent sessions, your computers and their folders |
+| | Your settings, [how you work](/concepts/preferences), your copies of your data and your webhooks |
+
+Computers stay personal: a shared project or task names no computer, and each member's agent sessions run on their own computers.
+
+Team workspaces need PacedMind Cloud. **Settings → Team workspaces** appears once you're signed in; see [Accounts and Cloud](/accounts-and-cloud).
+
+## Roles
+
+| Role | Can |
+| --- | --- |
+| **Owner** | Everything an admin can, and make or unmake owners and remove them. A workspace always has at least one owner. |
+| **Admin** | Invite people and withdraw invitations, change the roles of admins and members, remove admins and members, add and remove domains, create shared areas, share their own areas, and change or delete shared areas. |
+| **Member** | Work on everything in the shared areas: add, change and delete projects and tasks, and assign tasks. Add their own webhooks, and leave. |
+
+Everyone in a workspace sees its members with their email addresses, its domains and its shared areas. Waiting invitations are shown to owners and admins only.
+
+## Create a workspace
+
+1. Open **Settings → Team workspaces**.
+2. Under **New team workspace**, type the team's name (*Team name, like your company's*), up to 80 characters.
+3. Select **Create**.
+
+You're the workspace's owner. The note under the box says: *You own it, and your PacedMind Cloud plan covers everyone in it. Invite people, then share an area or create one for the team.* An account owns at most ten workspaces.
+
+Each workspace then has its own boxes on the page: its members, headed by the workspace's name and your role, such as **Acme · Owner**, then **Invite people** (owners and admins), **Domains**, **Shared areas** and **My webhooks**. Owners and admins can **Rename** the workspace from its first box, next to **Leave**.
+
+## Invite people
+
+PacedMind sends no email: an invitation is a link that you send yourself.
+
+1. Under **Invite people**, type the person's email address (*Their email address*).
+2. Choose **Member** or **Admin**, and select **Invite**.
+3. Select **Copy link**, and send the link by email or in a chat.
+
+The note says: *PacedMind sends no email: copy the link and send it yourself. Only an account with that confirmed email address can use it, within 14 days.* Anyone else who opens the link can't join with it.
+
+The invitations still waiting are listed below, each with its role and the date it ends, such as *Member · until 2026-11-21*. **Withdraw** cancels one. Inviting the same address again replaces its earlier link. Someone already in the workspace can't be invited (*They are a member already.*), and up to 100 invitations can wait at once.
+
+Nobody is invited as an owner: invite an admin or a member, then make them an owner from the member list.
+
+## Join a workspace
+
+### With an invitation link
+
+Open the link in a browser. Signed out, it opens the sign-in screen with *Sign in, or create an account, with the email address you were invited at to join your team.* Sign in, select **Create an account**, or use **Continue with Google**, with the invited address; once you're signed in, the invitation opens again. A new account confirms its email address first, with the link in the confirmation email, which leads back to the invitation. Signing in with Google confirms the address.
+
+The invitation page, *Join Acme*, says who invited whom, and as what, such as *Alex Kim invited sam@acme.com to join Acme as a member. Everyone in it sees and works on its shared areas.* Select **Accept invitation**: PacedMind opens **Today**, and the workspace's shared areas appear in the sidebar.
+
+When the invitation can't be accepted, the page says why:
+
+| When | The page says |
+| --- | --- |
+| The email address isn't confirmed yet | *Confirm your email address first: open the link PacedMind sent you, then this one again.* |
+| You're signed in with another address | *This invitation is for sam@acme.com, and you're signed in as sam@gmail.com. Sign in with the invited address to accept it.* |
+| It ran out or was withdrawn | *This invitation has expired or was withdrawn. Ask for a new one.* |
+| It was accepted already | *This invitation was accepted already.* |
+| You're in the workspace already | *You're a member of Acme already.* |
+| The link isn't right | *This invitation link isn't valid. Ask for a new one.* |
+
+### Through your email domain
+
+Owners and admins can let everyone at the company's email domain join as members, without an invitation. Under **Domains**, type the domain and select **Add domain**; with the field left empty, **Add domain** adds the domain of your own address, which the field shows. The note says: *Everyone whose confirmed email address is at one of these domains can join as a member without an invitation. Only your own address's domain, never a public mail provider's.*
+
+The domain has to be your own confirmed address's (*Add the domain of your own confirmed email address.*), and never one where anyone can have an address, such as gmail.com or outlook.com (*Anyone can have an address at gmail.com: invite people instead.*). A domain lets people into one workspace only (*Another workspace uses that domain.*). **Remove** stops it letting people in; those who joined through it stay.
+
+People whose confirmed address is at the domain see a line under the header: *Your team works in PacedMind: join Acme to see its shared areas.*, with **Join Acme** and **Not now**, which hides it in that browser for 30 days. **Settings → Team workspaces** lists those workspaces too, under **Join your team**, each *for @acme.com addresses* with **Join**. They join as members.
+
+## Shared areas
+
+Owners and admins add areas to the workspace under **Shared areas**:
+
+* **Create area**, with the area's name (*New area for the team*), makes a new shared area.
+* **Share an area** moves one of your own areas into the workspace, after the confirmation *Share Sales with Acme? Its projects and tasks move into the workspace for everyone in it, and can't be moved back.*
+
+Sharing an area moves it for good, with its projects and tasks and their sub-tasks, dependencies and reports. On the way:
+
+* links to work outside the area are dropped: dependencies on tasks elsewhere, tasks about a project in another area (and tasks elsewhere about its projects), and projects that start after a project elsewhere;
+* a task whose key the workspace already uses gets the area's next key;
+* an area can't come in while the workspace has an area with the same key: *The workspace has an area with the key SLS already: rename one of them first.*;
+* its projects and tasks no longer name a computer.
+
+A workspace numbers its tasks itself, by area key, so two members never get the same key.
+
+Shared areas appear in every member's sidebar with their projects, as their own areas do. Only owners and admins rename, recolor or delete a shared area. Deleting one deletes its projects and its tasks too, unlike one of your own areas, whose tasks move to the Inbox.
+
+A shared task stays in its workspace: in its details, **Area** and **Project** offer only the workspace's areas and projects, without **Inbox, no area**. Moving one of your own tasks into a shared area shares it in the same way.
+
+## Assign tasks
+
+A shared task can be assigned to one of the workspace's members. In the [task details](/tasks/task-details), **Assignee** offers **Nobody**, **You** and the other members, each with their email address. One of your own tasks can only be assigned to you, or to nobody.
+
+A task's row shows the assignee's initials; hover them for *Assigned to you* or *Assigned to Sam Lee*.
+
+### Assigned to me
+
+With a team workspace, or once a task is assigned to you, the sidebar has **Assigned to me** below **Today**: the open tasks assigned to you, in your own areas and in your team workspaces, grouped by status. The number beside it counts them. With none, the view says *Nothing is assigned to you*.
+
+Agents find the same tasks with [`list_tasks`](/mcp/tools/tasks#list_tasks) and `assignee: "me"`, and `get_overview` lists them under *Assigned to the user*.
+
+## Leave, remove people and change roles
+
+* **Leave**, next to the workspace's name, takes you out after *Leave Acme? You lose access to its shared areas at once.*
+* Owners and admins have **Remove** next to a member, after *Remove Sam Lee from Acme? Their assignments there are cleared; what they wrote stays.* Only an owner removes an owner.
+* Owners and admins change a member's role with the role next to their name: an owner picks **Owner**, **Admin** or **Member**; an admin picks **Admin** or **Member**, and doesn't change owners.
+
+A workspace always keeps an owner. The last owner can't leave, or become an admin or a member, while others are in the workspace: *The workspace needs an owner: make someone else an owner first.* The last member who leaves deletes the workspace with everything shared in it, after *Leave Acme? You're its last member: the workspace and everything shared in it are deleted.*
+
+## What happens to the data
+
+| When | What happens |
+| --- | --- |
+| Someone leaves or is removed | They lose access to the shared areas at once. Their assignments there are cleared and their webhooks there are deleted; requests about the workspace's tasks still waiting on their computers are dropped, and their calendar activities lose their link to its areas. What they wrote stays in the workspace, and their sessions stay theirs. |
+| Someone deletes their account | What they wrote in team workspaces stays there, under one of the workspace's owners. A workspace they were the only member of is deleted. The last owner of a workspace with other members can't delete the account: *You own a team workspace with other members: make one of them an owner first.* |
+| The last member leaves | The workspace is deleted with everything shared in it. |
+| **Settings → Data** | Its counts, copies of your data, putting a copy back, starting over and **Move to this computer** cover your own data only. Team workspaces stay in PacedMind Cloud as they are. See [Data](/settings#data). |
+
+## Billing
+
+The owner's PacedMind Cloud plan covers everyone's work in the workspace, so members need no plan of their own for it, and when no owner's Cloud is active any more the workspace turns read-only, with *This team workspace is read-only: its owner's PacedMind Cloud has ended.* (see [Accounts and Cloud](/accounts-and-cloud)).
+
+## Webhooks
+
+**My webhooks**, under each workspace, has your own webhooks: PacedMind posts JSON to an https address of yours when something happens to the workspace's tasks. Every member can add their own, up to ten per workspace; nobody else sees them, and they're deleted when you leave.
+
+1. Type the address, such as `https://hooks.example.com/pacedmind`.
+2. Tick the events. **A task is assigned to me** and **A task of mine changes status** are ticked to start with.
+3. Select **Add webhook**.
+4. The secret appears under *The webhook's secret, shown only now:*. Select **Copy secret** and keep it where your server reads it: it isn't shown again.
+
+Each webhook shows its address and events, a switch (**Webhook on**) to stop and restart it without deleting it, and **Delete**, after *Delete this webhook?*
+
+| Event | In the app | Sent when | To |
+| --- | --- | --- | --- |
+| `task.assigned` | **A task is assigned to me** | A task is assigned to you, or created assigned to you | Your webhooks, as the assignee |
+| `task.status_changed` | **A task of mine changes status** | A task assigned to you, or one you wrote, changes status | The assignee's and the author's webhooks |
+| `task.created` | **A task is created** | Any task is created in the workspace's shared areas | The webhooks of every member who ticked it |
+
+Changes you make yourself are sent too: `actor` in the body says who made them.
+
+The address is https on a public name: no IP address, port, user name or password, and no `localhost` or internal names such as `.local`, `.internal` or `.lan`. Otherwise: *A webhook's address is https on a public name, without a port or credentials.*
+
+### What's sent
+
+Each call is a `POST` with these headers:
+
+| Header | Value |
+| --- | --- |
+| `Content-Type` | `application/json` |
+| `User-Agent` | `PacedMind-Webhooks/1` |
+| `X-PacedMind-Event` | The event, such as `task.status_changed` |
+| `X-PacedMind-Delivery` | The call's number |
+| `X-PacedMind-Signature` | `sha256=` followed by the HMAC-SHA256 of the body with the webhook's secret, in hex |
+
+And a body such as:
+
+```json
+{
+  "event": "task.status_changed",
+  "at": "2026-11-07T10:42:05Z",
+  "workspace": { "id": "5b2e8c1a-3f4d-4e6b-9a7c-1d2e3f4a5b6c", "name": "Acme", "slug": "acme" },
+  "task": {
+    "id": 412,
+    "key": "SLS-14",
+    "title": "Send the renewal offer",
+    "status": "review",
+    "priority": 2,
+    "due_date": "2026-11-10",
+    "planned_date": "2026-11-09",
+    "area_id": "9d8c7b6a-5f4e-4d3c-8b2a-1f0e9d8c7b6a",
+    "project_id": null,
+    "previous_status": "progress",
+    "assignee": { "id": "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d", "name": "Sam Lee", "email": "sam@acme.com" },
+    "author": { "id": "f1e2d3c4-b5a6-4978-8a6b-5c4d3e2f1a0b", "name": "Alex Kim" }
+  },
+  "actor": { "id": "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d", "name": "Sam Lee" }
+}
+```
+
+| Field | What it holds |
+| --- | --- |
+| `event` | The event. |
+| `at` | When it happened, in UTC. |
+| `workspace` | The workspace's `id`, `name` and `slug`, its address. |
+| `task.status`, `task.previous_status` | `backlog`, `todo`, `progress` (in progress), `review` (in review), `done` or `canceled`. `previous_status` is the status before the change, and `null` for a new task. |
+| `task.priority` | `0` no priority, `1` urgent, `2` high, `3` medium, `4` low. |
+| `task.due_date`, `task.planned_date` | `YYYY-MM-DD`, a due date with `THH:mm` when it has a time, or `null`. |
+| `task.area_id`, `task.project_id` | The ids of its area and project, or `null`. |
+| `task.assignee` | Who it's assigned to, with `id`, `name` and `email`, or `null`. |
+| `task.author` | Who wrote the task. |
+| `actor` | Who made the change. |
+
+The body never holds the task's description, sub-tasks or reports. PacedMind makes each call once and waits up to 5 seconds for the answer; a call that fails isn't made again.
+
+### Check the signature
+
+Before trusting a call, compute the HMAC-SHA256 of the body exactly as it arrived, before parsing it, with the webhook's secret as the key: the secret as text, as it was shown, not decoded from hex. Then compare it with `X-PacedMind-Signature`. In Node.js:
+
+```js
+import crypto from 'node:crypto';
+import http from 'node:http';
+
+const secret = process.env.PACEDMIND_WEBHOOK_SECRET;
+
+http
+  .createServer((req, res) => {
+    const chunks = [];
+    req.on('data', (chunk) => chunks.push(chunk));
+    req.on('end', () => {
+      const rawBody = Buffer.concat(chunks);
+      const expected = Buffer.from('sha256=' + crypto.createHmac('sha256', secret).update(rawBody).digest('hex'));
+      const given = Buffer.from(String(req.headers['x-pacedmind-signature'] ?? ''));
+      const valid = given.length === expected.length && crypto.timingSafeEqual(given, expected);
+      if (!valid) {
+        res.writeHead(401).end();
+        return;
+      }
+      const call = JSON.parse(rawBody.toString('utf8'));
+      console.log(call.event, call.task.key, call.task.status);
+      res.writeHead(204).end();
+    });
+  })
+  .listen(3000);
+```
+
+## With agents
+
+Agents connected to PacedMind Cloud manage team workspaces with the [team workspace tools](/mcp/tools/team-workspaces): they list workspaces and their members, invite people (the link comes back for you to send), change roles, add domains, share areas and set up webhooks. `create_task`, `update_task` and the other task tools take an `assignee`, and `list_tasks` filters by `assignee` and `workspace`. Accepting an invitation and joining through a domain are yours to do, in the app.

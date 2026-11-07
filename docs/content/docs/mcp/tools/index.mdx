@@ -1,6 +1,6 @@
 ---
 title: Tool reference
-description: Conventions shared by all 44 tools of PacedMind's MCP server (references, dates, statuses, clearing values, errors) and an index of every tool.
+description: Conventions shared by all 56 tools of PacedMind's MCP server (references, dates, statuses, clearing values, errors) and an index of every tool.
 ---
 
 The pages in this section describe every tool of the `pacedmind` MCP server with its parameters and what it returns. Agents see the same descriptions and parameter schemas in their MCP client; this reference is for the people who use and configure them.
@@ -11,16 +11,18 @@ The pages in this section describe every tool of the `pacedmind` MCP server with
 
 | Thing | Refer to it by | Example |
 | --- | --- | --- |
-| Task | Its key, in any letter case | `WRK-12`, `wrk-12` |
+| Task | Its key, in any letter case. When one of the user's own tasks and a team workspace's task have the same key, the error names their ids, which work too | `WRK-12`, `wrk-12` |
 | Project | Its id, or its name; a unique part of the name also works | `q4`, `Q4 planning` |
 | Area | Its id, name or key | `work`, `Work`, `WRK` |
+| Team workspace | Its name, its address or its id, from `list_workspaces`; a unique part of the name also works | `workspace: "Acme"`, `workspace: "acme"` |
+| Member | `me` for the user, or a member's email address or user id, from `get_workspace`; their name works too when no other member has it | `member: "sam@acme.com"`, `assignee: "me"` |
 | The Inbox | `inbox`, `none` or `no area`, where an area is expected | `area: "inbox"` |
 | Calendar activity | Its event id, from `list_events` or `get_agenda` | `event: 7` |
 | Session | Its id, from `list_sessions` | `session: "3f2a9c1b"` |
 | Computer | Its name, whatever its capitals, the start of its name when no other starts the same way, or its id, from `list_computers` | `computer: "Studio Mac"` |
 | Preference | Its id, from `get_preferences` | `remove: [4]` |
 
-A name that matches several projects or areas returns an error listing them. A computer that doesn't match one returns an error that lists the user's computers.
+A name that matches several projects or areas returns an error listing them. A computer that doesn't match one returns an error that lists the user's computers, and a team workspace or a member that doesn't match one, an error that lists the user's workspaces or that workspace's members.
 
 ### Dates
 
@@ -41,8 +43,10 @@ Results repeat the date that was used, with its weekday, such as `2026-09-26 (Sa
 | Agent | `claude` (Claude Code) or `codex` (Codex) |
 | Who does a task | `claude`, `codex`, or `human` for a task only the user can do |
 | Color | A palette name (`Blue`, `Teal`, `Green`, `Olive`, `Sand`, `Clay`, `Rose`, `Violet`, `Mauve`, `Gray`) or a hex color such as `#7AA3AD` |
+| Role in a team workspace | `owner`, `admin` or `member` |
+| Webhook event | `task.assigned`, `task.status_changed` or `task.created` |
 
-Where a field can be cleared, `null` clears it: a date, a project, an area, an agent. Leaving a parameter out leaves the field as it is.
+Where a field can be cleared, `null` clears it: a date, a project, an area, an agent, an assignee. Leaving a parameter out leaves the field as it is.
 
 ### Results and errors
 
@@ -57,7 +61,7 @@ Each tool is marked for the client as one of:
 * **deletes**: removes something;
 * **starts an agent**: `start_session`, which starts an agent on one of the user's computers or in its cloud, and `request_changes`, which reopens an agent's session in a new terminal on the user's computer.
 
-Sessions that PacedMind starts get 20 of the tools, marked **Allowed without asking** on the tool pages. Claude Code runs them without asking; Codex follows its own approval settings. A session's token doesn't list the other tools, and they refuse it: *Sessions that PacedMind started can't use delete_task. Ask the user to do it in PacedMind.* See [What agents may do without asking](/agents/start-and-manage#what-agents-may-do-without-asking).
+Sessions that PacedMind starts get 24 of the tools, marked **Allowed without asking** on the tool pages. Claude Code runs them without asking; Codex follows its own approval settings. A session's token doesn't list the other tools, and they refuse it: *Sessions that PacedMind started can't use delete_task. Ask the user to do it in PacedMind.* See [What agents may do without asking](/agents/start-and-manage#what-agents-may-do-without-asking).
 
 ## All tools
 
@@ -93,6 +97,18 @@ Sessions that PacedMind starts get 20 of the tools, marked **Allowed without ask
 | [`delete_event`](/mcp/tools/calendar#delete_event) | Remove an activity. |
 | [`get_agenda`](/mcp/tools/calendar#get_agenda) | The day-by-day plan with focus blocks. |
 | [`reschedule_day`](/mcp/tools/calendar#reschedule_day) | Move one day's plans to another day. |
+| [`list_workspaces`](/mcp/tools/team-workspaces#list_workspaces) | The team workspaces the user is in, with their role and shared areas. |
+| [`create_workspace`](/mcp/tools/team-workspaces#create_workspace) | Make a team workspace, with the user as its owner. |
+| [`get_workspace`](/mcp/tools/team-workspaces#get_workspace) | A team workspace's members, invitations, domains and shared areas. |
+| [`invite_member`](/mcp/tools/team-workspaces#invite_member) | Invite someone by email; returns the link for the user to send. |
+| [`update_member`](/mcp/tools/team-workspaces#update_member) | Change a member's role. |
+| [`remove_member`](/mcp/tools/team-workspaces#remove_member) | Remove someone from a team workspace, or leave it. |
+| [`set_workspace_domain`](/mcp/tools/team-workspaces#set_workspace_domain) | Let everyone at an email domain join as a member. |
+| [`remove_workspace_domain`](/mcp/tools/team-workspaces#remove_workspace_domain) | Stop a domain letting people join. |
+| [`share_area`](/mcp/tools/team-workspaces#share_area) | Move one of the user's areas into a team workspace, for good. |
+| [`list_webhooks`](/mcp/tools/team-workspaces#list_webhooks) | The user's webhooks in their team workspaces. |
+| [`set_webhook`](/mcp/tools/team-workspaces#set_webhook) | Add or change one of the user's webhooks. |
+| [`delete_webhook`](/mcp/tools/team-workspaces#delete_webhook) | Delete one of the user's webhooks. |
 | [`list_computers`](/mcp/tools/computers#list_computers) | The user's computers, what their agents have, and what each does with a session you ask for. |
 | [`set_folder`](/mcp/tools/computers#set_folder) | Ask a computer to use a folder for a project, an area or a task. |
 | [`list_task_note_displays`](/mcp/tools/computers#list_task_note_displays) | Connected displays, remembered choice and recent note delivery results. |
@@ -115,5 +131,6 @@ Sessions that PacedMind starts get 20 of the tools, marked **Allowed without ask
 * **[Areas and projects](/mcp/tools/areas-and-projects)**
 * **[Tasks](/mcp/tools/tasks)**
 * **[Calendar and agenda](/mcp/tools/calendar)**
+* **[Team workspaces](/mcp/tools/team-workspaces)**
 * **[Computers](/mcp/tools/computers)**
 * **[Sessions](/mcp/tools/sessions)**

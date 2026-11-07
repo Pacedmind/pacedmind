@@ -441,6 +441,12 @@ export interface PreferencePatch {
 /** In their topics' order, then as they were added. */
 export const byTopic = (a: Preference, b: Preference) => topicOrder(a.topic, b.topic) || a.id - b.id;
 
+/**
+ * A refusal written for people: the database's own words (a rule it holds, such as who may invite) or a store's. MCP
+ * tools pass it on as it is, like their own errors.
+ */
+export class Refused extends Error {}
+
 /** What the local store answers for everything about team workspaces: they're PacedMind Cloud's. */
 export const CLOUD_ONLY_WORKSPACES = "Team workspaces need PacedMind Cloud: sign in to use them.";
 
