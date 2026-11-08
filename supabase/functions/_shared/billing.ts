@@ -5,9 +5,10 @@
 // row through row level security (a two-factor session that still exists, private.session_ok()); only the webhook
 // writes, with the service role, and only the billing table.
 import Stripe from "npm:stripe@22.6.2";
-import { createClient } from "npm:@supabase/supabase-js@2.117.2";
+import { env, userDb } from "./supabase.ts";
 
 export { Stripe };
+export { serviceDb } from "./supabase.ts";
 
 export class HttpError extends Error {
   constructor(readonly status: number, message: string) {
@@ -15,38 +16,10 @@ export class HttpError extends Error {
   }
 }
 
-function env(name: string): string {
-  const value = Deno.env.get(name);
-  if (!value) throw new Error(`${name} isn't set: npx supabase secrets set ${name}=…`);
-  return value;
-}
-
 let client: Stripe | null = null;
 export function stripe(): Stripe {
   client ??= new Stripe(env("STRIPE_SECRET_KEY"), { httpClient: Stripe.createFetchHttpClient() });
   return client;
-}
-
-/** Supabase's own keys for this project: the new ones (JSON maps) where the project has them, else the old JWTs. */
-function supabaseKey(kind: "publishable" | "secret"): string {
-  const map = Deno.env.get(kind === "publishable" ? "SUPABASE_PUBLISHABLE_KEYS" : "SUPABASE_SECRET_KEYS");
-  if (map) {
-    try {
-      const keys = JSON.parse(map) as Record<string, unknown>;
-      const key = keys.default ?? Object.values(keys)[0];
-      if (typeof key === "string" && key) return key;
-    } catch {
-      // Not JSON: fall back to the old keys.
-    }
-  }
-  return env(kind === "publishable" ? "SUPABASE_ANON_KEY" : "SUPABASE_SERVICE_ROLE_KEY");
-}
-
-const noSession = { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false };
-
-/** The service role: only the webhook uses it, to write billing rows. */
-export function serviceDb() {
-  return createClient(env("SUPABASE_URL"), supabaseKey("secret"), { auth: noSession });
 }
 
 export type BillingRow = {
@@ -71,10 +44,7 @@ export type BillingRow = {
 export async function caller(req: Request): Promise<{ row: BillingRow; email: string | null }> {
   const auth = req.headers.get("Authorization") ?? "";
   if (!/^Bearer [\w-]+\.[\w-]+\.[\w-]+$/.test(auth)) throw new HttpError(401, "Sign in again.");
-  const db = createClient(env("SUPABASE_URL"), supabaseKey("publishable"), {
-    auth: noSession,
-    global: { headers: { Authorization: auth } },
-  });
+  const db = userDb(auth);
   const { data, error } = await db.from("billing").select("*").maybeSingle();
   if (error || !data) throw new HttpError(401, "Sign in again.");
   const { data: user } = await db.auth.getUser(auth.slice("Bearer ".length));

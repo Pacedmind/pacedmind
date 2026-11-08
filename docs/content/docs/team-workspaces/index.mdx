@@ -54,7 +54,7 @@ Nobody is invited as an owner: invite an admin or a member, then make them an ow
 
 ### With an invitation link
 
-Open the link in a browser. Signed out, it opens the sign-in screen with *Sign in, or create an account, with the email address you were invited at to join your team.* Sign in, select **Create an account**, or use **Continue with Google**, with the invited address; once you're signed in, the invitation opens again. A new account confirms its email address first, with the link in the confirmation email, which leads back to the invitation. Signing in with Google confirms the address.
+Open the link in a browser and sign in to your PacedMind account. If the invitation went to your confirmed sign-in or work email, you can accept it. If it went to another address you use for work, select **Send verification code** on the invitation page. Enter the code from that mailbox and select **Confirm work email**. The invitation is then ready to accept on the same account.
 
 The invitation page, *Join Acme*, says who invited whom, and as what, such as *Alex Kim invited sam@acme.com to join Acme as a member. Everyone in it sees and works on its shared areas.* Select **Accept invitation**: PacedMind opens **Today**, and the workspace's shared areas appear in the sidebar.
 
@@ -62,8 +62,7 @@ When the invitation can't be accepted, the page says why:
 
 | When | The page says |
 | --- | --- |
-| The email address isn't confirmed yet | *Confirm your email address first: open the link PacedMind sent you, then this one again.* |
-| You're signed in with another address | *This invitation is for sam@acme.com, and you're signed in as sam@gmail.com. Sign in with the invited address to accept it.* |
+| The invitation went to a different address | *Confirm sam@acme.com as your work email to accept this invitation on this account.* |
 | It ran out or was withdrawn | *This invitation has expired or was withdrawn. Ask for a new one.* |
 | It was accepted already | *This invitation was accepted already.* |
 | You're in the workspace already | *You're a member of Acme already.* |
@@ -71,18 +70,22 @@ When the invitation can't be accepted, the page says why:
 
 ### Through your email domain
 
-Owners and admins can let everyone at the company's email domain join as members, without an invitation. Under **Domains**, type the domain and select **Add domain**; with the field left empty, **Add domain** adds the domain of your own address, which the field shows. The note says: *Everyone whose confirmed email address is at one of these domains can join as a member without an invitation. Only your own address's domain, never a public mail provider's.*
+Owners and admins can let people at the company's email domain join as members without an invitation. Under **Domains**, type the domain and select **Add domain**. With the field left empty, **Add domain** uses the domain shown in the field. Either a confirmed sign-in address or a confirmed work email can match a domain.
 
 The domain has to be your own confirmed address's (*Add the domain of your own confirmed email address.*), and never one where anyone can have an address, such as gmail.com or outlook.com (*Anyone can have an address at gmail.com: invite people instead.*). A domain lets people into one workspace only (*Another workspace uses that domain.*). **Remove** stops it letting people in; those who joined through it stay.
 
-People whose confirmed address is at the domain see a line under the header: *Your team works in PacedMind: join Acme to see its shared areas.*, with **Join Acme** and **Not now**, which hides it in that browser for 30 days. **Settings → Team workspaces** lists those workspaces too, under **Join your team**, each *for @acme.com addresses* with **Join**. They join as members.
+People whose confirmed address is at the domain see a line under the header: *Your team works in PacedMind: join Acme to see its shared areas.*, with **Join Acme** and **Not now**, which hides it in that browser for 30 days. **Settings → Team workspaces** lists those workspaces too, under **Join your team**, each *for @acme.com addresses* with **Join**. They join as members. After an administrator removes a member, that person needs a new invitation to return.
+
+## Confirm a work email
+
+In **Settings → Team workspaces → Work email**, enter your work address, select **Send verification code**, and enter the code from that mailbox within 15 minutes. You keep signing in with the same PacedMind account. Teams you join through your work address see that address in their member list. Confirming a new work address replaces the previous one. **Remove** clears the address for future invitations and domain joins. Team memberships are managed by each team's administrators.
 
 ## Shared areas
 
 Owners and admins add areas to the workspace under **Shared areas**:
 
 * **Create area**, with the area's name (*New area for the team*), makes a new shared area.
-* **Share an area** moves one of your own areas into the workspace, after the confirmation *Share Sales with Acme? Its projects and tasks move into the workspace for everyone in it, and can't be moved back.*
+* **Move an area to the team** opens a confirmation naming the selected area and team. Moving it gives every team member access to the area's projects, tasks, reports and attachments.
 
 Sharing an area moves it for good, with its projects and tasks and their sub-tasks, dependencies and reports. On the way:
 

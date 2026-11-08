@@ -2,13 +2,14 @@
 
 import { useState, type ReactNode } from "react";
 import {
-  acceptInviteAction, addWorkspaceDomainAction, createWorkspaceAction, renameWorkspaceAction, createWorkspaceAreaAction, deleteWebhookAction, dismissJoinPromptAction, inviteMemberAction,
+  acceptInviteAction, addWorkspaceDomainAction, confirmWorkEmailAction, createWorkspaceAction, renameWorkspaceAction, createWorkspaceAreaAction, deleteWebhookAction, dismissJoinPromptAction, inviteMemberAction,
   joinWorkspaceAction, removeMemberAction, removeWorkspaceDomainAction, revokeInviteAction, setMemberRoleAction, setWebhookAction,
-  shareAreaAction,
+  removeWorkEmailAction, requestWorkEmailAction, shareAreaAction,
 } from "@/app/actions";
 import {
   WEBHOOK_EVENTS, manages, type Area, type JoinableWorkspace, type MemberWebhook, type WebhookEvent, type WorkspaceDetails, type WorkspaceRole,
 } from "@/lib/types";
+import type { WorkEmailState } from "@/server/work-email";
 import { useTranslation } from "./language";
 import { AreaMark } from "./icons";
 import { PersonMark } from "./people";
@@ -46,10 +47,60 @@ function useCopy() {
     navigator.clipboard.writeText(text).then(() => toast(tx("{0} copied", [what])), () => toast(tx("Couldn't copy"), "error"));
 }
 
+export function WorkEmailSettings({ state, invitedEmail }: { state: WorkEmailState; invitedEmail?: string }) {
+  const tx = useTranslation();
+  const { run, pending } = useAction();
+  const [email, setEmail] = useState(state.pendingEmail ?? "");
+  const [code, setCode] = useState("");
+  const target = invitedEmail ?? email;
+  const pendingEmail = !invitedEmail || state.pendingEmail === invitedEmail ? state.pendingEmail : null;
+
+  return <Box title={tx("Work email")} note={tx("Use a confirmed work email for teams and invitations while signing in to this account as usual.")}>
+    {state.email && !invitedEmail && <Line>
+      <span className="min-w-0 flex-1 break-all text-[13px] text-fg">{state.email}</span>
+      <span className="text-[12px] text-mut2">{tx("Confirmed")}</span>
+      <Button size="sm" disabled={pending} onClick={() => {
+        if (confirm(tx("Remove {0} as your work email?", [state.email]))) run(removeWorkEmailAction);
+      }}>{tx("Remove")}</Button>
+    </Line>}
+    <form className="flex flex-wrap items-center gap-2 px-3.5 py-2.5" onSubmit={(event) => {
+      event.preventDefault();
+      run(async () => {
+        const result = await requestWorkEmailAction(target);
+        if (result.ok) setCode("");
+        return result;
+      });
+    }}>
+      <input className={input} type="email" autoComplete="email" aria-label={tx("Work email")} placeholder={tx("Work email")}
+        maxLength={254} value={target} readOnly={!!invitedEmail} onChange={(event) => setEmail(event.target.value)} required />
+      <Button size="sm" type="submit" disabled={pending || !target.trim()}>{tx("Send verification code")}</Button>
+    </form>
+    {pendingEmail && <form className="border-t border-line px-3.5 py-2.5" onSubmit={(event) => {
+      event.preventDefault();
+      run(async () => {
+        const result = await confirmWorkEmailAction(pendingEmail, code);
+        if (result.ok) {
+          setCode("");
+          setEmail("");
+        }
+        return result;
+      });
+    }}>
+      <p className="mb-2 break-all text-[12px] text-mut">{tx("Enter the code sent to {0}.", [pendingEmail])}</p>
+      <div className="flex flex-wrap items-center gap-2">
+        <input className={input} autoComplete="one-time-code" autoCapitalize="characters" spellCheck={false}
+          placeholder={tx("Verification code")} aria-label={tx("Verification code")} maxLength={20}
+          value={code} onChange={(event) => setCode(event.target.value)} required />
+        <Button variant="primary" size="sm" type="submit" disabled={pending || !code.trim()}>{tx("Confirm work email")}</Button>
+      </div>
+    </form>}
+  </Box>;
+}
+
 /** Settings → Team workspaces: the teams you're in, their people, invitations, domains, shared areas and your webhooks. */
-export function WorkspaceSettings({ cloud, workspaces, me, areas, hooks, joinable, emailDomain }: {
+export function WorkspaceSettings({ cloud, workspaces, me, areas, hooks, joinable, emailDomain, workEmail }: {
   cloud: boolean; workspaces: WorkspaceDetails[]; me: string | null; areas: Area[]; hooks: MemberWebhook[]; joinable: JoinableWorkspace[];
-  emailDomain: string | null;
+  emailDomain: string | null; workEmail: WorkEmailState | null;
 }) {
   const ownAreas = areas.filter((a) => !a.workspaceId);
   const tx = useTranslation();
@@ -61,6 +112,7 @@ export function WorkspaceSettings({ cloud, workspaces, me, areas, hooks, joinabl
     </p></Box>;
   }
   return <div className="flex flex-col gap-7">
+    {workEmail && <WorkEmailSettings state={workEmail} />}
     {joinable.length > 0 && <Box title={tx("Join your team")}>
       {joinable.map((w) => <Line key={w.id}>
         <span className="min-w-0 flex-1 truncate text-[13px] text-fg">{w.name}</span>
@@ -175,7 +227,7 @@ function Workspace({ workspace: w, me, ownAreas, shared, hooks, emailDomain }: {
       </form>}
     </Box>
 
-    <Box title={tx("Shared areas")} note={tx("Everyone in the workspace sees and works on these areas' projects and tasks. Sharing one of your areas moves its work there for good.")}>
+    <Box title={tx("Shared areas")} note={tx("Everyone in the workspace sees these areas and their work. Moving an area to the team is permanent.")}>
       {shared.map((a) => <Line key={a.id}>
         <AreaMark area={a} dot={7} />
         <span className="min-w-0 flex-1 truncate text-[13px] text-fg">{a.name}</span>
@@ -195,11 +247,11 @@ function Workspace({ workspace: w, me, ownAreas, shared, hooks, emailDomain }: {
           <Button size="sm" type="submit" disabled={pending || !areaName.trim()}>{tx("Create area")}</Button>
         </form>
         {ownAreas.length > 0 && <Menu align="right" width={240}
-          trigger={<Button size="sm" disabled={pending}>{tx("Share an area")}</Button>}
+          trigger={<Button size="sm" disabled={pending}>{tx("Move an area to the team")}</Button>}
           items={ownAreas.map((a) => ({ value: a.id, label: a.name, icon: <AreaMark area={a} dot={7} /> }))}
           onSelect={(id) => {
             const a = ownAreas.find((x) => x.id === id);
-            if (a && confirm(tx("Share {0} with {1}? Its projects and tasks move into the workspace for everyone in it, and can't be moved back.", [a.name, w.name]))) {
+            if (a && confirm(tx("Move {0} to {1}? Everyone on the team will see its projects, tasks, reports and attachments. Links to work outside the area are removed. This move is permanent.", [a.name, w.name]))) {
               run(() => shareAreaAction(a.id, w.id));
             }
           }} />}

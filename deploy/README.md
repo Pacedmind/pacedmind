@@ -47,7 +47,16 @@ In the project's dashboard (Authentication > URL Configuration):
 - Site URL: `https://app.pacedmind.com`. Email links depend on it: Supabase sends a link back to any address on the Site URL's own host (the web app's `/auth/callback?next=…`) and to loopback addresses (the desktop app's `http://127.0.0.1:4319/auth/callback?next=…`, development's 4320). Anything else has to match a redirect URL, and an entry without a wildcard doesn't match the `?next=…` those links carry.
 - Redirect URLs: the three exact callback URLs from SECURITY.md's checklist, with no wildcards.
 
-Apply the schema (`supabase/migrations`) with `npx supabase link --project-ref <ref>` and `npx supabase db push`, or through the Supabase MCP server. Before real users sign up, set up custom SMTP (Authentication > Emails): the built-in sender is rate-limited and meant for testing. The domain already has OVH email, so an address like `noreply@pacedmind.com` through OVH's SMTP server works.
+With Supabase CLI 3, apply the schema in `supabase/migrations` to the intended project with `npx supabase db push --remote=<ref>`. Before real users sign up, set up custom SMTP under **Authentication → Emails**. The built-in Auth sender is rate-limited and meant for testing. PacedMind's domain has OVH email for Auth mail.
+
+Work email verification uses the `work-email` Edge Function. Set `WORK_EMAIL_RESEND_API_KEY` to a sending key and `WORK_EMAIL_FROM` to a sender on a domain verified in Resend. Keep these values in a private file outside the checkout. Set the secrets and deploy the function after the schema and before the new web app or desktop installer.
+
+```bash
+npx supabase secrets set --remote=<ref> --env-file <private-file>
+npx supabase functions deploy work-email --remote=<ref>
+```
+
+After deployment, check delivery to a test mailbox and accept a team invitation sent to that address while signed in with a different confirmed login. The email contains a code that the user enters in PacedMind.
 
 ## 2. Set up the server (once)
 

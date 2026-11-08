@@ -82,7 +82,8 @@ jobs:
       - uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
-      - run: deno check billing-checkout/index.ts billing-portal/index.ts stripe-webhook/index.ts
+      - run: deno check billing-checkout/index.ts billing-portal/index.ts stripe-webhook/index.ts work-email/index.ts
+      - run: deno test --allow-env work-email/send_test.ts
 
   mobile:
     name: Mobile source and bundles

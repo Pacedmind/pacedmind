@@ -57,6 +57,8 @@ try {
   console.log("hidden_projects.sql: visibility, account isolation, preserved tasks and copy restoration passed; fixtures rolled back.");
   await db.exec(await read("supabase/tests/workspaces.sql"));
   console.log("workspaces.sql: membership isolation, invitations, domains, roles, keys, assignees, billing, leaving, account deletion, copies and webhooks passed; fixtures rolled back.");
+  await db.exec(await read("supabase/tests/work_email.sql"));
+  console.log("work_email.sql: proof access, rate limits, replay, expiry, team admission and private areas passed.");
   const { rows } = await db.query("select count(*)::int as accounts from auth.users");
   if (rows[0].accounts !== 0) throw new Error("SQL test fixtures were not rolled back.");
   console.log("Auth HTTP/OAuth integration and hosted security advisors still require a Supabase test stack.");
