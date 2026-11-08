@@ -430,6 +430,10 @@ verify_jwt = false
 [functions.stripe-webhook]
 verify_jwt = false
 
+# The mail function checks the caller's own live planner session in the database.
+[functions.work-email]
+verify_jwt = false
+
 [analytics]
 enabled = true
 port = 54327

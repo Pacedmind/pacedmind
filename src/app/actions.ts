@@ -29,6 +29,8 @@ import { approveFolder, isFolderApproval, refuseFolder } from "@/server/folder-r
 import { STEP_UP_REFUSED, codeFreshUntil, refusedStepUp, verifyCode } from "@/server/step-up";
 import { MODE, readAuthState, supabase } from "@/server/supabase";
 import { cloudOrigin } from "@/server/supabase-config";
+import { getTranslation } from "@/server/i18n";
+import { confirmWorkEmail, removeWorkEmail, requestWorkEmail } from "@/server/work-email";
 import { CLOUD_ONLY_WORKSPACES, inviteLink } from "@/server/store/shared";
 import { nextColor } from "@/lib/colors";
 import { guardAction as guard } from "@/server/guard";
@@ -1239,6 +1241,30 @@ export async function revokeInviteAction(id: string): Promise<Result> {
   return changing(() => repo.revokeInvite(id), () => "Invitation withdrawn");
 }
 
+export async function requestWorkEmailAction(email: string): Promise<Result> {
+  const tx = await getTranslation();
+  if (typeof email !== "string" || email.length > 254 || !email.trim()) {
+    return { ok: false, error: tx("Enter a valid work email address.") };
+  }
+  const result = await changing(() => requestWorkEmail(email.trim(), tx.language), () => tx("Verification code sent."));
+  return { ...result, error: result.error ? tx(result.error) : undefined };
+}
+
+export async function confirmWorkEmailAction(email: string, code: string): Promise<Result> {
+  const tx = await getTranslation();
+  if (typeof email !== "string" || email.length > 254 || typeof code !== "string" || code.length > 20) {
+    return { ok: false, error: tx("That verification code is incorrect.") };
+  }
+  const result = await changing(() => confirmWorkEmail(email, code), () => tx("Work email confirmed."));
+  return { ...result, error: result.error ? tx(result.error) : undefined };
+}
+
+export async function removeWorkEmailAction(): Promise<Result> {
+  const tx = await getTranslation();
+  const result = await changing(removeWorkEmail, () => tx("Work email removed."));
+  return { ...result, error: result.error ? tx(result.error) : undefined };
+}
+
 export async function setMemberRoleAction(workspaceId: string, userId: string, role: string): Promise<Result> {
   if (!ROLE_NAMES.has(role)) return { ok: false, error: "A role is owner, admin or member." };
   return changing(() => repo.setMemberRole(workspaceId, userId, role as WorkspaceRole));
@@ -1284,7 +1310,7 @@ export async function deleteWebhookAction(id: string): Promise<Result> {
   return changing(() => repo.deleteWebhook(id), () => "Webhook deleted");
 }
 
-/** Accepts an invitation with the signed-in account (its confirmed address must be the invited one). */
+/** Accepts an invitation using one of the signed-in account's confirmed addresses. */
 export async function acceptInviteAction(token: string): Promise<Result> {
   if (typeof token !== "string") return { ok: false, error: "That invitation link is incomplete." };
   const r = await changing(() => repo.acceptInvite(token));

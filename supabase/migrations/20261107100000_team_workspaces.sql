@@ -77,6 +77,16 @@ create table public.workspace_domains (
   primary key (workspace_id, domain)
 );
 
+-- An explicit removal requires a new invitation, even if the old member still has a confirmed team address.
+create table private.workspace_removals (
+  workspace_id uuid not null references public.workspaces (id) on delete cascade,
+  user_id uuid not null references auth.users (id) on delete cascade,
+  removed_at timestamptz not null default clock_timestamp(),
+  primary key (workspace_id, user_id)
+);
+alter table private.workspace_removals enable row level security;
+revoke all on private.workspace_removals from public, anon, authenticated, service_role;
+
 -- Task numbers per workspace and key prefix (key_counters holds each account's own).
 create table private.workspace_key_counters (
   workspace_id uuid not null references public.workspaces (id) on delete cascade,
@@ -129,13 +139,172 @@ language sql stable security definer set search_path = '' as $$
   select lower(u.email) from auth.users u where u.id = who and u.email_confirmed_at is not null and u.email like '%_@_%'
 $$;
 
--- How a member is shown: the name from their sign-in, else their email address's name.
-create function private.member_name(who uuid) returns text
+-- A second, verified address for team admission. It grants no right to sign in to the account.
+create table private.work_emails (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  email text not null unique
+);
+
+create table private.work_email_codes (
+  user_id uuid not null references auth.users(id) on delete cascade,
+  email text not null,
+  digest text not null,
+  requested_at timestamptz not null,
+  attempts integer not null default 0,
+  consumed boolean not null default false,
+  primary key (user_id, requested_at)
+);
+create index work_email_codes_by_address on private.work_email_codes (email, requested_at);
+create index work_email_codes_by_time on private.work_email_codes (requested_at);
+
+alter table private.work_emails enable row level security;
+alter table private.work_email_codes enable row level security;
+revoke all on private.work_emails, private.work_email_codes from public, anon, authenticated, service_role;
+
+-- A confirmed login address takes precedence if it becomes another account's primary address.
+create function private.workspace_addresses(who uuid) returns table (email text, is_work boolean)
+language sql stable security definer set search_path = '' as $$
+  select p.email, false from (select private.verified_email(who) as email) p where p.email is not null
+  union all
+  select e.email, true from private.work_emails e
+  where e.user_id = who and not exists (
+    select 1 from auth.users u where u.email_confirmed_at is not null and lower(u.email) = e.email
+  )
+$$;
+
+create function private.get_work_email() returns jsonb
+language plpgsql stable security definer set search_path = '' as $$
+declare
+  v_user uuid := auth.uid();
+begin
+  if v_user is null or not private.planner_session_ok() then
+    raise exception 'Sign in to manage your work email.' using errcode = '42501';
+  end if;
+  return jsonb_build_object(
+    'user_id', v_user,
+    'email', (select e.email from private.workspace_addresses(v_user) e where e.is_work),
+    'pending_email', (
+      select c.email from private.work_email_codes c
+      where c.user_id = v_user and not c.consumed and c.attempts < 5
+        and c.requested_at > now() - interval '15 minutes'
+      order by c.requested_at desc limit 1
+    )
+  );
+end $$;
+
+-- Only the mail function can set the expected proof. It authenticates the caller with get_work_email().
+create function private.issue_work_email_code(account uuid, target_email text, code_digest text) returns text
+language plpgsql security definer set search_path = '' as $$
+declare
+  v_email text := lower(btrim(coalesce(target_email, '')));
+  v_now timestamptz;
+begin
+  if char_length(v_email) > 254 or
+     v_email !~ '^[a-z0-9._+!#$%&''*=/^?{|}~-]{1,64}@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*\.[a-z]{2,63}$' then
+    raise exception 'Enter a valid work email address.' using errcode = '22023';
+  end if;
+  if code_digest is null or code_digest !~ '^[0-9a-f]{64}$' then
+    raise exception 'Invalid verification proof.' using errcode = '22023';
+  end if;
+  if exists (select 1 from private.workspace_addresses(account) e where e.email = v_email) then
+    raise exception 'This email is already confirmed on your account.' using errcode = '22023';
+  end if;
+  perform pg_advisory_xact_lock(hashtextextended('work-email-account:' || account::text, 0));
+  perform pg_advisory_xact_lock(hashtextextended('work-email-address:' || v_email, 0));
+  v_now := clock_timestamp();
+  if exists (select 1 from private.work_email_codes c
+             where c.user_id = account and c.requested_at > v_now - interval '1 minute')
+     or (select count(*) from private.work_email_codes c
+         where c.user_id = account and c.requested_at > v_now - interval '1 hour') >= 5
+     or (select count(*) from private.work_email_codes c
+         where c.email = v_email and c.requested_at > v_now - interval '1 hour') >= 5 then
+    raise exception 'Too many codes requested. Try again later.' using errcode = 'PT429';
+  end if;
+  delete from private.work_email_codes where requested_at <= v_now - interval '1 day';
+  update private.work_email_codes set consumed = true where user_id = account and not consumed;
+  insert into private.work_email_codes (user_id, email, digest, requested_at) values (account, v_email, code_digest, v_now);
+  return v_email;
+end $$;
+
+create function private.confirm_work_email(target_email text, code text) returns text
+language plpgsql security definer set search_path = '' as $$
+declare
+  v_user uuid := auth.uid();
+  v_code text := case when char_length(coalesce(code, '')) <= 20
+    then upper(regexp_replace(coalesce(code, ''), '[-[:space:]]', '', 'g')) else '' end;
+  v_pending private.work_email_codes;
+begin
+  if v_user is null or not private.planner_session_ok() then
+    raise exception 'Sign in to manage your work email.' using errcode = '42501';
+  end if;
+  perform pg_advisory_xact_lock(hashtextextended('work-email-account:' || v_user::text, 0));
+  select * into v_pending from private.work_email_codes c
+  where c.user_id = v_user and not c.consumed
+  order by c.requested_at desc limit 1;
+  if not found or v_pending.email is distinct from lower(btrim(target_email))
+     or v_pending.requested_at <= clock_timestamp() - interval '15 minutes' or v_pending.attempts >= 5 then
+    return 'expired';
+  end if;
+  -- Return errors as values so the attempt increment is committed on a wrong code.
+  update private.work_email_codes set attempts = attempts + 1
+  where user_id = v_user and requested_at = v_pending.requested_at;
+  if v_code !~ '^[A-HJ-NP-Z2-9]{10}$' or encode(sha256(convert_to(v_code, 'UTF8')), 'hex') <> v_pending.digest then
+    return case when v_pending.attempts = 4 then 'expired' else 'wrong' end;
+  end if;
+  update private.work_email_codes set consumed = true
+  where user_id = v_user and requested_at = v_pending.requested_at;
+  if exists (select 1 from auth.users u where u.email_confirmed_at is not null and lower(u.email) = v_pending.email) then
+    return 'in_use';
+  end if;
+  begin
+    insert into private.work_emails (user_id, email) values (v_user, v_pending.email)
+    on conflict (user_id) do update set email = excluded.email;
+  exception when unique_violation then
+    return 'in_use';
+  end;
+  return 'verified';
+end $$;
+
+create function private.remove_work_email() returns void
+language plpgsql security definer set search_path = '' as $$
+declare
+  v_user uuid := auth.uid();
+begin
+  if v_user is null or not private.planner_session_ok() then
+    raise exception 'Sign in to manage your work email.' using errcode = '42501';
+  end if;
+  perform pg_advisory_xact_lock(hashtextextended('work-email-account:' || v_user::text, 0));
+  delete from private.work_emails where user_id = v_user;
+  update private.work_email_codes set consumed = true where user_id = v_user and not consumed;
+end $$;
+
+-- The exposed functions carry the caller's privileges into the narrow, checked private functions.
+create function public.get_work_email() returns jsonb
+language sql stable set search_path = '' as $$ select private.get_work_email() $$;
+create function public.confirm_work_email(target_email text, code text) returns text
+language sql set search_path = '' as $$ select private.confirm_work_email(target_email, code) $$;
+create function public.remove_work_email() returns void
+language sql set search_path = '' as $$ select private.remove_work_email() $$;
+create function public.issue_work_email_code(account uuid, target_email text, code_digest text) returns text
+language sql set search_path = '' as $$ select private.issue_work_email_code(account, target_email, code_digest) $$;
+
+revoke execute on function private.workspace_addresses(uuid), private.get_work_email(), private.confirm_work_email(text, text),
+  private.remove_work_email(), private.issue_work_email_code(uuid, text, text), public.get_work_email(),
+  public.confirm_work_email(text, text), public.remove_work_email(), public.issue_work_email_code(uuid, text, text)
+  from public, anon, authenticated, service_role;
+grant execute on function private.get_work_email(), private.confirm_work_email(text, text), private.remove_work_email(),
+  public.get_work_email(), public.confirm_work_email(text, text), public.remove_work_email() to authenticated;
+grant usage on schema private to service_role;
+grant execute on function private.issue_work_email_code(uuid, text, text), public.issue_work_email_code(uuid, text, text)
+  to service_role;
+
+-- How a member is shown: the account's display name, or the local part of the address the team sees.
+create function private.member_name(who uuid, visible_email text) returns text
 language sql stable security definer set search_path = '' as $$
   select left(coalesce(
     nullif(btrim(regexp_replace(u.raw_user_meta_data ->> 'full_name', '[[:cntrl:]]', '', 'g')), ''),
     nullif(btrim(regexp_replace(u.raw_user_meta_data ->> 'name', '[[:cntrl:]]', '', 'g')), ''),
-    nullif(split_part(u.email, '@', 1), ''),
+    nullif(split_part(visible_email, '@', 1), ''),
     'Member'), 120)
   from auth.users u where u.id = who
 $$;
@@ -767,6 +936,7 @@ declare
   v_base text;
   v_slug text;
   v_id uuid;
+  v_email text;
   i integer := 1;
 begin
   if v_user is null or not private.planner_or_agent() then
@@ -794,10 +964,11 @@ begin
     i := i + 1;
     v_slug := v_base || '-' || i;
   end loop;
+  select e.email into v_email from private.workspace_addresses(v_user) e order by e.is_work desc limit 1;
+  v_email := coalesce(v_email, (select lower(u.email) from auth.users u where u.id = v_user), '');
   insert into public.workspaces (name, slug, created_by) values (v_name, v_slug, v_user) returning id into v_id;
   insert into public.workspace_members (workspace_id, user_id, role, name, email, joined_via)
-    values (v_id, v_user, 'owner', private.member_name(v_user),
-            coalesce((select lower(u.email) from auth.users u where u.id = v_user), ''), 'created');
+    values (v_id, v_user, 'owner', private.member_name(v_user, v_email), v_email, 'created');
   return v_id;
 end $$;
 
@@ -825,7 +996,8 @@ declare
   v_id uuid;
   v_expires timestamptz;
 begin
-  if not private.planner_or_agent() or coalesce(private.workspace_role(ws, auth.uid()), '') not in ('owner', 'admin') then
+  perform 1 from public.workspaces w where w.id = ws and private.planner_or_agent() for update;
+  if not found or coalesce(private.workspace_role(ws, auth.uid()), '') not in ('owner', 'admin') then
     raise exception 'Only the workspace''s owners and admins invite people.' using errcode = '42501';
   end if;
   if char_length(v_email) > 320 or v_email !~ '^[^@[:space:]]+@[a-z0-9.-]+\.[a-z]{2,63}$' then
@@ -834,8 +1006,9 @@ begin
   if v_role not in ('admin', 'member') then
     raise exception 'Invite people as admin or member; make an owner from the members.' using errcode = '22023';
   end if;
-  if exists (select 1 from public.workspace_members m join auth.users u on u.id = m.user_id
-             where m.workspace_id = ws and lower(u.email) = v_email) then
+  if exists (select 1 from public.workspace_members m
+             cross join lateral private.workspace_addresses(m.user_id) e
+             where m.workspace_id = ws and e.email = v_email) then
     raise exception 'They are a member already.' using errcode = '23505';
   end if;
   if (select count(*) from public.workspace_invites i
@@ -846,8 +1019,8 @@ begin
   update public.workspace_invites i set revoked_at = now()
     where i.workspace_id = ws and i.email = v_email and i.accepted_at is null and i.revoked_at is null;
   v_token := replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', '');
-  insert into public.workspace_invites (workspace_id, email, role, token_digest, invited_by)
-    values (ws, v_email, v_role, encode(sha256(convert_to(v_token, 'UTF8')), 'hex'), auth.uid())
+  insert into public.workspace_invites (workspace_id, email, role, token_digest, invited_by, created_at)
+    values (ws, v_email, v_role, encode(sha256(convert_to(v_token, 'UTF8')), 'hex'), auth.uid(), clock_timestamp())
     returning id, expires_at into v_id, v_expires;
   return jsonb_build_object('id', v_id, 'token', v_token, 'email', v_email, 'role', v_role, 'expires_at', v_expires);
 end $$;
@@ -871,7 +1044,6 @@ create function public.invite_details(token text) returns jsonb
 language plpgsql security definer set search_path = '' as $$
 declare
   v_inv public.workspace_invites;
-  v_email text := private.verified_email(auth.uid());
 begin
   if auth.uid() is null or not private.planner_session_ok() then
     raise exception 'Sign in first.' using errcode = '42501';
@@ -882,7 +1054,11 @@ begin
     return jsonb_build_object('status', 'unknown');
   end if;
   return jsonb_build_object(
-    'status', case when v_inv.accepted_at is not null then 'accepted' when v_inv.revoked_at is not null then 'revoked'
+    'status', case when v_inv.accepted_at is not null then 'accepted'
+                   when v_inv.revoked_at is not null or exists (
+                     select 1 from private.workspace_removals r where r.workspace_id = v_inv.workspace_id
+                       and r.user_id = auth.uid() and r.removed_at >= v_inv.created_at
+                   ) then 'revoked'
                    when v_inv.expires_at <= now() then 'expired' else 'open' end,
     'workspace', (select w.name from public.workspaces w where w.id = v_inv.workspace_id),
     'workspace_id', v_inv.workspace_id,
@@ -890,39 +1066,42 @@ begin
     'email', v_inv.email,
     'invited_by', (select m.name from public.workspace_members m where m.workspace_id = v_inv.workspace_id and m.user_id = v_inv.invited_by),
     'expires_at', v_inv.expires_at,
-    'matches', v_email is not null and v_email = v_inv.email,
-    'confirmed', v_email is not null,
+    'matches', exists (select 1 from private.workspace_addresses(auth.uid()) e where e.email = v_inv.email),
+    'confirmed', exists (select 1 from private.workspace_addresses(auth.uid())),
     'member', private.is_workspace_member(v_inv.workspace_id, auth.uid())
   );
 end $$;
 
--- Accepts an invitation: only a person's own sign-in (never an agent's), whose confirmed address is the invited one.
+-- Accepts an invitation with either of the person's confirmed addresses.
 create function public.accept_invite(token text) returns uuid
 language plpgsql security definer set search_path = '' as $$
 declare
   v_user uuid := auth.uid();
   v_inv public.workspace_invites;
-  v_email text := private.verified_email(auth.uid());
+  v_digest text := encode(sha256(convert_to(coalesce(token, ''), 'UTF8')), 'hex');
 begin
   if v_user is null or not private.planner_session_ok() then
     raise exception 'Sign in to PacedMind Cloud to accept the invitation.' using errcode = '42501';
   end if;
-  select * into v_inv from public.workspace_invites i
-    where i.token_digest = encode(sha256(convert_to(coalesce(token, ''), 'UTF8')), 'hex')
-    for update;
+  perform 1 from public.workspaces w join public.workspace_invites i on i.workspace_id = w.id
+  where i.token_digest = v_digest for update of w;
+  select * into v_inv from public.workspace_invites i where i.token_digest = v_digest for update;
   if not found or v_inv.revoked_at is not null or v_inv.expires_at <= now()
-     or (v_inv.accepted_at is not null and v_inv.accepted_by is distinct from v_user) then
+     or (v_inv.accepted_at is not null and v_inv.accepted_by is distinct from v_user)
+     or exists (select 1 from private.workspace_removals r where r.workspace_id = v_inv.workspace_id
+                and r.user_id = v_user and r.removed_at >= v_inv.created_at) then
     raise exception 'This invitation has expired or was withdrawn. Ask for a new one.' using errcode = 'P0002';
   end if;
-  if v_email is null then
+  if not exists (select 1 from private.workspace_addresses(v_user)) then
     raise exception 'Confirm your email address first.' using errcode = '42501';
   end if;
-  if v_email <> v_inv.email then
-    raise exception 'This invitation is for another email address: sign in with that one.' using errcode = '42501';
+  if not exists (select 1 from private.workspace_addresses(v_user) e where e.email = v_inv.email) then
+    raise exception 'This invitation is for another email address. Confirm it as your work email first.' using errcode = '42501';
   end if;
   insert into public.workspace_members (workspace_id, user_id, role, name, email, joined_via)
-    values (v_inv.workspace_id, v_user, v_inv.role, private.member_name(v_user), v_email, 'invite')
+    values (v_inv.workspace_id, v_user, v_inv.role, private.member_name(v_user, v_inv.email), v_inv.email, 'invite')
     on conflict (workspace_id, user_id) do nothing;
+  delete from private.workspace_removals r where r.workspace_id = v_inv.workspace_id and r.user_id = v_user;
   update public.workspace_invites i set accepted_at = coalesce(i.accepted_at, now()), accepted_by = v_user where i.id = v_inv.id;
   return v_inv.workspace_id;
 end $$;
@@ -955,7 +1134,7 @@ begin
   if private.public_email_domain(v_domain) then
     raise exception 'Anyone can have an address at %: invite people instead.', v_domain using errcode = '22023';
   end if;
-  if split_part(coalesce(private.verified_email(auth.uid()), ''), '@', 2) <> v_domain then
+  if not exists (select 1 from private.workspace_addresses(auth.uid()) e where split_part(e.email, '@', 2) = v_domain) then
     raise exception 'Add the domain of your own confirmed email address.' using errcode = '42501';
   end if;
   if exists (select 1 from public.workspace_domains d where d.domain = v_domain and d.workspace_id <> ws) then
@@ -977,16 +1156,18 @@ end $$;
 -- The workspaces the signed-in person may join through their confirmed address's domain, and isn't in.
 create function public.joinable_workspaces() returns table (id uuid, name text, slug text, domain text)
 language plpgsql stable security definer set search_path = '' as $$
-#variable_conflict use_column
-declare
-  v_domain text := split_part(coalesce(private.verified_email(auth.uid()), ''), '@', 2);
 begin
-  if auth.uid() is null or not private.planner_session_ok() or v_domain = '' then
+  if auth.uid() is null or not private.planner_session_ok() then
     return;
   end if;
   return query
-    select w.id, w.name, w.slug, d.domain from public.workspace_domains d join public.workspaces w on w.id = d.workspace_id
-    where d.domain = v_domain and not private.is_workspace_member(w.id, auth.uid());
+    select distinct on (w.id) w.id, w.name, w.slug, d.domain
+    from private.workspace_addresses(auth.uid()) e
+    join public.workspace_domains d on d.domain = split_part(e.email, '@', 2)
+    join public.workspaces w on w.id = d.workspace_id
+    where not private.is_workspace_member(w.id, auth.uid())
+      and not exists (select 1 from private.workspace_removals r where r.workspace_id = w.id and r.user_id = auth.uid())
+    order by w.id, e.is_work desc;
 end $$;
 
 -- Joins a workspace through the domain: a person's own sign-in, as a member.
@@ -994,18 +1175,23 @@ create function public.join_workspace(ws uuid) returns void
 language plpgsql security definer set search_path = '' as $$
 declare
   v_user uuid := auth.uid();
-  v_email text := private.verified_email(auth.uid());
+  v_email text;
 begin
   if v_user is null or not private.planner_session_ok() then
     raise exception 'Sign in to PacedMind Cloud to join.' using errcode = '42501';
   end if;
-  if v_email is null or not exists (
-    select 1 from public.workspace_domains d where d.workspace_id = ws and d.domain = split_part(v_email, '@', 2)
-  ) then
+  perform 1 from public.workspaces w where w.id = ws for update;
+  if exists (select 1 from private.workspace_removals r where r.workspace_id = ws and r.user_id = v_user) then
+    raise exception 'An administrator removed you from this team. Ask for a new invitation.' using errcode = '42501';
+  end if;
+  select e.email into v_email from private.workspace_addresses(v_user) e
+  join public.workspace_domains d on d.workspace_id = ws and d.domain = split_part(e.email, '@', 2)
+  order by e.is_work desc limit 1;
+  if v_email is null then
     raise exception 'Your confirmed email address doesn''t let you join that workspace: ask for an invitation.' using errcode = '42501';
   end if;
   insert into public.workspace_members (workspace_id, user_id, role, name, email, joined_via)
-    values (ws, v_user, 'member', private.member_name(v_user), v_email, 'domain')
+    values (ws, v_user, 'member', private.member_name(v_user, v_email), v_email, 'domain')
     on conflict (workspace_id, user_id) do nothing;
 end $$;
 
@@ -1013,9 +1199,12 @@ end $$;
 create function public.set_member_role(ws uuid, member uuid, new_role text) returns void
 language plpgsql security definer set search_path = '' as $$
 declare
-  v_mine text := private.workspace_role(ws, auth.uid());
-  v_theirs text := private.workspace_role(ws, member);
+  v_mine text;
+  v_theirs text;
 begin
+  perform 1 from public.workspaces w where w.id = ws and private.planner_or_agent() for update;
+  v_mine := private.workspace_role(ws, auth.uid());
+  v_theirs := private.workspace_role(ws, member);
   if not private.planner_or_agent() or v_mine is null or v_mine not in ('owner', 'admin') then
     raise exception 'Only the workspace''s owners and admins change roles.' using errcode = '42501';
   end if;
@@ -1040,10 +1229,13 @@ end $$;
 create function public.remove_member(ws uuid, member uuid) returns void
 language plpgsql security definer set search_path = '' as $$
 declare
-  v_mine text := private.workspace_role(ws, auth.uid());
-  v_theirs text := private.workspace_role(ws, member);
+  v_mine text;
+  v_theirs text;
   v_self boolean := member = auth.uid();
 begin
+  perform 1 from public.workspaces w where w.id = ws and private.planner_or_agent() for update;
+  v_mine := private.workspace_role(ws, auth.uid());
+  v_theirs := private.workspace_role(ws, member);
   if not private.planner_or_agent() or v_mine is null or (not v_self and v_mine not in ('owner', 'admin')) then
     raise exception 'Only the workspace''s owners and admins remove people.' using errcode = '42501';
   end if;
@@ -1059,6 +1251,10 @@ begin
     end if;
     perform private.delete_workspace(ws);
     return;
+  end if;
+  if not v_self then
+    insert into private.workspace_removals (workspace_id, user_id) values (ws, member)
+    on conflict (workspace_id, user_id) do update set removed_at = excluded.removed_at;
   end if;
   delete from public.workspace_members m where m.workspace_id = ws and m.user_id = member;
 end $$;
@@ -1294,7 +1490,7 @@ end $$;
 
 revoke execute on function
   private.my_workspaces(), private.my_admin_workspaces(), private.workspace_role(uuid, uuid), private.is_workspace_member(uuid, uuid),
-  private.can_reference(uuid, uuid, uuid), private.planner_or_agent(), private.verified_email(uuid), private.member_name(uuid),
+  private.can_reference(uuid, uuid, uuid), private.planner_or_agent(), private.verified_email(uuid), private.member_name(uuid, text),
   private.workspace_writable(uuid), private.workspace_task_key(uuid, text, uuid), private.keep_authorship(),
   private.area_delete_tasks(), private.project_scope(), private.task_scope(), private.task_child_scope(), private.edge_scope(),
   private.personal_references(), private.task_workspace_follows(), private.bump_shared_version(), private.require_cloud_row(),

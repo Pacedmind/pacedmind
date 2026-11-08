@@ -799,9 +799,9 @@ export interface InviteInfo {
   email: string | null;
   invitedBy: string | null;
   expiresAt: string | null;
-  /** Whether it's for the signed-in account's confirmed address. */
+  /** Whether it matches one of the signed-in account's confirmed addresses. */
   matches: boolean;
-  /** Whether the signed-in account's address is confirmed at all. */
+  /** Whether the signed-in account has at least one confirmed address. */
   confirmed: boolean;
   member: boolean;
 }

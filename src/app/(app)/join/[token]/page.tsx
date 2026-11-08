@@ -1,26 +1,26 @@
 import { getTranslation } from "@/server/i18n";
 import * as repo from "@/server/repo";
 import { usesCloud } from "@/server/scope";
-import { authState } from "@/server/supabase";
-import { AcceptInvite } from "@/components/workspace-settings";
+import { getWorkEmail } from "@/server/work-email";
+import { AcceptInvite, WorkEmailSettings } from "@/components/workspace-settings";
 
 /**
  * An invitation's link (/join/<token>): signed out, the hosted app sends you to sign in or create an account (with
- * Google too) and back here. Only an account whose confirmed address is the invited one can accept it.
+ * Google too) and back here. The invited address can be confirmed on that account from this page.
  */
 export default async function JoinPage(props: PageProps<"/join/[token]">) {
   const tx = await getTranslation();
   const { token } = await props.params;
   const cloud = await usesCloud();
   const info = cloud ? await repo.inviteDetails(token).catch(() => null) : null;
-  const email = (await authState())?.user.email ?? null;
-  const message = !cloud ? tx("Sign in to PacedMind Cloud with the invited email address to accept this invitation.")
+  const invitedEmail = info?.status === "open" && !info.member && !info.matches ? info.email : null;
+  const workEmail = invitedEmail ? await getWorkEmail() : null;
+  const message = !cloud ? tx("Sign in to PacedMind Cloud to accept this invitation.")
     : !info || info.status === "unknown" ? tx("This invitation link isn't valid. Ask for a new one.")
     : info.member ? tx("You're a member of {0} already.", [info.workspace ?? ""])
     : info.status === "accepted" ? tx("This invitation was accepted already.")
     : info.status !== "open" ? tx("This invitation has expired or was withdrawn. Ask for a new one.")
-    : !info.confirmed ? tx("Confirm your email address first: open the link PacedMind sent you, then this one again.")
-    : !info.matches ? tx("This invitation is for {0}, and you're signed in as {1}. Sign in with the invited address to accept it.", [info.email ?? "", email ?? ""])
+    : !info.matches ? tx("Confirm {0} as your work email to accept this invitation on this account.", [info.email ?? ""])
     : null;
   return (
     <div className="flex flex-1 items-center justify-center p-6">
@@ -36,6 +36,7 @@ export default async function JoinPage(props: PageProps<"/join/[token]">) {
             </p>
             <AcceptInvite token={token} />
           </>}
+        {invitedEmail && workEmail && <WorkEmailSettings key={invitedEmail} state={workEmail} invitedEmail={invitedEmail} />}
       </div>
     </div>
   );
