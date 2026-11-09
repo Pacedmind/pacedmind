@@ -9,6 +9,7 @@ import { googleCalendarStatus } from "@/server/google-calendar";
 import { HiddenProjectsSettings } from "@/components/hidden-projects-settings";
 import { WorkspaceSettings } from "@/components/workspace-settings";
 import { getWorkEmail } from "@/server/work-email";
+import { profileAvatarVersion } from "@/server/profile-avatar";
 import {
   AccountSettings, AppearanceSettings, ComputerSettings, DataSettings, McpSettings, NotificationSettings, PlanSettings,
   PlanningSettings, PreferencesSettings, ProjectSettings, SecuritySettings, SessionSettings, SettingsContent, type AccountView,
@@ -74,11 +75,14 @@ async function body(section: SettingsSection, state: Auth | null, desktop: boole
     }
     case "account": {
       if (!state) return <AccountSettings account={null} devices={[]} thisDeviceId={null} />;
-      const [all, me] = await Promise.all([repo.listDevices(), desktop ? thisDevice() : null]);
+      const [all, me, avatar] = await Promise.all([
+        repo.listDevices(), desktop ? thisDevice() : null, repo.profileAvatar(state.user.id).catch(() => null),
+      ]);
       // This computer first, once it joined the account's list; then the other computers signed in.
       const here = me?.id ? [me] : [];
       const devices = [...here, ...all.filter((x) => !x.revokedAt && x.id !== me?.id)];
-      return <AccountSettings account={accountView(state, tx)} devices={devices} thisDeviceId={here.length ? me!.id : null} />;
+      return <AccountSettings account={accountView(state, tx)} devices={devices} thisDeviceId={here.length ? me!.id : null}
+        avatar={avatar ? { userId: state.user.id, source: avatar.source, version: profileAvatarVersion(avatar) } : null} />;
     }
     case "plan": {
       const plan = await readPlan();

@@ -45,7 +45,7 @@ import { areaPictureProblem } from "@/lib/area-picture";
 import { addDaysStr, dateOnly, dayDiff, fmtDay, parseLocal, timeOf, toDateTimeStr } from "@/lib/dates";
 import {
   AGENT_LABEL, CONNECT_CARD_COOKIE, JOIN_PROMPT_COOKIE, LIVE_STATUSES, WEBHOOK_EVENTS, agentOf, deviceOnline, isLiveSession,
-  type WebhookEvent, type WorkspaceRole,
+  type ProfileAvatarSource, type WebhookEvent, type WorkspaceRole,
   type AgentId, type Device, type LaunchRequestKind, type Project, type RemoteStart, type Settings, type Surface,
   type TerminalId,
 } from "@/lib/types";
@@ -1216,6 +1216,19 @@ async function changing<T>(fn: () => Promise<T>, message?: (value: T) => string)
   } catch (e) {
     return { ok: false, error: errorOf(e) };
   }
+}
+
+export async function setProfileAvatarAction(source: ProfileAvatarSource, picture: string | null = null): Promise<Result> {
+  const tx = await getTranslation();
+  return changing(async () => {
+    if (source === "custom") {
+      const problem = typeof picture === "string" ? areaPictureProblem(picture) : "That isn't a picture.";
+      if (problem) throw new Error(tx(problem));
+    } else if ((source !== "google" && source !== "initials") || picture !== null) {
+      throw new Error(tx("Choose how to show your profile picture."));
+    }
+    await repo.setProfileAvatar(source, picture);
+  }, () => tx("Profile picture updated."));
 }
 
 export async function createWorkspaceAction(name: string): Promise<Result & { id?: string }> {

@@ -23,7 +23,7 @@ import { nowStamp, toDateStr } from "@/lib/dates";
 import {
   ME, repeatOf, taskHref,
   type InviteInfo, type JoinableWorkspace, type MemberWebhook, type NewInvite, type WebhookEvent, type Workspace, type WorkspaceDetails,
-  type WorkspaceMember, type WorkspaceRole,
+  type WorkspaceMember, type WorkspaceRole, type ProfileAvatar,
   type AgentId, type Area, type AskStatus, type Attachment, type CalEvent, type ConnectedAgent, type Dependency, type Device, type Doer, type EventOccurrence,
   type FolderRequest, type LaunchRequest, type Preference, type Priority, type Project, type Report, type ReportOutcome, type Session,
   type PushSubscriptionInput, type SessionAsk, type SessionEvent, type SessionStatus, type Settings, type Status, type Subtask, type Surface,
@@ -308,7 +308,7 @@ const toTask = (r: Row, subs: Subtask[]): Task => ({
   modelSettings: modelSelectionOf(json(r.model_settings, null)),
   sortOrder: Number(r.sort_order),
   createdAt: String(r.created_at), updatedAt: String(r.updated_at), completedAt: s(r.completed_at), subtasks: subs,
-  workspaceId: null, assigneeId: r.assignee_id === ME ? ME : null,
+  workspaceId: null, authorId: null, assigneeId: r.assignee_id === ME ? ME : null,
 });
 
 function tasksWhere(where: string, ...params: Value[]): Task[] {
@@ -986,6 +986,12 @@ export async function listWorkspaces(): Promise<Workspace[]> {
 }
 export async function listWorkspaceMembers(): Promise<(WorkspaceMember & { workspaceId: string })[]> {
   return [];
+}
+export async function profileAvatar(): Promise<ProfileAvatar | null> {
+  return null;
+}
+export async function setProfileAvatar(): Promise<void> {
+  throw new Refused(CLOUD_ONLY_WORKSPACES);
 }
 export async function getWorkspace(): Promise<WorkspaceDetails | null> {
   return null;

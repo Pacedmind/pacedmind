@@ -31,7 +31,7 @@ import { MarkdownEditor } from "./markdown-editor";
 import { AnswerForm, Gallery, ReportBody, RequestChangesForm, SessionPlan, SessionReport, sameText } from "./report";
 import { Button, IconButton, Menu, cx, useAction } from "./ui";
 import { FloatTaskButton } from "./float-task-button";
-import { PersonMark, assignable, useAssignee } from "./people";
+import { PersonMark, assignable, useTaskPerson } from "./people";
 
 /** "in a terminal", "in the Claude app" or "in Claude Code on the web". */
 const placeOf = (agent: AgentId, surface: Surface, tx: Translator = createTranslator("en")) =>
@@ -118,7 +118,8 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
   const people = assignable(task, ctx);
   // A team workspace's task stays in that workspace; your own can go anywhere, a shared area too.
   const stays = (x: { workspaceId: string | null }) => !task.workspaceId || x.workspaceId === task.workspaceId;
-  const assignee = useAssignee(task, ctx);
+  const assignee = useTaskPerson(task.assigneeId, task.workspaceId, ctx);
+  const author = useTaskPerson(task.workspaceId ? task.authorId : null, task.workspaceId, ctx);
   const related = ctx.projects.find((p) => p.id === task.relatedProjectId) ?? null;
   const session = ctx.sessions[task.id] ?? null;
   const use = ctx.agentUse?.[task.id];
@@ -431,16 +432,22 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
               items={doerItems}
               onSelect={chooseDoer} />
           </Prop>
+          {task.workspaceId && <Prop label={tx("Created by")}>
+            <span className="inline-flex min-h-7 items-center gap-1.5 px-2 text-[12.5px] text-fg2">
+              {author && <PersonMark userId={author.avatarId} name={author.name} email={author.email} size={16} />}
+              {author ? (author.you ? tx("You") : author.name) : tx("Unknown author")}
+            </span>
+          </Prop>}
           {/* Who among the people: a member of the task's team workspace, or for your own task you. */}
           {people.length > 0 && <Prop label={tx("Assignee")}>
             <Menu width={260}
               trigger={<button type="button" disabled={pending} aria-label={tx("Change assignee")} className={cx(pv, !assignee && "text-mut2")}>
-                {assignee ? <PersonMark name={assignee.name || tx("You")} email={assignee.email} size={16} /> : <Icon name="user" size={14} />}
+                {assignee ? <PersonMark userId={assignee.avatarId} name={assignee.name || tx("You")} email={assignee.email} size={16} /> : <Icon name="user" size={14} />}
                 {assignee ? (assignee.you ? tx("You") : assignee.name) : tx("Nobody")}
               </button>}
               items={[{ value: null as string | null, label: tx("Nobody") }, ...people.map((p) => ({
                 value: p.userId as string | null, label: p.userId === ctx.people?.me ? tx("You") : p.name, hint: p.email,
-                icon: <PersonMark name={p.name || tx("You")} email={p.email} size={16} />,
+                icon: <PersonMark userId={p.userId} name={p.name || tx("You")} email={p.email} size={16} />,
               }))]}
               onSelect={(v) => save({ assigneeId: v })} />
           </Prop>}

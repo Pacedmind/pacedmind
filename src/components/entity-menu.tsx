@@ -1,6 +1,5 @@
 "use client";
 import { useTranslation } from "@/components/language";
-import { createTranslator, type Translator } from "@/lib/i18n";
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -9,7 +8,7 @@ import {
 } from "@/app/actions";
 import { areaIconLabelFor, findAreaIconsFor } from "@/lib/area-icon-localization";
 import { AREA_ICON_CATEGORIES,  type AreaIcon } from "@/lib/area-icons";
-import { AREA_PICTURE_MAX, AREA_PICTURE_PX } from "@/lib/area-picture";
+import { PICTURE_FILE_TYPES, pictureFromFile } from "@/lib/picture-file";
 import { PALETTE, projectColor } from "@/lib/colors";
 import type { Area, Project, Usage } from "@/lib/types";
 import { ConfirmDialog } from "./dialog";
@@ -96,42 +95,8 @@ export function AreaIconPicker({ area, onPick }: { area: Pick<Area, "color" | "i
 }
 
 /**
- * Draws an image file into what an area's picture is (area-picture.ts): a square PNG of AREA_PICTURE_PX at most,
- * with the whole image fitted in and the rest left clear. Any image the browser shows works, SVG too, and only the
- * PNG leaves the browser. A picture with too much detail for the size limit is tried smaller.
- */
-async function areaPictureFrom(file: File, tx: Translator = createTranslator("en")): Promise<string> {
-  if (!file.type.startsWith("image/")) throw new Error(tx("Pick a picture: PNG, JPEG, WebP, GIF or SVG."));
-  if (file.size > 20_000_000) throw new Error(tx("That file is over 20 MB. Pick a smaller picture."));
-  const url = URL.createObjectURL(file);
-  try {
-    const img = new Image();
-    img.src = url;
-    await img.decode().catch(() => { throw new Error(tx("That picture couldn't be read.")); });
-    // An SVG without a size of its own reports none: draw it at the largest size.
-    const [w, h] = img.naturalWidth && img.naturalHeight ? [img.naturalWidth, img.naturalHeight] : [AREA_PICTURE_PX, AREA_PICTURE_PX];
-    // A small image, such as a favicon, keeps its size rather than turning blurry.
-    const largest = Math.min(AREA_PICTURE_PX, Math.max(w, h));
-    for (const side of [largest, 48, 32].filter((s) => s <= largest)) {
-      const canvas = document.createElement("canvas");
-      canvas.width = canvas.height = side;
-      const g = canvas.getContext("2d");
-      if (!g) break;
-      g.imageSmoothingQuality = "high";
-      const scale = Math.min(side / w, side / h);
-      g.drawImage(img, (side - w * scale) / 2, (side - h * scale) / 2, w * scale, h * scale);
-      const png = canvas.toDataURL("image/png").slice("data:image/png;base64,".length);
-      if (png.length <= AREA_PICTURE_MAX) return png;
-    }
-    throw new Error(tx("That picture has too much detail to keep small. Try a simpler logo."));
-  } finally {
-    URL.revokeObjectURL(url);
-  }
-}
-
-/**
  * The area's own picture, such as a company logo, shown instead of its icon. Choosing one opens the file picker; the
- * browser makes it small (areaPictureFrom). Remove puts the area's dot back.
+ * browser makes it small. Remove puts the area's dot back.
  */
 export function AreaPicturePicker({ area, onPick }: { area: Pick<Area, "id" | "picture">; onPick: (picture: string | null) => void }) {
   const tx = useTranslation();
@@ -141,7 +106,7 @@ export function AreaPicturePicker({ area, onPick }: { area: Pick<Area, "id" | "p
     if (!file) return;
     setReading(true);
     try {
-      onPick(await areaPictureFrom(file, tx));
+      onPick(await pictureFromFile(file, tx));
     } catch (e) {
       toast(e instanceof Error ? e.message : tx("That picture couldn't be read."), "error");
     } finally {
@@ -161,7 +126,7 @@ export function AreaPicturePicker({ area, onPick }: { area: Pick<Area, "id" | "p
       <PopoverItem icon={area.picture ? <AreaPicture area={area} size={14} /> : <Icon name="image" size={14} />} onClick={() => input.current?.click()}>
         {reading ? tx("Reading the picture…") : area.picture ? tx("Replace the picture…") : tx("Use a picture, such as a logo…")}
       </PopoverItem>
-      <input ref={input} type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" hidden aria-label={tx("Picture file")}
+      <input ref={input} type="file" accept={PICTURE_FILE_TYPES} hidden aria-label={tx("Picture file")}
         onChange={(e) => choose(e.target.files?.[0])} />
     </>
   );
