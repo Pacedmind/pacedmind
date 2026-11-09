@@ -1,6 +1,5 @@
-// An area's own picture, such as a company logo, shown instead of an icon or its dot. The browser draws the image
-// you pick into a small PNG (entity-menu.tsx), and the area keeps it in base64. The server takes nothing else, and
-// the cloud's database holds it to the same form (supabase/migrations), so a picture can't carry markup or scripts.
+// Area icons and custom profile pictures use the same small PNG format. The browser draws the image you
+// pick into a PNG (picture-file.ts), and the database keeps it in base64 without markup or scripts.
 
 /** A picture's side, in pixels at most: the mark it replaces is 16 at most, so this stays sharp at 4x. */
 export const AREA_PICTURE_PX = 64;

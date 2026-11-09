@@ -25,6 +25,11 @@ create table auth.users (
   email_confirmed_at timestamptz, raw_app_meta_data jsonb, raw_user_meta_data jsonb,
   created_at timestamptz, updated_at timestamptz
 );
+create table auth.identities (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users on delete cascade,
+  provider text not null, provider_id text not null, identity_data jsonb not null, last_sign_in_at timestamptz
+);
 create table auth.mfa_factors (
   id uuid primary key, user_id uuid references auth.users on delete cascade,
   friendly_name text, factor_type text, status text, created_at timestamptz, updated_at timestamptz, secret text

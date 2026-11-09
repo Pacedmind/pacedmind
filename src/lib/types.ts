@@ -196,6 +196,8 @@ export interface Task {
   subtasks: Subtask[];
   /** Its area's team workspace, or null for one of your own. */
   workspaceId: string | null;
+  /** The account that created the task, independent of its current owner or assignee. */
+  authorId: string | null;
   /**
    * The person it's assigned to: a member of its workspace, or for one of your own tasks you (`ME` locally). Who
    * does the work in the app is `agent`.
@@ -746,6 +748,13 @@ export interface AskView {
 export type WorkspaceRole = "owner" | "admin" | "member";
 export const WORKSPACE_ROLES: readonly WorkspaceRole[] = ["owner", "admin", "member"];
 export const manages = (role: WorkspaceRole | null | undefined) => role === "owner" || role === "admin";
+
+export type ProfileAvatarSource = "google" | "custom" | "initials";
+export interface ProfileAvatar {
+  source: ProfileAvatarSource;
+  picture: string | null;
+  googleUrl: string | null;
+}
 
 /** A team workspace you're in, with your role. */
 export interface Workspace {

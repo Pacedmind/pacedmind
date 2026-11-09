@@ -31,7 +31,7 @@ import {
   type RemoteStart, type Report, type ReportOutcome, type Session, type SessionEvent, type SessionStatus, type Settings, type Status,
   type PushSubscriptionInput, type SessionAsk, type Subtask, type Surface, type Task,
   type InviteInfo, type JoinableWorkspace, type MemberWebhook, type NewInvite, type WebhookEvent, type Workspace, type WorkspaceDetails,
-  type WorkspaceInvite, type WorkspaceMember, type WorkspaceRole,
+  type WorkspaceInvite, type WorkspaceMember, type WorkspaceRole, type ProfileAvatar, type ProfileAvatarSource,
 } from "@/lib/types";
 import { cleanNeeds } from "@/lib/needs";
 
@@ -371,7 +371,7 @@ const toTask = (r: Row): Task => ({
   sortOrder: Number(r.sort_order),
   createdAt: String(r.created_at), updatedAt: String(r.updated_at), completedAt: s(r.completed_at),
   subtasks: ((r.subtasks as Row[] | undefined) ?? []).map(toSubtask).sort((a, b) => a.sort - b.sort || a.id - b.id),
-  workspaceId: s(r.workspace_id), assigneeId: s(r.assignee_id),
+  workspaceId: s(r.workspace_id), authorId: s(r.author_id), assigneeId: s(r.assignee_id),
 });
 
 const TASK_SELECT = "*, subtasks(*)";
@@ -1336,6 +1336,21 @@ const toMember = (r: Row): WorkspaceMember => ({
   userId: String(r.user_id), name: String(r.name), email: String(r.email), role: roleOf(r.role), joinedAt: String(r.joined_at),
   joinedVia: r.joined_via === "invite" || r.joined_via === "domain" ? r.joined_via : "created",
 });
+
+export async function profileAvatar(personId: string): Promise<ProfileAvatar | null> {
+  if (!isUuid(personId)) return null;
+  const row = await rpc<Row | null>("get_profile_avatar", { person: personId });
+  if (!row) return null;
+  return {
+    source: row.source === "custom" || row.source === "initials" ? row.source : "google",
+    picture: areaPictureOf(row.picture),
+    googleUrl: s(row.google_url),
+  };
+}
+
+export async function setProfileAvatar(source: ProfileAvatarSource, picture: string | null): Promise<void> {
+  await rpc("set_profile_avatar", { choice: source, png: picture });
+}
 
 /** Everyone in your workspaces (each person once per workspace), for names and assignees. */
 export async function listWorkspaceMembers(): Promise<(WorkspaceMember & { workspaceId: string })[]> {

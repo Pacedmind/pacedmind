@@ -164,7 +164,7 @@ function Workspace({ workspace: w, me, ownAreas, shared, hooks, emailDomain }: {
       </Button>
     </span>}>
       {w.members.map((m) => <Line key={m.userId}>
-        <PersonMark name={m.name} email={m.email} />
+        <PersonMark userId={m.userId} name={m.name} email={m.email} />
         <div className="min-w-0 flex-1">
           <p className="truncate text-[13px] text-fg">{m.name}{m.userId === me ? ` · ${tx("you")}` : ""}</p>
           <p className="truncate text-[12px] text-mut2">{m.email}</p>

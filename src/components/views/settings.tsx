@@ -36,6 +36,7 @@ import { AreaWorkspace } from "../area-workspace";
 import { useExecution } from "../execution-context";
 import { FolderField } from "../folder-field";
 import { PushSettings, type PushDevice } from "../push-settings";
+import { ProfileAvatarSettings, type ProfileAvatarView } from "../profile-avatar-settings";
 import { ThemeSelector } from "../theme";
 import { TaskNoteColorSettings } from "../task-note-colors";
 import { Button, Dot, Menu, Segmented, Switch, cx, toast, useAction } from "../ui";
@@ -249,13 +250,14 @@ export interface AccountView {
 }
 
 /** Settings → Account: signing in or out, the account's computers, deleting it. */
-export function AccountSettings({ account, devices, thisDeviceId }: {
+export function AccountSettings({ account, devices, thisDeviceId, avatar }: {
   /** The signed-in account; null without one, when the desktop app keeps this computer's own data. */
   account: AccountView | null;
   /** The computers signed in to the account, this one first. */
   devices: Device[];
   /** This computer's id in the account's list; null in the web app, or until it registered. */
   thisDeviceId: string | null;
+  avatar?: ProfileAvatarView | null;
 }) {
   const tx = useTranslation();
   const { run, pending } = useAction();
@@ -282,6 +284,11 @@ export function AccountSettings({ account, devices, thisDeviceId }: {
         <Button size="sm" onClick={() => confirm(tx("Sign out everywhere, including here?")) && run(() => signOutEverywhereAction())}>{tx("Sign out all")}</Button>
       </Row>
     </Section>
+
+    {avatar && <Section title={tx("Profile picture")}
+      note={tx("Your teammates can see this picture. PacedMind uses your Google profile photo by default when one is available.")}>
+      <ProfileAvatarSettings {...avatar} email={account.email} />
+    </Section>}
 
     {/* A summary: the Computers page shows each computer's agents and sessions, and manages them. */}
     <Section title={tx("Computers")} action={<ComputersLink />}
