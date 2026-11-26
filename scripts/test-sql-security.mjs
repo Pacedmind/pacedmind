@@ -61,6 +61,8 @@ try {
   console.log("work_email.sql: proof access, rate limits, replay, expiry, team admission and private areas passed.");
   await db.exec(await read("supabase/tests/shared_task_people.sql"));
   console.log("shared_task_people.sql: creator integrity, avatar choices and team isolation passed.");
+  await db.exec(await read("supabase/tests/issuer_sign_in.sql"));
+  console.log("issuer_sign_in.sql: server-only marking, single-use tokens, links that never move, two-factor and fresh-code trust only for the marked live session passed; fixtures rolled back.");
   const { rows } = await db.query("select count(*)::int as accounts from auth.users");
   if (rows[0].accounts !== 0) throw new Error("SQL test fixtures were not rolled back.");
   console.log("Auth HTTP/OAuth integration and hosted security advisors still require a Supabase test stack.");
