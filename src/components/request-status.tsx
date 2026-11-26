@@ -24,7 +24,7 @@ export interface LaunchState {
   codeFreshUntil: number | null;
   /**
    * The organisation's name when this session came through its sign-in: a fresh check is a new round-trip through it
-   * (SSO_START_PATH), never PacedMind's code.
+   * that asks it for a code from the last five minutes (ssoConfirmHref), never PacedMind's code.
    */
   confirmWith: string | null;
   computers: Device[];

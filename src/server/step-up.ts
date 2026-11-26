@@ -39,11 +39,13 @@ export const CODE_REUSE_MS = 4 * 60_000;
  * time this session verified an authenticator, plus CODE_REUSE_MS. Null without one. A hint only: the database checks
  * the code's time itself, and that it came from an authenticator the account had before this sign-in.
  *
- * A session made through your organisation's sign-in never asks for PacedMind's code: its check is the issuer's, as
- * recent as the round-trip through it that made the session (`issuer.verifiedAt`, which the database also checks).
+ * A session made through your organisation's sign-in never asks for PacedMind's code: its check is the issuer's. Only a
+ * session made by the fresh round-trip (`max_age`, ssoConfirmHref) has one, as recent as the code the person entered
+ * there (`issuer.verifiedAt`, the token's `auth_time`, which the database also checks); a plain sign-in through the
+ * issuer says nothing about when a code was last entered, so it has none.
  */
 export function codeFreshUntil(state: AuthState | null): number | null {
-  if (state?.issuer) return state.issuer.verifiedAt + CODE_REUSE_MS;
+  if (state?.issuer) return state.issuer.fresh ? state.issuer.verifiedAt + CODE_REUSE_MS : null;
   const at = (state?.amr ?? [])
     .filter((a) => ["totp", "mfa/totp", "webauthn", "mfa/webauthn"].includes(a.method) && Number.isFinite(a.timestamp))
     .reduce((max, a) => Math.max(max, a.timestamp), 0);
@@ -52,7 +54,8 @@ export function codeFreshUntil(state: AuthState | null): number | null {
 
 /**
  * What a session made through your organisation's sign-in hears instead of "enter a code": a new round-trip through the
- * issuer is its fresh check. `label` is the organisation's name (SSO_LABEL).
+ * issuer that asks it for a code from the last five minutes (ssoConfirmHref) is its fresh check. `label` is the
+ * organisation's name (SSO_LABEL).
  */
 export const issuerStepUp = (label: string | null) =>
   `Confirm with ${label ?? "your organisation"} again first, then try again within four minutes.`;
@@ -88,7 +91,8 @@ export async function verifyCode(db: SupabaseClient, code: string, factorId?: st
 /**
  * Why a request to a computer (or an answer from elsewhere) can't go yet for want of a fresh check, or null: `code` when
  * given, else one this session entered in the last four minutes. A session made through your organisation's sign-in
- * never uses PacedMind's code: its check is a round-trip through the issuer in the last four minutes. The database checks
+ * never uses PacedMind's code: its check is the fresh round-trip through the issuer (`max_age`), whose code was entered
+ * in the last four minutes. The database checks
  * the time and the authenticator either way (private.recent_mfa).
  */
 export async function freshCheckProblem(code: string | null | undefined): Promise<string | null> {

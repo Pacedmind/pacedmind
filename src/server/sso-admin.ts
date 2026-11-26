@@ -57,10 +57,11 @@ export function accountSteps(config: SsoConfig): AccountSteps {
       // Another sign-in of the same person may have created it a moment ago: linking again finds it.
       if (error && error.code !== "email_exists" && error.code !== "user_already_exists") throw failed("Creating the account", error);
     },
-    async beginHandoff(handoffId, identity, userId, next) {
+    async beginHandoff(handoffId, identity, userId, next, fresh) {
       const { error } = await admin.rpc("issuer_begin_handoff", {
         handoff: handoffId, token_id: identity.tokenId, issuer: identity.issuer, subject: identity.subject, account: userId,
-        verified_at: new Date(identity.issuedAt * 1000).toISOString(), next,
+        // When the person last passed the issuer's check (auth_time), never when the token was made (iat).
+        verified_at: new Date(identity.authTime * 1000).toISOString(), fresh, next,
       });
       if (error) throw failed("Keeping the sign-in", error);
     },

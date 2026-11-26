@@ -58,9 +58,11 @@ const fake = {
   tokens: new Set<string>(),
   links_pending: new Map<string, string>(),
   sessions: new Map<string, { userId: string; token: string; aal: "aal1" | "aal2" }>(),
-  marks: new Map<string, number>(),
+  // The database's mark of each session: when the person last passed the issuer's check, and whether the round-trip
+  // that made the session was the fresh check (max_age).
+  marks: new Map<string, { at: number; fresh: boolean }>(),
   // What the callback kept for the finish, by the id the browser carries (the database keeps only its digest).
-  handoffs: new Map<string, { userId: string; subject: string; verifiedAt: number; next: string; opened: boolean }>(),
+  handoffs: new Map<string, { userId: string; subject: string; verifiedAt: number; fresh: boolean; next: string; opened: boolean }>(),
   calls: [] as { path: string; apikey: string | null; auth: string | null; body: unknown }[],
   markFails: false,
   markUnreadable: false,
@@ -143,7 +145,8 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   }
   if (path === "/rest/v1/rpc/issuer_begin_handoff") {
     assert.ok(fake.tokens.has(body.token_id), "only for a token used up");
-    fake.handoffs.set(body.handoff, { userId: body.account, subject: body.subject, verifiedAt: Date.parse(body.verified_at), next: body.next, opened: false });
+    assert.equal(typeof body.fresh, "boolean");
+    fake.handoffs.set(body.handoff, { userId: body.account, subject: body.subject, verifiedAt: Date.parse(body.verified_at), fresh: body.fresh, next: body.next, opened: false });
     return new Response(null, { status: 204 });
   }
   if (path === "/rest/v1/rpc/issuer_open_handoff") {
@@ -159,7 +162,7 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
       return json({ code: "42501", message: "That sign-in is not waiting to finish." }, 403);
     }
     fake.handoffs.delete(body.handoff);
-    fake.marks.set(body.session, h.verifiedAt);
+    fake.marks.set(body.session, { at: h.verifiedAt, fresh: h.fresh });
     return new Response(null, { status: 204 });
   }
   const own = sessionOf(auth);
@@ -172,8 +175,8 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   }
   if (path === "/rest/v1/rpc/issuer_session") {
     if (fake.markUnreadable) return json({ code: "57014", message: "canceling statement due to statement timeout" }, 500);
-    const at = own ? fake.marks.get(own[0]) : undefined;
-    return json(at === undefined ? null : new Date(at).toISOString());
+    const mark = own ? fake.marks.get(own[0]) : undefined;
+    return json(mark === undefined ? null : { verified_at: new Date(mark.at).toISOString(), fresh: mark.fresh });
   }
   if (path === "/rest/v1/rpc/can_control_computers") return json(!!own && fake.marks.has(own[0]));
   // The database takes the approval from a planner session; the marked session is one (supabase/tests/issuer_sign_in.sql).
@@ -212,8 +215,8 @@ const consent = await import("../src/app/oauth/consent/actions");
 
 const sessionCookies = () => [...jar.keys()].filter((n) => n.startsWith("sb-"));
 
-async function startFlow(next = "/settings/account") {
-  const res = await start.GET(new NextRequest(`${ORIGIN}/auth/sso/start?next=${encodeURIComponent(next)}`));
+async function startFlow(next = "/settings/account", fresh = false) {
+  const res = await start.GET(new NextRequest(`${ORIGIN}/auth/sso/start?next=${encodeURIComponent(next)}${fresh ? "&fresh=1" : ""}`));
   assert.equal(res.status, 303);
   const to = new URL(res.headers.get("location")!);
   return { state: to.searchParams.get("state")!, nonce: to.searchParams.get("nonce")!, to, res };
@@ -233,9 +236,11 @@ function post(fields: Record<string, string>) {
   }));
 }
 
-async function signIn(next = "/settings/account") {
-  const s = await startFlow(next);
-  const posted = await post({ id_token: await token(s.nonce), state: s.state });
+/** Signing in through the issuer; `fresh` makes it the fresh check, whose code the issuer says was entered `codeAgo` s ago. */
+async function signIn(next = "/settings/account", { fresh = false, codeAgo }: { fresh?: boolean; codeAgo?: number } = {}) {
+  codeAgo ??= fresh ? 20 : 3 * 3600;
+  const s = await startFlow(next, fresh);
+  const posted = await post({ id_token: await token(s.nonce, { auth_time: Math.floor(Date.now() / 1000) - codeAgo }), state: s.state });
   assert.equal(posted.status, 303, await posted.clone().text());
   assert.equal(posted.headers.get("location"), "/auth/sso/finish");
   return finish.GET();
@@ -263,6 +268,11 @@ test("the browser goes to the issuer with a fresh state in a __Host- cookie", as
   assert.equal(s.to.searchParams.get("redirect_uri"), `${ORIGIN}/auth/sso/callback`);
   assert.equal(s.res.headers.get("cache-control"), "no-store");
   assert.deepEqual(jar.get(START_COOKIE)?.options, { httpOnly: true, secure: true, sameSite: "none", path: "/", maxAge: 600 });
+  // A plain sign-in asks for no max_age; the fresh check (fresh=1) asks for five minutes, and only `1` asks for it.
+  assert.equal(s.to.searchParams.has("max_age"), false);
+  assert.equal((await startFlow("/settings/account", true)).to.searchParams.get("max_age"), "300");
+  const other = await start.GET(new NextRequest(`${ORIGIN}/auth/sso/start?fresh=yes&max_age=1`));
+  assert.equal(new URL(other.headers.get("location")!).searchParams.has("max_age"), false);
 });
 
 test("an account with its own authenticator isn't taken over by its address: only its owner's two-factor session links it", async () => {
@@ -320,6 +330,18 @@ test("a full sign-in makes a marked session that counts as two-factor, with no P
   assert.equal(nextStep(state), null);
   assert.equal((await requireAal2()).user.id, existing.id);
   assert.equal(await computerAccessProblem(), null);
+  // The issuer's session started hours ago (auth_time), so this plain sign-in is no fresh check: a sensitive action asks
+  // for the round-trip that asks the issuer for max_age, never for PacedMind's code.
+  assert.equal(fake.marks.size, 1);
+  assert.equal([...fake.marks.values()][0].fresh, false);
+  assert.equal(Math.round((Date.now() - [...fake.marks.values()][0].at) / 3600_000), 3, "the mark is the issuer's auth_time, not iat");
+  assert.match(String(await freshCheckProblem("")), /^Confirm with Example Org again first/);
+  assert.match(String(await freshCheckProblem("123456")), /^Confirm with Example Org again first/);
+  // The fresh round-trip, with a code entered at the issuer twenty seconds ago, is the fresh check.
+  assert.equal((await signIn("/settings/account", { fresh: true })).status, 303);
+  const marked = [...fake.marks.values()].pop()!;
+  assert.equal(marked.fresh, true);
+  assert.ok(Math.abs(Date.now() - 20_000 - marked.at) < 2_000, "the mark is the issuer's auth_time");
   assert.equal(await freshCheckProblem(""), null);
   assert.equal(await freshCheckProblem("123456"), null);
   // PacedMind's code is never asked for, nor checked, in such a session.
@@ -330,11 +352,21 @@ test("a full sign-in makes a marked session that counts as two-factor, with no P
 
 test("the check goes stale after four minutes: a new round-trip through the issuer, never a code", async () => {
   const sessionId = [...fake.marks.keys()].pop()!;
-  fake.marks.set(sessionId, Date.now() - 5 * 60_000);
+  fake.marks.set(sessionId, { at: Date.now() - 5 * 60_000, fresh: true });
   assert.match(String(await freshCheckProblem("123456")), /^Confirm with Example Org again first/);
   assert.match((await actions.deleteAccountAction("", existing.email)).error ?? "", /^Confirm with Example Org again first/);
   assert.equal(fake.deleted.length, 0);
-  fake.marks.set(sessionId, Date.now() - 30_000);
+  fake.marks.set(sessionId, { at: Date.now() - 30_000, fresh: true });
+});
+
+test("the fresh round-trip refuses a token whose code is older than max_age, and leaves the session as it was", async () => {
+  const before = [...fake.sessions.keys()];
+  const s = await startFlow("/settings/account", true);
+  const res = await post({ id_token: await token(s.nonce, { auth_time: Math.floor(Date.now() / 1000) - 301 }), state: s.state });
+  assert.equal(res.status, 403);
+  assert.match(await res.text(), /Code: stale</);
+  assert.equal(jar.has(FINISH_COOKIE), false);
+  assert.deepEqual([...fake.sessions.keys()], before);
 });
 
 test("an agent's MCP sign-in is approved from such a session without PacedMind's code or password", async () => {
@@ -352,7 +384,7 @@ test("pages learn to offer the organisation's round-trip, never a code field, fo
   assert.equal(body.confirmWith, "Example Org");
   assert.equal(typeof body.codeFreshUntil, "number");
   const sessionId = [...fake.marks.keys()].pop()!;
-  assert.equal(body.codeFreshUntil, fake.marks.get(sessionId)! + 4 * 60_000);
+  assert.equal(body.codeFreshUntil, fake.marks.get(sessionId)!.at + 4 * 60_000);
 });
 
 test("PacedMind's own authenticators and password can't be changed from such a session", async () => {
@@ -388,7 +420,7 @@ test("signing in again replaces the browser's session and ends the old one", asy
   assert.equal(fake.sessions.size, 1);
 });
 
-test("a new person gets a confirmed account; a fresh check deletes it with no code", async () => {
+test("a new person gets a confirmed account; the fresh check, and only it, deletes it with no code", async () => {
   jar.clear();
   const linked = person;
   person = randomUUID();
@@ -407,6 +439,13 @@ test("a new person gets a confirmed account; a fresh check deletes it with no co
   assert.equal((await actions.startEnrollAction()).error, ISSUER_MANAGED);
   assert.equal((await actions.changePasswordAction("old password!", "a new password 123", "")).error, ISSUER_MANAGED);
   assert.ok(!fake.calls.some((c) => c.path.includes("/factors") || c.path === "/auth/v1/user" && c.body));
+  // Deleting takes the fresh check: the plain sign-in, though its issuer session started a minute ago, isn't one.
+  assert.match((await actions.deleteAccountAction("", "new@org.example")).error ?? "", /^Confirm with Example Org again first/);
+  assert.deepEqual(fake.deleted, []);
+  const again = await startFlow("/settings/account", true);
+  const confirmed = await post({ id_token: await token(again.nonce, { email: "new@org.example", sub: person, name: "New Person", auth_time: Math.floor(Date.now() / 1000) - 10 }), state: again.state });
+  assert.equal(confirmed.status, 303);
+  assert.equal((await finish.GET()).status, 303);
   await assert.rejects(actions.deleteAccountAction("", "new@org.example"), (e: Error & { digest?: string }) => /NEXT_REDIRECT/.test(e.digest ?? e.message));
   assert.deepEqual(fake.deleted, [created.id]);
   person = linked;

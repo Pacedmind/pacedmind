@@ -21,7 +21,7 @@ import { projectColor } from "@/lib/colors";
 import { fmtShort, fmtTime, toDateStr } from "@/lib/dates";
 import { REMOTE_START_OPTIONS, fromElsewhereText } from "@/lib/from-elsewhere";
 import { OLD_ANCHORS, type SettingsGroup, type SettingsSection } from "@/lib/settings-menu";
-import { ssoStartHref } from "@/lib/sso";
+import { ssoConfirmHref, ssoStartHref } from "@/lib/sso";
 import { TERMINALS, terminalFor } from "@/lib/terminals";
 import {
   AGENT_LABEL, APP_LABEL, PREFERENCE_TEXT_MAX, PREFERENCE_TOPIC_MAX, SUGGESTED_TOPICS, deviceOnline, sameTopic, topicHint, topicOrder,
@@ -322,8 +322,8 @@ export function AccountSettings({ account, devices, thisDeviceId, avatar }: {
       {account.issuer ? <>
         <p className="text-[12.5px] text-fg3">{tx("Confirm with {0} first: deleting takes a sign-in through it from the last four minutes.", [account.issuer])}</p>
         <Row label={tx("Confirm")}>
-          {/* A full page load: the organisation's sign-in page, then back here with a new session. */}
-          <a href={ssoStartHref("/settings/account")} className="inline-flex h-6 items-center rounded-md border border-ctl px-2 text-[12px] whitespace-nowrap text-fg2 transition-colors hover:bg-hover">
+          {/* A full page load: the organisation's fresh check (a code from the last five minutes), then back here with a new session. */}
+          <a href={ssoConfirmHref("/settings/account")} className="inline-flex h-6 items-center rounded-md border border-ctl px-2 text-[12px] whitespace-nowrap text-fg2 transition-colors hover:bg-hover">
             {tx("Confirm with {0}", [account.issuer])}</a>
           <span className="flex-1" />
           <Button disabled={pending || !deleting.email}

@@ -50,7 +50,7 @@ begin
   --    writes the state behind them.
   foreach op in array array['anon', 'authenticated'] loop
     foreach obj in array array['public.issuer_claim_token(text, timestamptz)', 'public.issuer_link_account(text, text, text)',
-        'public.issuer_begin_handoff(text, text, text, text, uuid, timestamptz, text)', 'public.issuer_open_handoff(text)',
+        'public.issuer_begin_handoff(text, text, text, text, uuid, timestamptz, boolean, text)', 'public.issuer_open_handoff(text)',
         'public.issuer_mark_session(uuid, text)'] loop
       if has_function_privilege(op, obj, 'EXECUTE') then raise exception '% may call %', op, obj; end if;
       checks := checks + 1;
@@ -81,7 +81,7 @@ begin
     raise exception 'A signed-in browser marked its own session';
   exception when insufficient_privilege then checks := checks + 1; end;
   begin
-    insert into private.issuer_sessions(session_id, user_id, issuer, subject, verified_at) values (plain, account, issuer, person, now());
+    insert into private.issuer_sessions(session_id, user_id, issuer, subject, verified_at, fresh) values (plain, account, issuer, person, now(), true);
     raise exception 'A signed-in browser wrote the session marker';
   exception when insufficient_privilege then checks := checks + 1; end;
   reset role;
@@ -153,10 +153,10 @@ begin
   perform public.issuer_claim_token('6a1d3c2e-0000-4000-8000-000000000013', now() + interval '2 minutes');
   foreach op in array array[
     -- A token this server never used up.
-    format('select public.issuer_begin_handoff(%L, %L, %L, %L, %L, now(), %L)', h1, '6a1d3c2e-0000-4000-8000-0000000000ff', issuer, person, account, '/today'),
+    format('select public.issuer_begin_handoff(%L, %L, %L, %L, %L, now(), true, %L)', h1, '6a1d3c2e-0000-4000-8000-0000000000ff', issuer, person, account, '/today'),
     -- The person goes to their own link's account only, and an account linked to someone else takes nobody new.
-    format('select public.issuer_begin_handoff(%L, %L, %L, %L, %L, now(), %L)', h1, '6a1d3c2e-0000-4000-8000-000000000011', issuer, other_person, account, '/today'),
-    format('select public.issuer_begin_handoff(%L, %L, %L, %L, %L, now(), %L)', h1, '6a1d3c2e-0000-4000-8000-000000000011', issuer, person, other_account, '/today')
+    format('select public.issuer_begin_handoff(%L, %L, %L, %L, %L, now(), true, %L)', h1, '6a1d3c2e-0000-4000-8000-000000000011', issuer, other_person, account, '/today'),
+    format('select public.issuer_begin_handoff(%L, %L, %L, %L, %L, now(), true, %L)', h1, '6a1d3c2e-0000-4000-8000-000000000011', issuer, person, other_account, '/today')
   ] loop
     begin
       execute op;
@@ -164,8 +164,13 @@ begin
     exception when insufficient_privilege then checks := checks + 1; end;
   end loop;
   foreach op in array array[
-    format('select public.issuer_begin_handoff(%L, %L, %L, %L, %L, now() - interval ''10 minutes'', %L)', h1, '6a1d3c2e-0000-4000-8000-000000000011', issuer, person, account, '/today'),
-    format('select public.issuer_begin_handoff(%L, %L, %L, %L, %L, now(), %L)', 'short', '6a1d3c2e-0000-4000-8000-000000000011', issuer, person, account, '/today'),
+    -- The fresh check, with a code entered ten minutes ago: not the check it claims to be.
+    format('select public.issuer_begin_handoff(%L, %L, %L, %L, %L, now() - interval ''10 minutes'', true, %L)', h1, '6a1d3c2e-0000-4000-8000-000000000011', issuer, person, account, '/today'),
+    -- A check in the future, or none, or no word on whether it was the fresh one.
+    format('select public.issuer_begin_handoff(%L, %L, %L, %L, %L, now() + interval ''2 minutes'', false, %L)', h1, '6a1d3c2e-0000-4000-8000-000000000011', issuer, person, account, '/today'),
+    format('select public.issuer_begin_handoff(%L, %L, %L, %L, %L, null, false, %L)', h1, '6a1d3c2e-0000-4000-8000-000000000011', issuer, person, account, '/today'),
+    format('select public.issuer_begin_handoff(%L, %L, %L, %L, %L, now(), null, %L)', h1, '6a1d3c2e-0000-4000-8000-000000000011', issuer, person, account, '/today'),
+    format('select public.issuer_begin_handoff(%L, %L, %L, %L, %L, now(), true, %L)', 'short', '6a1d3c2e-0000-4000-8000-000000000011', issuer, person, account, '/today'),
     format('select public.issuer_open_handoff(%L)', 'not/a/random/id')
   ] loop
     begin
@@ -174,13 +179,13 @@ begin
     exception when invalid_parameter_value then checks := checks + 1; end;
   end loop;
   begin
-    perform public.issuer_begin_handoff(h1, '6a1d3c2e-0000-4000-8000-000000000011', issuer, person, account, now(), 'https://elsewhere.example');
+    perform public.issuer_begin_handoff(h1, '6a1d3c2e-0000-4000-8000-000000000011', issuer, person, account, now(), true, 'https://elsewhere.example');
     raise exception 'Kept a sign-in that goes to another site';
   exception when check_violation then checks := checks + 1; end;
   -- The issuer's check said 30 seconds ahead: kept as now, never in the future.
-  perform public.issuer_begin_handoff(h1, '6a1d3c2e-0000-4000-8000-000000000011', issuer, person, account, now() + interval '30 seconds', '/settings/account');
+  perform public.issuer_begin_handoff(h1, '6a1d3c2e-0000-4000-8000-000000000011', issuer, person, account, now() + interval '30 seconds', true, '/settings/account');
   begin
-    perform public.issuer_begin_handoff(h4, '6a1d3c2e-0000-4000-8000-000000000011', issuer, person, account, now(), '/today');
+    perform public.issuer_begin_handoff(h4, '6a1d3c2e-0000-4000-8000-000000000011', issuer, person, account, now(), false, '/today');
     raise exception 'One token kept two sign-ins';
   exception when unique_violation then checks := checks + 1; end;
   reset role;
@@ -259,24 +264,22 @@ begin
   end if;
   checks := checks + 1;
 
-  -- A sign-in kept too long ago opens no more, and a check that went stale on the way marks nothing.
+  -- A sign-in kept too long ago opens no more. A plain sign-in whose issuer session started hours ago is kept with that
+  -- time (auth_time), not refused: only the fresh check has to be recent.
   set local role service_role;
-  perform public.issuer_begin_handoff(h2, '6a1d3c2e-0000-4000-8000-000000000012', issuer, person, account, now(), '/today');
-  perform public.issuer_begin_handoff(h3, '6a1d3c2e-0000-4000-8000-000000000013', issuer, person, account, now(), '/today');
+  perform public.issuer_begin_handoff(h2, '6a1d3c2e-0000-4000-8000-000000000012', issuer, person, account, now(), true, '/today');
+  perform public.issuer_begin_handoff(h3, '6a1d3c2e-0000-4000-8000-000000000013', issuer, person, account, now() - interval '3 hours', false, '/today');
   reset role;
   update private.issuer_handoffs set expires_at = now() - interval '1 second' where id_digest = sha256(convert_to(h2, 'UTF8'));
   set local role service_role;
   if public.issuer_open_handoff(h2) is not null then raise exception 'An expired sign-in opened'; end if;
   if public.issuer_open_handoff(h3) is null then raise exception 'Fixture: the sign-in did not open'; end if;
   reset role;
-  update private.issuer_handoffs set verified_at = now() - interval '6 minutes' where id_digest = sha256(convert_to(h3, 'UTF8'));
-  set local role service_role;
-  begin
-    perform public.issuer_mark_session(plain, h3);
-    raise exception 'Marked with a stale check';
-  exception when invalid_parameter_value then checks := checks + 1; end;
-  checks := checks + 1;
-  reset role;
+  if (select verified_at from private.issuer_handoffs where id_digest = sha256(convert_to(h3, 'UTF8'))) > now() - interval '3 hours'
+    or (select fresh from private.issuer_handoffs where id_digest = sha256(convert_to(h3, 'UTF8'))) then
+    raise exception 'The plain sign-in was not kept with the issuer''s own time of its check';
+  end if;
+  checks := checks + 2;
   delete from private.issuer_handoffs;
 
   -- 5. The marked session is a two-factor session for planning, computers and fresh codes; the account's other
@@ -294,7 +297,10 @@ begin
           and public.can_control_computers() and private.recent_mfa(300)) then
     raise exception 'The session made through the issuer is not a two-factor session';
   end if;
-  if public.issuer_session() is null then raise exception 'The app cannot see its own session is made through the issuer'; end if;
+  if public.issuer_session() is null or public.issuer_session() ->> 'fresh' <> 'true'
+     or (public.issuer_session() ->> 'verified_at')::timestamptz > now() then
+    raise exception 'The app cannot see its own session is made through the issuer by the fresh check: %', public.issuer_session();
+  end if;
   select count(*) into n from public.areas;
   if n <> 5 then raise exception 'The session made through the issuer cannot read its planner'; end if;
   insert into public.tasks(key, area_id, title, created_at, updated_at)
@@ -348,13 +354,24 @@ begin
   -- 8. The trust ends with the session, and with the link.
   set local role service_role;
   perform public.issuer_claim_token('6a1d3c2e-0000-4000-8000-000000000014', now() + interval '2 minutes');
-  perform public.issuer_begin_handoff(h4, '6a1d3c2e-0000-4000-8000-000000000014', issuer, person, account, now(), '/today');
+  -- A plain sign-in (no max_age) whose issuer check is seconds old: auth_time may be a remembered browser's session
+  -- start, with no code entered, so it never counts as a fresh code.
+  perform public.issuer_begin_handoff(h4, '6a1d3c2e-0000-4000-8000-000000000014', issuer, person, account, now() - interval '10 seconds', false, '/today');
   if public.issuer_open_handoff(h4) ->> 'linked' <> 'true' then raise exception 'Fixture: the linked person was not seen as linked'; end if;
   perform public.issuer_mark_session(plain, h4);
   reset role;
   perform set_config('request.jwt.claims', plain_claims, true);
   set local role authenticated;
-  if not private.session_ok() then raise exception 'Fixture: the second session was not marked'; end if;
+  if not (private.session_ok() and private.planner_session_ok() and private.computer_session_ok()) then
+    raise exception 'Fixture: the second session was not marked';
+  end if;
+  if private.recent_mfa(300) or public.issuer_session() ->> 'fresh' <> 'false' then
+    raise exception 'A plain sign-in through the issuer counted as a fresh code';
+  end if;
+  begin
+    perform public.delete_account();
+    raise exception 'A plain sign-in through the issuer deleted the account';
+  exception when insufficient_privilege then checks := checks + 1; end;
   reset role;
   delete from auth.sessions where id = plain;
   set local role authenticated;
@@ -366,7 +383,7 @@ begin
   set local role authenticated;
   if private.session_ok() or public.can_control_computers() then raise exception 'An unlinked session stayed trusted'; end if;
   reset role;
-  checks := checks + 3;
+  checks := checks + 4;
 
   raise notice 'Issuer sign-in: % assertions passed (fixtures rolled back).', checks;
 end $test$;

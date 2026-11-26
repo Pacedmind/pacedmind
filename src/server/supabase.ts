@@ -148,23 +148,32 @@ export interface AuthState {
   clientId: string | null;
   /**
    * Set when this session was made through your organisation's sign-in (src/server/sso.ts), as the database records
-   * it: `verifiedAt` (ms) is when the issuer last checked the person, which counts as a fresh code for a few minutes
-   * (CODE_REUSE_MS in step-up.ts; five in the database).
+   * it: `verifiedAt` (ms) is when the person last passed the issuer's two-factor check (the token's `auth_time`), and
+   * `fresh` whether the round-trip that made the session was the fresh check (it asked the issuer for `max_age`). Only
+   * then does `verifiedAt` count as a fresh code, for a few minutes (CODE_REUSE_MS in step-up.ts; five in the database).
    */
-  issuer: { verifiedAt: number } | null;
+  issuer: IssuerCheck | null;
+}
+
+export interface IssuerCheck {
+  verifiedAt: number;
+  fresh: boolean;
 }
 
 /**
- * Whether the database marked this session as made through your organisation's sign-in, and when the issuer checked
- * (ms). Only the database's own record counts, which only the hosted app's sign-in writes; asked only of a person's
- * session that hasn't verified a code of its own, and only while the feature is on. Fails closed.
+ * Whether the database marked this session as made through your organisation's sign-in, when the issuer checked the
+ * person (ms) and whether that was the fresh check. Only the database's own record counts, which only the hosted app's
+ * sign-in writes; asked only of a person's session that hasn't verified a code of its own, and only while the feature
+ * is on. Fails closed.
  */
-async function issuerCheck(client: SupabaseClient, claims: Record<string, unknown>): Promise<{ verifiedAt: number } | null> {
+async function issuerCheck(client: SupabaseClient, claims: Record<string, unknown>): Promise<IssuerCheck | null> {
   if (MODE !== "web" || !ssoConfig() || claims.aal === "aal2" || claims.client_id || typeof claims.session_id !== "string") return null;
   const { data, error } = await client.rpc("issuer_session");
-  if (error || typeof data !== "string") return null;
-  const at = Date.parse(data);
-  return Number.isFinite(at) ? { verifiedAt: at } : null;
+  if (error || !data || typeof data !== "object") return null;
+  const { verified_at, fresh } = data as { verified_at?: unknown; fresh?: unknown };
+  if (typeof verified_at !== "string" || typeof fresh !== "boolean") return null;
+  const at = Date.parse(verified_at);
+  return Number.isFinite(at) ? { verifiedAt: at, fresh } : null;
 }
 
 /**

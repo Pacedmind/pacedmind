@@ -2,12 +2,14 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { SignJWT, exportJWK, generateKeyPair, type CryptoKey } from "jose";
+import { readFileSync } from "node:fs";
 import { canUsePlanner } from "../src/lib/auth-access";
+import { ssoConfirmHref, ssoStartHref } from "../src/lib/sso";
 import { nextStep } from "../src/server/auth-flow";
 import { readSsoConfig, type SsoConfig } from "../src/server/sso-config";
 import { verifyIdentityToken } from "../src/server/sso-token";
 import {
-  FINISH_COOKIE, START_COOKIE, acceptCallback, finishSignIn, startSignIn, type AccountSteps, type OpenedHandoff, type SessionSteps,
+  FINISH_COOKIE, FRESH_MAX_AGE, START_COOKIE, acceptCallback, finishSignIn, startSignIn, type AccountSteps, type OpenedHandoff, type SessionSteps,
 } from "../src/server/sso";
 import { CODE_REUSE_MS, codeFreshUntil } from "../src/server/step-up";
 import type { AuthState } from "../src/server/supabase";
@@ -91,7 +93,8 @@ test("a genuine token verifies to the person it names", async () => {
   const r = await verify(await sign(body));
   assert.ok(r.ok);
   assert.deepEqual(r.identity, {
-    issuer: ISSUER, subject: body.sub, email: "person@org.example", name: "A Person", tokenId: body.jti, issuedAt: now, expiresAt: now + 120,
+    issuer: ISSUER, subject: body.sub, email: "person@org.example", name: "A Person", tokenId: body.jti, issuedAt: now,
+    authTime: now - 600, expiresAt: now + 120,
   });
   // Within a minute of clock difference either way.
   assert.ok((await verify(await sign(claims({ iat: now + 50, exp: now + 170, auth_time: now + 50 })))).ok);
@@ -153,8 +156,8 @@ test("every promised claim is checked", async () => {
 
 /* ---------- the steps ---------- */
 
-function started(next: string | null = "/settings/account", at = Date.now()) {
-  const { location, cookie } = startSignIn(config, next, at);
+function started(next: string | null = "/settings/account", at = Date.now(), fresh = false) {
+  const { location, cookie } = startSignIn(config, next, at, fresh);
   const url = new URL(location);
   return { url, cookie, state: url.searchParams.get("state")!, nonce: url.searchParams.get("nonce")! };
 }
@@ -179,20 +182,51 @@ test("starting sends exactly the agreed request and keeps state and nonce in a _
   assert.equal(kept("https://elsewhere.example"), "/today");
   assert.equal(kept("//elsewhere.example"), "/today");
   assert.equal(kept(null), "/today");
+  // A plain sign-in asks the issuer for no particular freshness, and says so in its cookie.
+  assert.equal(url.searchParams.has("max_age"), false);
+  assert.equal(JSON.parse(Buffer.from(cookie.value, "base64url").toString()).fresh, false);
+});
+
+test("the fresh check asks the issuer for max_age=300 and nothing else besides", () => {
+  const { url, cookie } = started("/settings/account", Date.now(), true);
+  assert.equal(FRESH_MAX_AGE, 300);
+  assert.deepEqual([...url.searchParams.keys()].sort(), ["client_id", "max_age", "nonce", "redirect_uri", "response_mode", "state"]);
+  assert.equal(url.searchParams.get("max_age"), "300");
+  assert.equal(JSON.parse(Buffer.from(cookie.value, "base64url").toString()).fresh, true);
+});
+
+test("every Confirm with link is the fresh round-trip; signing in and linking are plain ones", () => {
+  assert.equal(ssoConfirmHref(), "/auth/sso/start?fresh=1");
+  assert.equal(ssoConfirmHref("/settings/account"), "/auth/sso/start?next=%2Fsettings%2Faccount&fresh=1");
+  assert.equal(ssoStartHref("/settings/security"), "/auth/sso/start?next=%2Fsettings%2Fsecurity");
+  // The pages that offer the fresh check: each "Confirm with {0}" link leads to ssoConfirmHref, and nothing there
+  // starts the round-trip any other way.
+  let links = 0;
+  for (const file of ["src/components/remote-start.tsx", "src/components/ask-card.tsx", "src/components/views/settings.tsx"]) {
+    const source = readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
+    assert.doesNotMatch(source, /href=\{SSO_START_PATH\}/, file);
+    const lines = source.split("\n");
+    lines.forEach((line, i) => {
+      if (!line.includes('tx("Confirm with {0}"')) return;
+      links += 1;
+      assert.match(lines.slice(Math.max(0, i - 2), i + 1).join("\n"), /href=\{ssoConfirmHref\(/, `${file}:${i + 1}`);
+    });
+  }
+  assert.equal(links, 3);
 });
 
 function accounts(patch: Partial<AccountSteps> = {}) {
   const calls: string[] = [];
   const seen = new Set<string>();
-  const kept: { id: string; subject: string; tokenId: string; issuedAt: number; userId: string; next: string }[] = [];
+  const kept: { id: string; subject: string; tokenId: string; authTime: number; fresh: boolean; userId: string; next: string }[] = [];
   let created = false;
   const steps: AccountSteps = {
     claimToken: async (id) => { calls.push(`claim ${id}`); if (seen.has(id)) return false; seen.add(id); return true; },
     linkAccount: async () => { calls.push("link"); return { userId: "11111111-1111-4111-8111-111111111111" }; },
     createAccount: async (identity) => { calls.push(`create ${identity.email}`); created = true; },
-    beginHandoff: async (id, identity, userId, next) => {
+    beginHandoff: async (id, identity, userId, next, fresh) => {
       calls.push(`keep ${userId}`);
-      kept.push({ id, subject: identity.subject, tokenId: identity.tokenId, issuedAt: identity.issuedAt, userId, next });
+      kept.push({ id, subject: identity.subject, tokenId: identity.tokenId, authTime: identity.authTime, fresh, userId, next });
     },
     ...patch,
   };
@@ -240,7 +274,10 @@ test("a token signs in once: the database keeps the verified sign-in, the browse
   // 256 random bits and nothing else: no account, person, time or sign-in token the browser could change.
   assert.match(r.cookie.value, /^[A-Za-z0-9_-]{43}$/);
   assert.deepEqual(kept, [{
-    id: r.cookie.value, subject: body.sub, tokenId: body.jti, issuedAt: body.iat, userId: "11111111-1111-4111-8111-111111111111", next: "/settings/account",
+    // The issuer's check is when the person last passed it (auth_time, ten minutes ago here), never when the token was
+    // made; and a plain sign-in is not the fresh check.
+    id: r.cookie.value, subject: body.sub, tokenId: body.jti, authTime: body.auth_time, fresh: false,
+    userId: "11111111-1111-4111-8111-111111111111", next: "/settings/account",
   }]);
   assert.deepEqual(calls, [`claim ${body.jti}`, "link", "keep 11111111-1111-4111-8111-111111111111"]);
   // The same token again, even through a new start in the same browser: refused, and no account is touched.
@@ -250,6 +287,30 @@ test("a token signs in once: the database keeps the verified sign-in, the browse
   const { jti } = body;
   assert.deepEqual(await acceptCallback({ id_token: replay, state: again.state }, again.cookie.value, config, steps), { ok: false, code: "replayed" });
   assert.deepEqual(calls, [`claim ${jti}`]);
+});
+
+test("the fresh check takes only a token whose code was entered within max_age; a plain sign-in takes any", async () => {
+  const at = Math.floor(Date.now() / 1000);
+  // Exactly at the limit: the fresh check, kept as such with the code's time.
+  const ok = started("/settings/account", Date.now(), true);
+  const body = liveClaims({ nonce: ok.nonce, auth_time: at - FRESH_MAX_AGE });
+  const fresh = accounts();
+  const r = await acceptCallback({ id_token: await sign(body), state: ok.state }, ok.cookie.value, config, fresh.steps, at * 1000);
+  assert.ok(r.ok);
+  assert.deepEqual(fresh.kept.map((k) => [k.authTime, k.fresh]), [[at - FRESH_MAX_AGE, true]]);
+  // A second older: the issuer didn't ask for a code (or the token isn't the answer to this request). Refused before the
+  // token is used up or any account touched.
+  const late = started("/settings/account", Date.now(), true);
+  const stale = accounts();
+  assert.deepEqual(await acceptCallback({ id_token: await sign(liveClaims({ nonce: late.nonce, auth_time: at - FRESH_MAX_AGE - 1 })), state: late.state },
+    late.cookie.value, config, stale.steps, at * 1000), { ok: false, code: "stale" });
+  assert.deepEqual(stale.calls, []);
+  // The plain sign-in takes an issuer session that started hours ago, and keeps that time; it is no fresh check.
+  const plain = started();
+  const signIn = accounts();
+  assert.ok((await acceptCallback({ id_token: await sign(liveClaims({ nonce: plain.nonce, auth_time: at - 4 * 3600 })), state: plain.state },
+    plain.cookie.value, config, signIn.steps, at * 1000)).ok);
+  assert.deepEqual(signIn.kept.map((k) => [k.authTime, k.fresh]), [[at - 4 * 3600, false]]);
 });
 
 test("accounts: a new person gets a confirmed account, and a refused link stops the sign-in", async () => {
@@ -340,13 +401,18 @@ function state(patch: Partial<AuthState> = {}): AuthState {
     mfaEnabled: true, hasRecoveryCodes: false, clientId: null, amr: [], issuer: null, ...patch };
 }
 
-test("an issuer session counts as two-factor, and its round-trip as the fresh check", () => {
+test("an issuer session counts as two-factor, and only its fresh round-trip as the fresh check", () => {
   const at = Date.now() - 60_000;
-  const viaIssuer = state({ aal: "aal2", issuer: { verifiedAt: at } });
+  const viaIssuer = state({ aal: "aal2", issuer: { verifiedAt: at, fresh: true } });
   assert.equal(canUsePlanner(viaIssuer), true);
   assert.equal(nextStep(viaIssuer), null);
   assert.equal(codeFreshUntil(viaIssuer), at + CODE_REUSE_MS);
   // A TOTP timestamp in the token doesn't extend it: the issuer's round-trip is the only check such a session has.
-  assert.equal(codeFreshUntil(state({ aal: "aal2", issuer: { verifiedAt: at }, amr: [{ method: "totp", timestamp: Math.floor(Date.now() / 1000) }] })), at + CODE_REUSE_MS);
+  assert.equal(codeFreshUntil(state({ aal: "aal2", issuer: { verifiedAt: at, fresh: true }, amr: [{ method: "totp", timestamp: Math.floor(Date.now() / 1000) }] })), at + CODE_REUSE_MS);
   assert.equal(codeFreshUntil(state()), null);
+  // A plain sign-in through the issuer is two-factor, yet no fresh check, however recent its auth_time: that may be a
+  // remembered browser's session start, with no code entered.
+  const plain = state({ aal: "aal2", issuer: { verifiedAt: Date.now(), fresh: false } });
+  assert.equal(nextStep(plain), null);
+  assert.equal(codeFreshUntil(plain), null);
 });

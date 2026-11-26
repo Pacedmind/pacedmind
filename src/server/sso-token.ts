@@ -16,7 +16,7 @@ export const CLOCK_SKEW = 60;
 /** Why a sign-in through the issuer failed, as the one short code the error page shows. */
 export type SsoRefusal =
   | "access_denied" | "state" | "token" | "expired" | "nonce" | "email" | "domain" | "two_factor"
-  | "replayed" | "account_linked" | "account_unconfirmed" | "account_ambiguous" | "account_protected" | "unavailable";
+  | "stale" | "replayed" | "account_linked" | "account_unconfirmed" | "account_ambiguous" | "account_protected" | "unavailable";
 
 /** The person the issuer vouches for. */
 export interface Identity {
@@ -26,8 +26,13 @@ export interface Identity {
   email: string;
   name: string;
   tokenId: string;
-  /** When the issuer issued the token (seconds): the time of this round-trip through it. */
+  /** When the issuer issued the token (seconds). Says nothing about when the person last entered a code. */
   issuedAt: number;
+  /**
+   * When the person last passed the issuer's two-factor check (`auth_time`, seconds): the code they entered, or for a
+   * browser the issuer remembers, the start of its session there. This, never `iat`, is the time of the check.
+   */
+  authTime: number;
   expiresAt: number;
 }
 
@@ -87,6 +92,6 @@ export async function verifyIdentityToken(
   }
   return {
     ok: true,
-    identity: { issuer: config.issuer, subject: sub.toLowerCase(), email, name, tokenId: jti.toLowerCase(), issuedAt: iat, expiresAt: exp },
+    identity: { issuer: config.issuer, subject: sub.toLowerCase(), email, name, tokenId: jti.toLowerCase(), issuedAt: iat, authTime: auth_time, expiresAt: exp },
   };
 }

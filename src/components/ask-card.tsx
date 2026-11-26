@@ -5,7 +5,7 @@ import { useState } from "react";
 
 import { answerAskAction, withdrawAskAction } from "@/app/actions";
 import { AGENT_LABEL, type AgentId, type AskView } from "@/lib/types";
-import { SSO_START_PATH } from "@/lib/sso";
+import { ssoConfirmHref } from "@/lib/sso";
 import { pollLaunchState, useClock, useLaunchState } from "./request-status";
 import { Button, cx, useAction } from "./ui";
 
@@ -72,7 +72,7 @@ function AskBody({ ask, agent, codeFreshUntil, confirmWith }: { ask: AskView; ag
           {viaIssuer ? (
             <p className="text-[12px] leading-snug text-mut">
               {tx("Answering from here takes a sign-in through {0} from the last few minutes.", [confirmWith])}{" "}
-              <a href={SSO_START_PATH} className="text-fg2 underline underline-offset-2">{tx("Confirm with {0}", [confirmWith])}</a>
+              <a href={ssoConfirmHref()} className="text-fg2 underline underline-offset-2">{tx("Confirm with {0}", [confirmWith])}</a>
             </p>
           ) : showCode && (
             <label className="flex items-center gap-2 text-[12px] text-mut">

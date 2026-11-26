@@ -9,8 +9,12 @@ import { sameSecret, verifyIdentityToken, type Identity, type SsoRefusal } from 
  * Signing in through your organisation, in three steps (the routes under src/app/auth/sso are thin wrappers):
  *
  * 1. GET /auth/sso/start: a random state and nonce go into a short-lived cookie, and the browser goes to the issuer.
+ *    With `fresh=1` it is the fresh check before a sensitive action: the issuer is asked for `max_age` (FRESH_MAX_AGE),
+ *    so it signs only once the person entered a code there that recently, and says when in `auth_time`. A plain
+ *    sign-in asks for no `max_age`.
  * 2. POST /auth/sso/callback, which the issuer's page sends with the identity token: the state must match the cookie,
- *    the token must verify (sso-token.ts) and never have been used, and the account is found, linked or created. The
+ *    the token must verify (sso-token.ts) and never have been used, a fresh check's `auth_time` must be within
+ *    FRESH_MAX_AGE, and the account is found, linked or created. The
  *    database then keeps the verified sign-in (issuer_begin_handoff), and the browser gets only a random id for it in
  *    a second short-lived cookie.
  * 3. GET /auth/sso/finish: the browser follows the callback's redirect here. Only now does it send its existing
@@ -32,6 +36,12 @@ export const FINISH_COOKIE = "__Host-pacedmind-sso-finish";
 export const START_MAX_AGE = 600;
 /** How long the redirect from the callback to the finish may take (seconds). */
 export const FINISH_MAX_AGE = 60;
+
+/**
+ * How recent the issuer's check must be for a fresh check (seconds): the `max_age` a fresh round-trip asks for, and the
+ * most `now - auth_time` its token may show. The same five minutes the database gives a fresh code (private.recent_mfa).
+ */
+export const FRESH_MAX_AGE = 300;
 
 export const CALLBACK_PATH = "/auth/sso/callback";
 export const FINISH_PATH = "/auth/sso/finish";
@@ -66,8 +76,13 @@ function decode(value: string | undefined): Record<string, unknown> | null {
 export const clearCookie = (name: string, sameSite: "none" | "lax"): CookieToSet =>
   ({ name, value: "", options: { httpOnly: true, secure: true, sameSite, path: "/", maxAge: 0 } });
 
-/** Step 1: where to send the browser, and the cookie that remembers what it was sent with. */
-export function startSignIn(config: SsoConfig, next: string | null | undefined, now = Date.now()): { location: string; cookie: CookieToSet } {
+/**
+ * Step 1: where to send the browser, and the cookie that remembers what it was sent with. `fresh` makes it the fresh
+ * check: the issuer is asked for `max_age`, and the callback takes only a token whose `auth_time` is that recent.
+ */
+export function startSignIn(
+  config: SsoConfig, next: string | null | undefined, now = Date.now(), fresh = false,
+): { location: string; cookie: CookieToSet } {
   const state = random();
   const nonce = random();
   const url = new URL(config.authorizeUrl);
@@ -76,25 +91,27 @@ export function startSignIn(config: SsoConfig, next: string | null | undefined, 
   url.searchParams.set("state", state);
   url.searchParams.set("nonce", nonce);
   url.searchParams.set("response_mode", "form_post");
+  if (fresh) url.searchParams.set("max_age", String(FRESH_MAX_AGE));
   return {
     location: url.toString(),
     cookie: {
       name: START_COOKIE,
-      value: encode({ state, nonce, next: safeNext(next), at: now }),
+      value: encode({ state, nonce, next: safeNext(next), at: now, fresh }),
       // SameSite=None: the issuer's page posts back from its own site, and the cookie has to come along.
       options: { httpOnly: true, secure: true, sameSite: "none", path: "/", maxAge: START_MAX_AGE },
     },
   };
 }
 
-type Started = { state: string; nonce: string; next: string };
+type Started = { state: string; nonce: string; next: string; fresh: boolean };
 
 function readStarted(value: string | undefined, now: number): Started | null {
   const v = decode(value);
-  if (!v || typeof v.state !== "string" || typeof v.nonce !== "string" || typeof v.next !== "string" || typeof v.at !== "number") return null;
+  if (!v || typeof v.state !== "string" || typeof v.nonce !== "string" || typeof v.next !== "string" || typeof v.at !== "number"
+    || typeof v.fresh !== "boolean") return null;
   if (!RANDOM.test(v.state) || !RANDOM.test(v.nonce)) return null;
   if (now - v.at > START_MAX_AGE * 1000 || v.at > now + 60_000) return null;
-  return { state: v.state, nonce: v.nonce, next: safeNext(v.next) };
+  return { state: v.state, nonce: v.nonce, next: safeNext(v.next), fresh: v.fresh };
 }
 
 export type LinkAnswer = { userId: string } | { userId: null } | { refused: "account_linked" | "account_unconfirmed" | "account_ambiguous" };
@@ -106,8 +123,12 @@ export interface AccountSteps {
   linkAccount(identity: Identity): Promise<LinkAnswer>;
   /** A new account with this confirmed email. Resolves even when another request created it first. */
   createAccount(identity: Identity): Promise<void>;
-  /** Has the database keep the verified sign-in under `handoffId` for the finish, tied to the token it used up. */
-  beginHandoff(handoffId: string, identity: Identity, userId: string, next: string): Promise<void>;
+  /**
+   * Has the database keep the verified sign-in under `handoffId` for the finish, tied to the token it used up. `fresh`:
+   * the round-trip asked for `max_age`, so `identity.authTime` is a code entered that recently, which makes the session
+   * a fresh check until it is FRESH_MAX_AGE old.
+   */
+  beginHandoff(handoffId: string, identity: Identity, userId: string, next: string, fresh: boolean): Promise<void>;
 }
 
 export type Outcome<T> = ({ ok: true } & T) | { ok: false; code: SsoRefusal };
@@ -132,6 +153,8 @@ export async function acceptCallback(
   const verified = await verifyIdentityToken(form.id_token, config, started.nonce, Math.floor(now / 1000));
   if (!verified.ok) return verified;
   const identity = verified.identity;
+  // The fresh check asked the issuer for a code within FRESH_MAX_AGE: a token showing an older one isn't that check.
+  if (started.fresh && Math.floor(now / 1000) - identity.authTime > FRESH_MAX_AGE) return { ok: false, code: "stale" };
   if (!(await steps.claimToken(identity.tokenId, identity.expiresAt))) return { ok: false, code: "replayed" };
   let link = await steps.linkAccount(identity);
   if ("refused" in link) return { ok: false, code: link.refused };
@@ -142,7 +165,7 @@ export async function acceptCallback(
     if (!link.userId) return { ok: false, code: "unavailable" };
   }
   const handoffId = random();
-  await steps.beginHandoff(handoffId, identity, link.userId, started.next);
+  await steps.beginHandoff(handoffId, identity, link.userId, started.next, started.fresh);
   return {
     ok: true,
     // Lax: the redirect that follows is a top-level GET, which carries Lax cookies, and nothing else needs it.

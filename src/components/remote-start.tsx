@@ -12,7 +12,7 @@ import {
   type AgentId, type AgentTools, type Device, type Doer, type LaunchRequestView, type RemoteStart as Setting, type Surface,
 } from "@/lib/types";
 import { REMOTE_START_LABEL } from "@/lib/from-elsewhere";
-import { SSO_START_PATH } from "@/lib/sso";
+import { ssoConfirmHref } from "@/lib/sso";
 import { deviceWithNeeds, missingOn, needList, toolsOn } from "@/lib/needs";
 import { AgentIcon, Icon, SurfaceIcon, type IconName } from "./icons";
 import { RUN_SHEET, noteSentRequest, publishComputers, useClock, useLaunchState } from "./request-status";
@@ -506,8 +506,8 @@ function RunSheet({ ask, devices, task, hereId, onClose }: {
 
           {usable && (showCode && confirmWith ? (
             <div className="flex flex-col gap-1.5">
-              {/* A full page load: the organisation's sign-in page, then back to Today with a new session. */}
-              <a href={SSO_START_PATH} className="inline-flex h-10 w-full items-center justify-center rounded-md border border-line2 text-[13px] text-fg2 transition-colors hover:bg-hover">
+              {/* A full page load: the organisation's fresh check (a code from the last five minutes), then back to Today with a new session. */}
+              <a href={ssoConfirmHref()} className="inline-flex h-10 w-full items-center justify-center rounded-md border border-line2 text-[13px] text-fg2 transition-colors hover:bg-hover">
                 {tx("Confirm with {0}", [confirmWith])}</a>
               <span className="text-[11.5px] leading-relaxed text-mut2">
                 {tx("Asking a computer to run an agent takes a sign-in through {0} from the last few minutes. Come back here once you have.", [confirmWith])}</span>

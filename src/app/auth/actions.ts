@@ -342,8 +342,9 @@ export async function deleteAccountAction(proof: string, confirmEmail: string): 
   const db = await supabase();
   let deletionClient = db;
   if (state.issuer) {
-    // Signed in through your organisation: a round-trip through it in the last few minutes confirms, never a code or a
-    // password of PacedMind's. The database checks the same (private.recent_mfa).
+    // Signed in through your organisation: its fresh round-trip (a code entered there in the last few minutes, asked
+    // for with max_age) confirms, never a code or a password of PacedMind's. The database checks the same
+    // (private.recent_mfa).
     const until = codeFreshUntil(state);
     if (!until || until <= Date.now()) return { ok: false, error: issuerStepUp(ssoLabel()) };
   } else if (state.mfaEnabled) {

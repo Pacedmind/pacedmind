@@ -1,7 +1,10 @@
 -- Signing in through your organisation: the hosted app verifies a short-lived identity token from one trusted issuer
 -- (src/server/sso-token.ts) and then starts an ordinary session for the account. The issuer asked for its own
--- two-factor code before it issued the token, so such a session counts as a two-factor session here: for planning,
--- for computers and, while the issuer's check is under five minutes old, as a fresh code.
+-- two-factor code before it issued the token, so such a session counts as a two-factor session here: for planning and
+-- for computers. It counts as a fresh code only when the round-trip that made it was the fresh check: the app asked the
+-- issuer for `max_age`, so the issuer signed only after a code entered that recently, and its `auth_time` (when that
+-- code was entered) is under five minutes old. A plain sign-in's `auth_time` may be the start of a session the issuer
+-- remembered, with no code at all, so it never counts as a fresh code, however recent.
 --
 -- What marks such a session is a row in private.issuer_sessions, keyed by the auth session's id. Only the hosted app's
 -- server writes it, with the project's secret key, right after it made the session, and only from the sign-in its
@@ -36,8 +39,10 @@ create table private.issuer_sessions (
   user_id uuid not null references auth.users (id) on delete cascade,
   issuer text not null,
   subject text not null,
-  -- When the issuer issued the token this session came from: the time of its two-factor round-trip.
+  -- When the person last passed the issuer's two-factor check (the token's auth_time), never when the token was made.
   verified_at timestamptz not null,
+  -- Whether the round-trip was the fresh check (max_age): only then is verified_at a code entered at that time.
+  fresh boolean not null,
   foreign key (issuer, subject) references private.issuer_identities (issuer, subject) on delete cascade
 );
 create index issuer_sessions_by_user on private.issuer_sessions (user_id);
@@ -54,6 +59,7 @@ create table private.issuer_handoffs (
   issuer text not null,
   subject text not null,
   verified_at timestamptz not null,
+  fresh boolean not null,
   -- Where the browser goes afterwards; the app checks it again (safeNext) before it goes there.
   next text not null check (char_length(next) <= 300 and next ~ '^/[A-Za-z0-9/_?=&%.~-]*$' and next !~ '^//'),
   created_at timestamptz not null default now(),
@@ -71,11 +77,11 @@ revoke all on private.issuer_identities, private.issuer_tokens, private.issuer_s
 
 /* ---------- 2. who counts as signed in through the issuer ---------- */
 
--- When the issuer last checked the person behind this request, or null: the request's own session, still live, a
--- person's (never an agent's OAuth sign-in), made through the issuer for this very account, whose link still stands.
-create function private.issuer_verified_at() returns timestamptz
+-- The mark of the session behind this request, or no row: the request's own session, still live, a person's (never an
+-- agent's OAuth sign-in), made through the issuer for this very account, whose link still stands.
+create function private.issuer_current() returns table (verified_at timestamptz, fresh boolean)
 language sql stable security definer set search_path = '' as $$
-  select i.verified_at
+  select i.verified_at, i.fresh
   from private.issuer_sessions i
   join auth.sessions s on s.id = i.session_id and s.user_id = i.user_id
   join private.issuer_identities l on l.issuer = i.issuer and l.subject = i.subject and l.user_id = i.user_id
@@ -88,7 +94,14 @@ $$;
 
 create function private.issuer_session_ok() returns boolean
 language sql stable security definer set search_path = '' as $$
-  select private.issuer_verified_at() is not null
+  select exists (select 1 from private.issuer_current())
+$$;
+
+-- When the person behind this request entered the issuer's code, if the round-trip that made this session was the
+-- fresh check (max_age); null otherwise.
+create function private.issuer_fresh_at() returns timestamptz
+language sql stable security definer set search_path = '' as $$
+  select c.verified_at from private.issuer_current() c where c.fresh
 $$;
 
 /* ---------- 3. the existing checks honour it ---------- */
@@ -141,7 +154,7 @@ language sql stable security definer set search_path = '' as $$
 $$;
 
 -- A fresh code: one from an authenticator the account had before this sign-in, entered in the last `seconds`; or, for
--- a session made through the issuer, a round-trip through the issuer that recent (a new session made by it).
+-- a session made through the issuer by its fresh check (max_age), the issuer's code entered that recently (auth_time).
 create or replace function private.recent_mfa(seconds integer) returns boolean
 language sql stable security definer set search_path = '' as $$
   select (
@@ -162,7 +175,7 @@ language sql stable security definer set search_path = '' as $$
         and f.status = 'verified'
         and f.created_at < s.created_at
     )
-  ) or coalesce(private.issuer_verified_at() >= now() - make_interval(secs => seconds), false)
+  ) or coalesce(private.issuer_fresh_at() >= now() - make_interval(secs => seconds), false)
 $$;
 
 -- An agent approved from a session made through the issuer was approved under the issuer's two-factor check, which
@@ -263,9 +276,11 @@ begin
 end $$;
 
 -- The callback's last step: keeps the verified sign-in under `handoff` for one minute. Only for a token this server
--- just used up, a recent check, and an account the person is linked to or may still be linked to.
+-- just used up and an account the person is linked to or may still be linked to. `verified_at` is the token's
+-- auth_time, which for a plain sign-in may be long ago (the issuer's session started hours before); `fresh` says the
+-- round-trip was the fresh check, whose code must then be under five minutes old.
 create function public.issuer_begin_handoff(handoff text, token_id text, issuer text, subject text, account uuid,
-  verified_at timestamptz, next text) returns void
+  verified_at timestamptz, fresh boolean, next text) returns void
 language plpgsql security definer set search_path = '' as $$
 declare
   v_linked uuid;
@@ -274,7 +289,10 @@ begin
                  where t.jti = issuer_begin_handoff.token_id and t.expires_at > now()) then
     raise exception 'That identity token was not used up here.' using errcode = '42501';
   end if;
-  if verified_at is null or verified_at < now() - interval '5 minutes' or verified_at > now() + interval '1 minute' then
+  if verified_at is null or fresh is null or verified_at > now() + interval '1 minute' then
+    raise exception 'That check is not valid.' using errcode = '22023';
+  end if;
+  if fresh and verified_at < now() - interval '5 minutes' then
     raise exception 'That check is not recent.' using errcode = '22023';
   end if;
   select l.user_id into v_linked from private.issuer_identities l
@@ -284,10 +302,10 @@ begin
     raise exception 'That person and that account are linked elsewhere.' using errcode = '42501';
   end if;
   delete from private.issuer_handoffs h where h.expires_at < now();
-  insert into private.issuer_handoffs (id_digest, token_id, user_id, issuer, subject, verified_at, next, expires_at)
+  insert into private.issuer_handoffs (id_digest, token_id, user_id, issuer, subject, verified_at, fresh, next, expires_at)
     values (private.issuer_handoff_digest(handoff), issuer_begin_handoff.token_id, account, issuer_begin_handoff.issuer,
-            issuer_begin_handoff.subject, least(issuer_begin_handoff.verified_at, now()), issuer_begin_handoff.next,
-            now() + interval '1 minute');
+            issuer_begin_handoff.subject, least(issuer_begin_handoff.verified_at, now()), issuer_begin_handoff.fresh,
+            issuer_begin_handoff.next, now() + interval '1 minute');
 end $$;
 
 -- The finish's first step: which account the waiting sign-in is for, whether the person is linked to it yet, and
@@ -332,9 +350,10 @@ begin
 end $$;
 
 -- The finish's last step: marks the session it just made as made through the issuer, using up the waiting sign-in.
--- The account, the person and the time of the check come from the sign-in the callback kept, never from the caller:
--- the session must be a live person's session of that account, made after the callback (a minute of clock
--- difference) and in the last five minutes, and the person must be linked to the account.
+-- The account, the person, the time of the check and whether it was the fresh one come from the sign-in the callback
+-- kept, never from the caller: the session must be a live person's session of that account, made after the callback
+-- (a minute of clock difference) and in the last five minutes, and the person must be linked to the account. A fresh
+-- check that went stale on the way still marks the session, which then simply isn't a fresh code (recent_mfa).
 create function public.issuer_mark_session(session uuid, handoff text) returns void
 language plpgsql security definer set search_path = '' as $$
 declare
@@ -357,31 +376,31 @@ begin
                    and (s.not_after is null or s.not_after > now())) then
     raise exception 'That session is not a new session of this account.' using errcode = '42501';
   end if;
-  if v.verified_at < now() - interval '5 minutes' then
-    raise exception 'That check is not recent.' using errcode = '22023';
-  end if;
   -- Sessions of this account that have ended leave nothing behind.
   delete from private.issuer_sessions i
     where i.user_id = v.user_id
       and not exists (select 1 from auth.sessions s where s.id = i.session_id);
-  insert into private.issuer_sessions (session_id, user_id, issuer, subject, verified_at)
-    values (issuer_mark_session.session, v.user_id, v.issuer, v.subject, v.verified_at);
+  insert into private.issuer_sessions (session_id, user_id, issuer, subject, verified_at, fresh)
+    values (issuer_mark_session.session, v.user_id, v.issuer, v.subject, v.verified_at, v.fresh);
 end $$;
 
 /* ---------- 5. what a signed-in browser may ask ---------- */
 
--- For the app: whether this request's own session was made through the issuer, and when the issuer last checked.
-create function public.issuer_session() returns timestamptz
+-- For the app: whether this request's own session was made through the issuer (null if not), when the person last
+-- passed the issuer's check, and whether the round-trip that made the session was the fresh check:
+-- {"verified_at": …, "fresh": true|false}.
+create function public.issuer_session() returns jsonb
 language sql stable security definer set search_path = '' as $$
-  select private.issuer_verified_at()
+  select jsonb_build_object('verified_at', c.verified_at, 'fresh', c.fresh) from private.issuer_current() c
 $$;
 
-revoke execute on function private.issuer_verified_at(), private.issuer_session_ok(), private.issuer_handoff_digest(text),
+revoke execute on function private.issuer_current(), private.issuer_session_ok(), private.issuer_fresh_at(),
+  private.issuer_handoff_digest(text),
   public.issuer_claim_token(text, timestamptz), public.issuer_link_account(text, text, text),
-  public.issuer_begin_handoff(text, text, text, text, uuid, timestamptz, text), public.issuer_open_handoff(text),
+  public.issuer_begin_handoff(text, text, text, text, uuid, timestamptz, boolean, text), public.issuer_open_handoff(text),
   public.issuer_confirm_link(text), public.issuer_mark_session(uuid, text), public.issuer_session()
   from public, anon, authenticated, service_role;
 grant execute on function public.issuer_session(), public.issuer_confirm_link(text) to authenticated;
 grant execute on function public.issuer_claim_token(text, timestamptz), public.issuer_link_account(text, text, text),
-  public.issuer_begin_handoff(text, text, text, text, uuid, timestamptz, text), public.issuer_open_handoff(text),
+  public.issuer_begin_handoff(text, text, text, text, uuid, timestamptz, boolean, text), public.issuer_open_handoff(text),
   public.issuer_mark_session(uuid, text) to service_role;
