@@ -5,6 +5,7 @@ import { headers } from "next/headers";
 import { Geist, Geist_Mono } from "next/font/google";
 import { THEME_INIT_SCRIPT } from "@/lib/theme";
 import { ThemeSync } from "@/components/theme";
+import { embedMode } from "@/server/embed";
 import "./globals.css";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin", "latin-ext"] });
@@ -24,8 +25,10 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
   const tx = await getTranslation();
   // The Content Security Policy only runs scripts carrying this request's nonce (src/proxy.ts).
   const nonce = (await headers()).get("x-nonce") ?? undefined;
+  // Embed mode (src/lib/embed.ts): marked on the document, which stays dark (THEME_INIT_SCRIPT).
+  const embed = await embedMode();
   return (
-    <html lang={tx.language} data-theme="dark" suppressHydrationWarning className={`${geistSans.variable} ${geistMono.variable} h-full`}>
+    <html lang={tx.language} data-theme="dark" data-embed={embed ? "" : undefined} suppressHydrationWarning className={`${geistSans.variable} ${geistMono.variable} h-full`}>
       <head><script id="pacedmind-theme" nonce={nonce} dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} /></head>
       <body className="h-full"><LanguageProvider language={tx.language}><ThemeSync />{children}</LanguageProvider></body>
     </html>

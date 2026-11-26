@@ -235,7 +235,7 @@ function SpacesEditor({ display, error, update, onClose }: { display: NoteDispla
               e.preventDefault(); setSelected(i.id);
               const dx = e.key === "ArrowLeft" ? -.01 : e.key === "ArrowRight" ? .01 : 0, dy = e.key === "ArrowUp" ? -.01 : e.key === "ArrowDown" ? .01 : 0;
               commit(i.id, clamp(e.shiftKey ? { ...r, width: r.width + dx, height: r.height + dy } : { ...r, x: r.x + dx, y: r.y + dy }));
-            }}><span className="pointer-events-none absolute left-2 top-2 z-20 max-w-[calc(100%-16px)] rounded border border-line2 bg-raised px-1.5 py-1 text-[10px] shadow-sm">{i.label}{preview && <span className="ml-2 text-mut">{tx("Room for {0}", [preview.preview.capacity])}</span>}</span></button>
+            }}><span className="pointer-events-none absolute left-2 top-2 z-20 max-w-[calc(100%-16px)] rounded border border-line2 bg-raised px-1.5 py-1 text-[10px] shadow-[var(--shadow-sm)]">{i.label}{preview && <span className="ml-2 text-mut">{tx("Room for {0}", [preview.preview.capacity])}</span>}</span></button>
           {handles.map(h => <button key={h.edge} type="button" aria-label={tx("Resize {0} from {1}", [i.label, tx(h.label)])} title={tx("Resize from {0}", [tx(h.label)])} className="absolute z-30 touch-none rounded-sm hover:bg-sel focus-visible:bg-sel" style={h.style}
             onFocus={() => { if (selected !== i.id) setDraft(null); setSelected(i.id); }} onPointerDown={e => start(e, i.id, r, h.edge)} onPointerMove={move} onPointerUp={finish} onPointerCancel={cancel}>
             {h.edge.length === 2 && <span aria-hidden className="absolute inset-[3px] rounded-sm border border-line-strong bg-raised" />}

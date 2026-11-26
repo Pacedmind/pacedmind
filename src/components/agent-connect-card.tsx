@@ -109,7 +109,7 @@ export function AgentConnectCard({ url }: { url: string }) {
   };
   return (
     <div role="dialog" aria-labelledby="agent-connect-title"
-      className="fixed bottom-4 right-4 z-40 flex w-[470px] flex-col gap-3 rounded-xl border border-line bg-panel p-4 shadow-lg max-md:inset-x-3 max-md:w-auto">
+      className="fixed bottom-4 right-4 z-40 flex w-[470px] flex-col gap-3 rounded-xl border border-line bg-panel p-4 shadow-[var(--shadow-lg)] max-md:inset-x-3 max-md:w-auto">
       <div>
         <p id="agent-connect-title" className="text-[13px] font-semibold text-strong">{tx("Connect your agent")}</p>
         <p className="mt-1 text-[12.5px] leading-relaxed text-fg3">

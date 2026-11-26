@@ -134,7 +134,7 @@ function ProjectTimeline({ from, days, now, projects, colorOf, markOf, stats, se
               );
             })}
             {pill !== null && (
-              <span className="absolute top-[7px] flex h-[18px] -translate-x-1/2 items-center whitespace-nowrap rounded bg-accent-strong px-1.5 text-[11px] font-medium text-white"
+              <span className="absolute top-[7px] flex h-[18px] -translate-x-1/2 items-center whitespace-nowrap rounded bg-accent-strong px-1.5 text-[11px] font-medium text-on-accent"
                 style={{ left: pill }}>
                 {fmtShort(today, tx.language)}
               </span>
@@ -265,7 +265,7 @@ function PhoneProjects({ from, days, now, projects, colorOf, markOf, stats, sele
             );
           })}
           {showNow && (
-            <span className="absolute top-[7px] flex h-[18px] -translate-x-1/2 items-center whitespace-nowrap rounded bg-accent-strong px-1.5 text-[11px] font-medium text-white"
+            <span className="absolute top-[7px] flex h-[18px] -translate-x-1/2 items-center whitespace-nowrap rounded bg-accent-strong px-1.5 text-[11px] font-medium text-on-accent"
               style={{ left: pill }}>
               {fmtShort(today, tx.language)}
             </span>

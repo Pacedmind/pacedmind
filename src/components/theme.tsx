@@ -10,6 +10,9 @@ const EVENT = "pacedmind:theme";
 const getTheme = (): Theme => document.documentElement.dataset.theme === "light" ? "light" : "dark";
 const getServerTheme = (): Theme => "dark";
 const isNote = () => location.pathname.startsWith("/floating/task/");
+/** Embed mode (src/lib/embed.ts): dark, whatever the person chose; the choice still counts outside it. */
+const isEmbedded = () => document.documentElement.hasAttribute("data-embed");
+const show = (theme: Theme) => { if (!isEmbedded()) document.documentElement.dataset.theme = theme; };
 function preference(): ThemePreference {
   try { const saved = localStorage.getItem(THEME_STORAGE_KEY); if (saved === "system" || saved === "light") return saved; } catch {}
   return "dark";
@@ -20,13 +23,13 @@ function subscribe(onChange: () => void) {
   const onStorage = (event: StorageEvent) => {
     if (event.key !== THEME_STORAGE_KEY) return;
     if (isNote() && window.pacedMindDesktop?.onTaskNoteTheme) return;
-    document.documentElement.dataset.theme = resolve(preference());
+    show(resolve(preference()));
     onChange();
   };
   window.addEventListener(EVENT, onChange);
   window.addEventListener("storage", onStorage);
   const media = matchMedia("(prefers-color-scheme: dark)");
-  const onSystem = () => { if (preference() === "system" && !isNote()) { document.documentElement.dataset.theme = resolve("system"); onChange(); } };
+  const onSystem = () => { if (preference() === "system" && !isNote()) { show(resolve("system")); onChange(); } };
   media.addEventListener("change", onSystem);
   return () => {
     window.removeEventListener(EVENT, onChange);
@@ -40,7 +43,7 @@ function useTheme() {
 }
 
 function setTheme(theme: ThemePreference) {
-  document.documentElement.dataset.theme = resolve(theme);
+  show(resolve(theme));
   try { localStorage.setItem(THEME_STORAGE_KEY, theme); } catch { /* The current session still switches. */ }
   window.dispatchEvent(new Event(EVENT));
 }
@@ -64,12 +67,18 @@ export function ThemeToggle() {
   );
 }
 
+const noChange = () => () => {};
+
 export function ThemeSelector() {
   const tx = useTranslation();
   const theme = useSyncExternalStore(subscribe, preference, getServerTheme);
-  return <Segmented value={theme} onChange={setTheme} options={[
-    { value: "dark", label: <><Icon name="moon" size={13} />{tx("Dark")}</> },
-    { value: "light", label: <><Icon name="sun" size={13} />{tx("Light")}</> },
-    { value: "system", label: <><Icon name="appWindow" size={13} />{tx("System")}</> },
-  ]} />;
+  const embedded = useSyncExternalStore(noChange, isEmbedded, () => false);
+  return <>
+    <Segmented value={theme} onChange={setTheme} options={[
+      { value: "dark", label: <><Icon name="moon" size={13} />{tx("Dark")}</> },
+      { value: "light", label: <><Icon name="sun" size={13} />{tx("Light")}</> },
+      { value: "system", label: <><Icon name="appWindow" size={13} />{tx("System")}</> },
+    ]} />
+    {embedded && <span className="text-[12px] text-mut2">{tx("The app PacedMind is shown in sets its colors here.")}</span>}
+  </>;
 }

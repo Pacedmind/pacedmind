@@ -286,11 +286,11 @@ export function SetupForm({ first, email, next }: { first: boolean; email: strin
         <li>{tx("Enter the 6-digit code the app shows.")}</li>
       </ol>
       <div className="flex flex-col items-center gap-3">
-        <div className="flex h-[184px] w-[184px] items-center justify-center rounded-lg bg-white p-2">
+        <div className="flex h-[184px] w-[184px] items-center justify-center rounded-lg bg-qr p-2">
           {enrollment
             ? /* eslint-disable-next-line @next/next/no-img-element -- a data: URI SVG made by Supabase */
               <img src={enrollment.qr} alt={tx("QR code for PacedMind ({0})", [email])} width={168} height={168} />
-            : <span className="text-[12px] text-neutral-500">{tx("Preparing…")}</span>}
+            : <span className="text-[12px] text-qr-fg">{tx("Preparing…")}</span>}
         </div>
         {enrollment && (
           // A phone can't scan its own screen: this hands the key to the authenticator app on it.

@@ -8,6 +8,8 @@
     "test:projects": "node --conditions=react-server --import tsx --test tests/hidden-projects.test.ts",
     "test:workspaces": "node --conditions=react-server --import tsx --test tests/team-workspaces.test.ts tests/profile-avatar.test.ts",
     "test:auth": "node --conditions=react-server --import tsx --test tests/auth-access.test.ts tests/auth-state.test.ts tests/native-auth.test.ts",
+    "test:embed": "node --conditions=react-server --import tsx --test tests/embed.test.ts && node --import tsx --test tests/embed-colors.test.tsx",
+    "test:embed:app": "node scripts/test-embed-app.mjs",
     "test:sql": "node scripts/test-sql-security.mjs",
     "test:connectors": "node --conditions=react-server --import tsx --test tests/connector-contract.test.ts",
     "test:platforms": "node --test tests/windows-store.test.mjs",

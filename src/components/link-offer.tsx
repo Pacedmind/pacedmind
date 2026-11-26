@@ -44,7 +44,7 @@ export function LinkOffer({ items, areas }: { items: Linkable[]; areas: Area[] }
   };
   return (
     <div role="dialog" aria-labelledby="link-offer-title"
-      className="fixed bottom-4 right-4 z-40 flex w-[380px] flex-col gap-2 rounded-xl border border-line bg-panel p-4 shadow-lg max-md:inset-x-3 max-md:w-auto">
+      className="fixed bottom-4 right-4 z-40 flex w-[380px] flex-col gap-2 rounded-xl border border-line bg-panel p-4 shadow-[var(--shadow-lg)] max-md:inset-x-3 max-md:w-auto">
       <p id="link-offer-title" className="text-[13px] font-semibold text-strong">{tx("Found on this computer")}</p>
       <p className="text-[12.5px] leading-relaxed text-fg3">
         {what} {" "}{tx("from your other computers")}{" "}{items.length > 1 ? "are" : "is"} {" "}{tx("here too. Linked,")}{" "}{items.length > 1 ? "their" : "its"} {tx("tasks run here as well.")}</p>

@@ -21,7 +21,7 @@ export function GoogleCalendarSettings({ initial, web }: { initial: GoogleCalend
     <p className="text-mut2">{web ? tx("This connection syncs while PacedMind is open in this browser. Keep a tab open, or connect from the desktop app for background sync.") : tx("This connection syncs while PacedMind is running on this computer, including when its window is closed to the tray.")}</p>
     {!status.configured && <p className="rounded-lg border border-line p-3">{tx("Google Calendar is not configured on this server yet. Follow the setup guide to enable the connection.")}</p>}
     {status.elsewhere && <p>{tx("This connection runs on another computer or the web app. Open its Calendar settings to sync or resolve conflicts. You can disconnect it here.")}</p>}
-    {status.error && <p role="alert" className="text-red-400">{tx.generated(status.error)}</p>}
+    {status.error && <p role="alert" className="text-error">{tx.generated(status.error)}</p>}
     {!status.elsewhere && <>
       {status.configured && <Button disabled={pending} onClick={() => run(async () => {
         const result = await connectGoogleCalendarAction();
@@ -59,7 +59,7 @@ function ConnectionCard({ connection: c, firstCalendar, refresh }: { connection:
   const selectedId = c.calendars?.some((item) => item.id === selected) ? selected : c.calendars?.[0]?.id ?? "";
   return <section className="space-y-3 rounded-lg border border-line p-4">
     <div><strong>{c.calendarName ?? c.accountName ?? tx("Google Calendar")}</strong>{c.calendarName && <p className="text-mut2">{c.accountName}</p>}</div>
-    {c.error && <p role="alert" className="text-red-400">{tx.generated(c.error)}</p>}
+    {c.error && <p role="alert" className="text-error">{tx.generated(c.error)}</p>}
     {c.calendarName && <p className="text-mut2">{c.lastSync ? tx("Last synced: {0}", [new Date(c.lastSync).toLocaleString(tx.language)]) : tx("Waiting for the first sync")}</p>}
     {c.calendarName && !!c.calendars?.length && <Button disabled={pending} onClick={() => setAdding(!adding)}>{tx("Add another calendar")}</Button>}
     {adding && <div className="space-y-3">

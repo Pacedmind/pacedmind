@@ -34,8 +34,10 @@ declare global {
   }
 }
 
-// Runs before the first paint, including when local storage is unavailable.
+// Runs before the first paint, including when local storage is unavailable. In embed mode (`data-embed`, set by the root
+// layout) the page stays dark, as the server drew it, whatever the person chose.
 export const THEME_INIT_SCRIPT = `(() => {
+  if (document.documentElement.hasAttribute('data-embed')) return;
   let theme = window.pacedMindDesktop?.initialTheme || 'dark';
   try { const saved = localStorage.getItem('${THEME_STORAGE_KEY}'); if (saved === 'light' || saved === 'dark') theme = saved; if (saved === 'system') theme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'; } catch {}
   document.documentElement.dataset.theme = theme;

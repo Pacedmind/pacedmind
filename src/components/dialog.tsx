@@ -47,7 +47,7 @@ export function ConfirmDialog({ title, children, confirmLabel, danger, typed, on
         <div className="mt-2 flex justify-end gap-2">
           <Button variant="ghost" onClick={onCancel}>{tx("Cancel")}</Button>
           <Button onClick={onConfirm} autoFocus={!typed} disabled={!ready}
-            className={danger ? "border-danger-line bg-danger-bg text-danger-fg hover:bg-danger-hover" : "border-transparent bg-accent-strong text-white hover:brightness-110"}>
+            className={danger ? "border-danger-line bg-danger-bg text-danger-fg hover:bg-danger-hover" : "border-transparent bg-accent-strong text-on-accent hover:brightness-110"}>
             {confirmLabel}
           </Button>
         </div>

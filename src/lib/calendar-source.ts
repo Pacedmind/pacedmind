@@ -1,6 +1,7 @@
 import type { CalendarDetails } from "./calendar-sync";
 
-const COLORS = ["#5585d9", "#aa74ca", "#d07845", "#3b9a87", "#c36984", "#7f8c42"];
+/** A synced calendar's color: one of six variables in globals.css (`--color-calendar-1` to `-6`), which a host may set. */
+const COLORS = [1, 2, 3, 4, 5, 6].map((n) => `var(--color-calendar-${n})`);
 
 /** Public event provenance only; never reads the OAuth connection or its tokens. */
 export function calendarSource(details?: CalendarDetails) {

@@ -26,6 +26,9 @@ jobs:
       - run: npm run test:models
       - run: npm run test:sessions
       - run: npm run test:auth
+      - run: npm run test:embed
+      # Starts a development server of its own on this runner, on the sample data.
+      - run: npm run test:embed:app
       - run: npm run test:sql
       - run: npm run test:projects
       - run: npm run test:connectors

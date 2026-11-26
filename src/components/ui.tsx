@@ -21,7 +21,7 @@ export function Button({ variant = "outline", size = "md", className, ...rest }:
         size === "sm" ? "h-6 px-2 text-[12px]" : "h-7 px-2.5 text-[12.5px]",
         variant === "outline" && "border border-ctl text-fg2 hover:bg-hover",
         variant === "ghost" && "text-mut hover:bg-hover hover:text-fg2",
-        variant === "primary" && "bg-accent-strong text-white font-medium hover:brightness-110",
+        variant === "primary" && "bg-accent-strong text-on-accent font-medium hover:brightness-110",
         className,
       )}
     />
@@ -51,7 +51,7 @@ export function Switch({ on, onChange, label }: { on: boolean; onChange: (v: boo
   return (
     <button type="button" role="switch" aria-checked={on} aria-label={label} onClick={() => onChange(!on)}
       className={cx("flex h-[18px] w-[30px] shrink-0 items-center rounded-full p-0.5 transition-colors", on ? "justify-end bg-accent-strong" : "justify-start bg-ctl")}>
-      <span className="h-3.5 w-3.5 rounded-full bg-white" />
+      <span className="h-3.5 w-3.5 rounded-full bg-knob" />
     </button>
   );
 }

@@ -2381,5 +2381,6 @@
   "New name for {0}": "Nowa nazwa dla {0}",
   "Only the workspace's owners and admins change or delete its areas.": "Obszary zespołu zmieniają i usuwają tylko jego właściciele i administratorzy.",
   "Only the workspace's owners and admins rename it.": "Nazwę zespołu zmieniają tylko jego właściciele i administratorzy.",
-  "Shared with your team": "Wspólne z zespołem"
+  "Shared with your team": "Wspólne z zespołem",
+  "The app PacedMind is shown in sets its colors here.": "Tutaj kolory ustala aplikacja, w której otwarto PacedMind."
 }

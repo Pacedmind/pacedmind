@@ -1,0 +1,72 @@
+---
+title: Embedding
+description: "Embed mode, for an application that shows PacedMind's web app in a browser view of its own: the pacedmind-embed cookie, what it changes, and the names its sidebar links carry."
+---
+
+An application can show the web app's pages in a browser view of its own and draw PacedMind's navigation in its own sidebar. Embed mode is for that: the pages come without PacedMind's header and sidebar, and the sidebar's links stay in the page, under names that don't change.
+
+The view must be a top-level page. PacedMind refuses to be shown in a frame, in embed mode too.
+
+## Switching it on
+
+Set this cookie for the web app's address, `https://app.pacedmind.com`, before loading a page:
+
+| Attribute | Value |
+| --- | --- |
+| Name and value | `pacedmind-embed=1` |
+| Path | `/` |
+| SameSite | `Lax` |
+| HttpOnly | Not set |
+
+Without the cookie, or with any other value, the pages are as usual. Removing it and loading a page again brings PacedMind's header and sidebar back.
+
+## What changes
+
+| | Usually | In embed mode |
+| --- | --- | --- |
+| The header | **Go back**, **Go forward**, the wordmark and the account menu across the top | Not there, and nothing in the page can drag the window |
+| The sidebar | On the left | In the page, hidden (`hidden` on its wrapper); <kbd>Ctrl</kbd>+<kbd>B</kbd> does nothing |
+| The main panel | Framed, with a margin around it | Fills the view, without a margin |
+| The theme | The one chosen in **Settings → Appearance** | Dark, on every page including the sign-in pages. The choice in **Settings → Appearance** is kept for when the page isn't embedded |
+
+**Sign out** is in **Settings → Account**. The banners above the page, such as the one offering two-factor sign-in, still show.
+
+### Colors and fonts
+
+Every color on the planner's pages and the sign-in pages comes from a CSS variable, so the application can set its own on `:root`, for example in a stylesheet it adds to the view:
+
+| Variables | What they color |
+| --- | --- |
+| `--color-bg`, `--color-panel`, `--color-raised`, `--color-input` | The background, the main panel, raised surfaces, inputs |
+| `--color-hover`, `--color-sel` | A row under the pointer, the selected row |
+| `--color-line`, `--color-line2`, `--color-line-strong`, `--color-ctl`, `--color-track` | Lines and borders, controls, progress tracks |
+| `--color-strong`, `--color-fg`, `--color-fg2`, `--color-fg3`, `--color-mut`, `--color-mut2`, `--color-dim`, `--color-faint`, `--color-ink` | Text, from the strongest to the faintest |
+| `--color-accent`, `--color-accent-strong`, `--color-accent-fg`, `--color-on-accent` | Today and now, the selection, the primary button and what's on it |
+| `--color-danger`, `--color-danger-bg`, `--color-danger-hover`, `--color-danger-line`, `--color-danger-fg` | Overdue dates, deleting |
+| `--color-knob`, `--color-qr`, `--color-qr-fg`, `--color-overlay`, `--color-nonwork` | A switch's knob, the square behind the two-factor QR code, the shade behind dialogs, time outside work hours |
+| `--color-claude`, `--color-codex` | The agents' wash in the week calendar |
+| `--color-calendar-1` to `--color-calendar-6` | The marks of synced Google calendars, one of the six for each calendar account |
+| `--color-error` | Messages that something failed, such as a calendar connection's |
+| `--shadow-popover`, `--shadow-sm`, `--shadow-lg` | Shadows |
+| `--font-sans`, `--font-mono` | The text and code fonts |
+
+The colors of areas and projects are the ones chosen for them, and Google's mark on **Continue with Google** keeps Google's colors.
+
+## The sidebar's names
+
+The same names are in the page with and without embed mode. Links open their page in the app when clicked (`click()` on the element); loading the link's `href` opens the same page.
+
+| Name | Where | Value |
+| --- | --- | --- |
+| `data-pm="sidebar"` | The sidebar's wrapper | |
+| `data-pm="nav-link"` | Each link in the sidebar | |
+| `data-pm-kind` | Each link | `view` (**Inbox**, **Today**, **Assigned to me**, **Upcoming**, **Calendar**, **Timeline**, **Projects**, **Roadmap**, **Sessions**), `area`, `todos` (an area's **To-dos**), `project` or `settings` |
+| `data-pm-label` | Each link | The link's name, as the sidebar shows it |
+| `data-pm-count` | A link with a number next to it, while it has one | The number |
+| `data-pm-shared` | An area shared with a [team workspace](/team-workspaces) | Present, empty |
+
+Each area's links (the area, its **To-dos** and its projects) are inside the area's own `section` element, in the sidebar's order. Pages refresh by themselves when data changes elsewhere, and the names and counts change with them.
+
+## Signing in
+
+Embed mode doesn't change signing in. Signed out, the pages send the view to the sign-in page as usual, with the same choices: **Continue with Google** where it is available, or an email and a password, then the two-factor code when the account has one. The sign-in pages are dark in embed mode, like the others.

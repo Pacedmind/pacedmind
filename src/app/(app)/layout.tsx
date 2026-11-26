@@ -34,6 +34,7 @@ import { dateOnly, todayStr } from "@/lib/dates";
 import { CONNECT_CARD_COOKIE, JOIN_PROMPT_COOKIE, type FoundFolder } from "@/lib/types";
 import { JoinPrompt } from "@/components/workspace-settings";
 import { isNativeCompanion } from "@/lib/native-client";
+import { embedMode } from "@/server/embed";
 
 export const dynamic = "force-dynamic";
 
@@ -49,6 +50,8 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
   const state = await authState();
   const step = state || MODE === "web" ? nextStep(state) : deviceConfig().withoutAccount ? null : "/login";
   if (step) redirect(step);
+  // Embed mode (src/lib/embed.ts): the host draws the title bar and the navigation; the sidebar stays in the page, hidden.
+  const embed = await embedMode();
   const user = state?.user ?? null;
   // The web app shows how to connect an agent until the account has one, or this browser said Not now.
   const askConnect = MODE === "web" && !(await cookies()).get(CONNECT_CARD_COOKIE);
@@ -97,7 +100,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
   return (
     <ExecutionProvider devices={executionDevices} hereId={here?.id ?? null} desktop={MODE === "desktop"} folders={folders}>
     <div className="flex h-full flex-col">
-      <AppHeader email={user?.email ?? null} />
+      {!embed && <AppHeader email={user?.email ?? null} />}
       {state && !state.mfaEnabled && <div role="status" className="flex flex-wrap items-center justify-between gap-2 border-b border-line bg-panel px-4 py-2 text-[12px] text-fg3">
         <span>{tx("Your planner and MCP are ready. Set up two-factor sign-in when you want to start sessions on your computers.")}</span>
         <Link href="/login/setup?next=%2Fsettings%2Fsecurity" className="shrink-0 text-fg2 underline underline-offset-2">{tx("Set up 2FA")}</Link>
@@ -105,9 +108,10 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
       {plan?.enforced && <BillingBanner plan={plan} desktop={MODE === "desktop"} nativeCompanion={nativeCompanion} />}
       {joinable.length > 0 && <JoinPrompt workspaces={joinable} />}
       <div className="flex min-h-0 flex-1 overflow-hidden">
-        <Sidebar areas={areas} projects={projects} counts={counts} usage={usage(areas, projects, tasks)} desktop={MODE === "desktop"} />
-        {/* On a phone the sidebar is a panel over the page, and the page takes the whole width. */}
-        <main className="m-2 ml-0 flex min-w-0 flex-1 overflow-hidden rounded-[10px] border border-line bg-panel max-md:m-0 max-md:rounded-none max-md:border-x-0 max-md:border-b-0">{children}</main>
+        <Sidebar areas={areas} projects={projects} counts={counts} usage={usage(areas, projects, tasks)} desktop={MODE === "desktop"} embedded={embed} />
+        {/* On a phone the sidebar is a panel over the page, and the page takes the whole width; embedded, always. */}
+        <main className={embed ? "flex min-w-0 flex-1 overflow-hidden bg-panel"
+          : "m-2 ml-0 flex min-w-0 flex-1 overflow-hidden rounded-[10px] border border-line bg-panel max-md:m-0 max-md:rounded-none max-md:border-x-0 max-md:border-b-0"}>{children}</main>
       </div>
       {approvals.length > 0 && <Approvals items={approvals} />}
       <RemoteStart devices={devices} tasks={tasks.map((t) => ({

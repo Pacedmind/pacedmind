@@ -16,6 +16,8 @@ export function useNoteAppearance(data: FloatingTaskData | null) {
       else document.documentElement.style.removeProperty("--note-tint");
     });
     const theme = desktop?.onTaskNoteTheme?.(({ theme, duration }) => {
+      // In embed mode the page stays dark, as every page does there.
+      if (document.documentElement.hasAttribute("data-embed")) return;
       const elements = [...document.querySelectorAll<HTMLElement>(".task-note-surface, .task-note-surface *")];
       const colors = () => elements.map(el => { const s = getComputedStyle(el); return { color: s.color, backgroundColor: s.backgroundColor, borderColor: s.borderColor }; });
       const before = colors();

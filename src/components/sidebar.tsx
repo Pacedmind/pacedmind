@@ -10,6 +10,7 @@ import {
 } from "@/app/actions";
 import { nextColor, projectColor } from "@/lib/colors";
 import { fmtShort } from "@/lib/dates";
+import { navLink } from "@/lib/embed";
 import type { Area, Project, Usage } from "@/lib/types";
 import { AreaMenu, AreasMenu, InlineName, MoreButton, ProjectMenu, ProjectsMenu, type OpenMenu } from "./entity-menu";
 import { AreaIconSvg, AreaPicture, Icon, ProgressRing, type IconName } from "./icons";
@@ -55,7 +56,7 @@ function SectionHeader({ label, addLabel, onAdd }: { label: string; addLabel: st
   const tx = useTranslation();
   return (
     <div className="group flex h-[26px] items-center pl-2 pr-1">
-      <Link href="/projects" title={tx("All areas and projects")} className="mr-auto text-[12px] font-medium text-mut2 hover:text-fg3">{label}</Link>
+      <Link href="/projects" title={tx("All areas and projects")} className="mr-auto text-[12px] font-medium text-mut2 hover:text-fg3" {...navLink("view", label)}>{label}</Link>
       <button type="button" aria-label={addLabel} title={addLabel} onMouseDown={(e) => e.stopPropagation()} onClick={(e) => onAdd(anchorOf(e.currentTarget))}
         className="flex h-5 w-5 items-center justify-center rounded text-mut opacity-0 hover:bg-hover hover:text-fg2 focus-visible:opacity-100 group-hover:opacity-100 pointer-coarse:opacity-100">
         <Icon name="plus" size={13} />
@@ -85,8 +86,10 @@ function moveIds(ids: string[], moving: string[], at: DropAt): string[] {
  * no long-press menu), so there the "…" always shows, beside the key or date. Ctrl-click (⌘-click on a Mac) and
  * Shift-click select the row instead of opening it; dragging it moves it in the list.
  */
-function MenuRow({ href, active, open, selected, dragged, drop, label, onMenu, onClose, onSelect, drag, children, trailing, group }: {
+function MenuRow({ href, active, open, selected, dragged, drop, label, onMenu, onClose, onSelect, drag, children, trailing, group, pm }: {
   href: string; active: boolean; open: boolean; selected: boolean; dragged: boolean; drop: "before" | "after" | null; label: string;
+  /** The names a host reads the link by (navLink in src/lib/embed.ts). */
+  pm: ReturnType<typeof navLink>;
   onMenu: (a: Anchor) => void; onClose: () => void; onSelect: (range: boolean) => void; drag: RowDrag;
   children: ReactNode; trailing?: ReactNode;
   group?: { expanded: boolean; onToggle: () => void; onAdd: () => void };
@@ -108,7 +111,7 @@ function MenuRow({ href, active, open, selected, dragged, drop, label, onMenu, o
         onClick={group.onToggle} className="flex h-6 w-5 shrink-0 items-center justify-center rounded text-mut2 hover:bg-hover hover:text-fg2">
         <Icon name={group.expanded ? "chevronDown" : "chevronRight"} size={12} />
       </button>}
-      <Link href={href} draggable onClick={onClick} title={group ? tx("{0} · Drag to reorder area", [label]) : label}
+      <Link href={href} draggable onClick={onClick} title={group ? tx("{0} · Drag to reorder area", [label]) : label} {...pm}
         className={cx(item, group && "min-w-0 flex-1 gap-2 px-1 text-[12px] font-medium", active && "bg-sel text-strong", open && "bg-hover", selected && "bg-accent/[0.17] text-strong hover:bg-accent/[0.22]")}>
         {children}
         {trailing && <span className={cx("group-hover:opacity-0 group-has-[:focus-visible]:opacity-0 pointer-coarse:mr-7 pointer-coarse:opacity-100", open && "opacity-0")}>{trailing}</span>}
@@ -128,12 +131,14 @@ function MenuRow({ href, active, open, selected, dragged, drop, label, onMenu, o
 
 type Draft = { kind: "area" } | { kind: "project"; areaId: string } | null;
 
-export function Sidebar({ areas: savedAreas, projects: savedProjects, counts, usage, desktop }: {
+export function Sidebar({ areas: savedAreas, projects: savedProjects, counts, usage, desktop, embedded }: {
   areas: Area[];
   projects: Project[];
   counts: { inbox: number; today: number; sessions: number; assigned: number; teams: boolean };
   usage: Usage;
   desktop: boolean;
+  /** Embed mode (src/lib/embed.ts): in the page for the host to read, never shown, and its keys do nothing. */
+  embedded: boolean;
 }) {
   const tx = useTranslation();
   const path = usePathname();
@@ -166,6 +171,7 @@ export function Sidebar({ areas: savedAreas, projects: savedProjects, counts, us
   const closeMenu = () => { setMenu(null); setBulk(null); };
 
   useEffect(() => {
+    if (embedded) return;
     const toggle = () => setDrawer((open) => !open);
     const onKey = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "b" && !(e.target as HTMLElement).isContentEditable) {
@@ -185,7 +191,7 @@ export function Sidebar({ areas: savedAreas, projects: savedProjects, counts, us
       window.removeEventListener("organizer:menu", toggle);
       window.removeEventListener("keydown", onKey);
     };
-  }, []);
+  }, [embedded]);
 
   // A press outside the sidebar ends the selection, unless it's in the selection's menu or its confirmation.
   useEffect(() => {
@@ -396,7 +402,7 @@ export function Sidebar({ areas: savedAreas, projects: savedProjects, counts, us
     <>
       {drawer && <div aria-hidden className="fixed inset-0 z-40 bg-overlay md:hidden" onClick={() => setDrawer(false)} />}
       {/* Takes the sidebar's room beside the page, or, hidden, a strip at the window's edge that brings it out. On a phone it isn't there. */}
-      <div className="relative shrink-0 max-md:contents" style={{ width: layout.hidden ? 8 : width }}
+      <div data-pm="sidebar" hidden={embedded} className="relative shrink-0 max-md:contents" style={{ width: layout.hidden ? 8 : width }}
         onMouseEnter={() => { if (layout.hidden) setPeek(true); }}
         // Out of the strip and the sidebar over the page, a peek goes back, unless one of its menus is open.
         onMouseLeave={() => { if (!menu && !bulk) setPeek(false); }}>
@@ -430,7 +436,7 @@ export function Sidebar({ areas: savedAreas, projects: savedProjects, counts, us
 
         <div className="flex flex-col gap-px">
           {NAV(tx, counts.teams || counts.assigned > 0).map((n) => (
-            <Link key={n.href} href={n.href} className={cx(item, active(n.href) && "bg-sel text-strong")}>
+            <Link key={n.href} href={n.href} className={cx(item, active(n.href) && "bg-sel text-strong")} {...navLink("view", n.label, { count: n.count && counts[n.count] })}>
               <Icon name={n.icon} />
               <span className="flex-1">{n.label}</span>
               {n.count && counts[n.count] > 0 && <span className="text-[11.5px] text-mut2">{counts[n.count]}</span>}
@@ -456,6 +462,7 @@ export function Sidebar({ areas: savedAreas, projects: savedProjects, counts, us
                   </div>
                 ) : (
                   <MenuRow href={`/area/${a.id}`} active={path === `/area/${a.id}`} label={a.name} {...state} drag={rowDrag("area", a.id)} drop={null} dragged={false}
+                    pm={navLink("area", a.name, { shared: Boolean(a.workspaceId) })}
                     group={{ expanded: !shut, onToggle: () => setCollapsed((c) => ({ ...c, [a.id]: !shut })), onAdd: () => newProject(a.id) }}>
                     <AreaDot area={a} />
                     <span className="flex-1 truncate">{a.name}</span>
@@ -468,7 +475,7 @@ export function Sidebar({ areas: savedAreas, projects: savedProjects, counts, us
                 {!shut && <div className="ml-7 flex flex-col gap-px border-l border-line pl-2" {...listDrop("project", a.id)}>
                   {/* The area's own tasks, outside its projects: small things like replying to an email or logging hours. */}
                   <Link href={`/area/${a.id}/todos`} title={tx("Tasks in {0} outside its projects", [a.name])}
-                    className={cx(item, active(`/area/${a.id}/todos`) && "bg-sel text-strong")}>
+                    className={cx(item, active(`/area/${a.id}/todos`) && "bg-sel text-strong")} {...navLink("todos", tx("To-dos"), { count: usage.areas[a.id]?.loose })}>
                     <Icon name="check" size={15} className="shrink-0 text-mut2" />
                     <span className="flex-1 truncate">{tx("To-dos")}</span>
                     {(usage.areas[a.id]?.loose ?? 0) > 0 && <span className="text-[11.5px] text-mut2">{usage.areas[a.id].loose}</span>}
@@ -481,6 +488,7 @@ export function Sidebar({ areas: savedAreas, projects: savedProjects, counts, us
                     </div>
                   ) : (
                     <MenuRow key={p.id} href={`/project/${p.id}`} active={active(`/project/${p.id}`)} label={p.name} {...rowState("project", p.id)} drag={rowDrag("project", p.id)}
+                      pm={navLink("project", p.name)}
                       trailing={p.targetDate && <span className="text-[11.5px] text-mut2">{fmtShort(p.targetDate, tx.language)}</span>}>
                       <ProgressRing pct={usage.projects[p.id]?.pct ?? 0} color={projectColor(p, areas)} size={16} />
                       <span className="flex-1 truncate">{p.name}</span>
@@ -514,7 +522,7 @@ export function Sidebar({ areas: savedAreas, projects: savedProjects, counts, us
 
         <div className="flex-1" />
         <div className="flex items-center gap-1.5">
-          <Link href="/settings" className={cx(item, "flex-1 text-mut", active("/settings") && "bg-sel text-strong")}>
+          <Link href="/settings" className={cx(item, "flex-1 text-mut", active("/settings") && "bg-sel text-strong")} {...navLink("settings", tx("Settings"))}>
             <Icon name="settings" />
             <span className="flex-1">{tx("Settings")}</span>
           </Link>

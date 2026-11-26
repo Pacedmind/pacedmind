@@ -23,7 +23,7 @@ export function CloudConnectOffer({ agents }: { agents: AgentId[] }) {
   };
   return (
     <div role="dialog" aria-labelledby="cloud-connect-title"
-      className="fixed bottom-4 right-4 z-40 flex w-[360px] flex-col gap-2 rounded-xl border border-line bg-panel p-4 shadow-lg max-md:inset-x-3 max-md:w-auto">
+      className="fixed bottom-4 right-4 z-40 flex w-[360px] flex-col gap-2 rounded-xl border border-line bg-panel p-4 shadow-[var(--shadow-lg)] max-md:inset-x-3 max-md:w-auto">
       <p id="cloud-connect-title" className="text-[13px] font-semibold text-strong">{tx("Connect your agents to PacedMind Cloud")}</p>
       <p className="text-[12.5px] leading-relaxed text-fg3">
         {names} {tx("on this computer can then plan your tasks and report on their work from any folder, in their terminals and apps. Each signs in with your account in the browser; no token goes into their settings.")}</p>

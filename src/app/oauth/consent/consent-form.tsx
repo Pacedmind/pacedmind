@@ -129,7 +129,7 @@ export function ConsentForm({ id, held, name, local, children }: {
         {connected ? (
           <>
             <p className="text-[13px] leading-relaxed text-mut">{tx("Return to")}{" "}{name || tx("your agent")} {" "}{tx("to continue. You can close this tab.")}</p>
-            <Link href="/today" className="flex h-9 w-full items-center justify-center rounded-md bg-accent-strong px-3 text-[13px] font-medium text-white hover:brightness-110">
+            <Link href="/today" className="flex h-9 w-full items-center justify-center rounded-md bg-accent-strong px-3 text-[13px] font-medium text-on-accent hover:brightness-110">
               {tx("Open PacedMind")}</Link>
             <Link href="/settings/mcp" className="text-[12px] text-mut underline-offset-4 hover:text-fg2 hover:underline">
               {tx("Manage connected agents")}</Link>

@@ -55,7 +55,7 @@ function Check({ on, off, label, onClick }: { on: boolean; off?: boolean; label:
     <button type="button" role="checkbox" aria-checked={on} disabled={off} aria-label={label} onClick={onClick}
       className={cx("flex h-4 w-4 shrink-0 items-center justify-center rounded border-[1.5px]",
         on ? "border-accent bg-accent" : off ? "border-line" : "border-line-strong")}>
-      {on && <Icon name="check" size={11} strokeWidth={3} className="text-white" />}
+      {on && <Icon name="check" size={11} strokeWidth={3} className="text-on-accent" />}
     </button>
   );
 }
