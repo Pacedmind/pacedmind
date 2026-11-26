@@ -1,17 +1,19 @@
 import "server-only";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { supabase } from "./supabase";
+import { nextStep } from "./auth-flow";
+import { readAuthState, supabase } from "./supabase";
 import { supabaseConfig } from "./supabase-config";
 import type { SsoConfig } from "./sso-config";
-import type { AccountSteps, Handoff, SessionSteps } from "./sso";
+import type { AccountSteps, SessionSteps } from "./sso";
 
 /*
  * The Supabase side of signing in through your organisation. Starting a session for an account without its password
  * and without sending an email takes the project's secret key: Auth's admin API makes a magic link's one-time token,
  * which the browser's own client then verifies like any email link, so the session lands in the usual cookies. The
  * key is used here and nowhere else, only by the sign-in routes, and only after the identity token verified. The
- * session's mark and the links between the issuer's people and accounts are written by database functions only that
- * key may call (supabase/migrations/*_issuer_sign_in.sql).
+ * session's mark, the sign-in kept between the callback and the finish, and the links between the issuer's people and
+ * accounts are written by database functions only that key may call (supabase/migrations/*_issuer_sign_in.sql); the
+ * one exception, confirming a link, runs with the browser's own session, since that session is the proof it needs.
  */
 
 function adminClient(config: SsoConfig): SupabaseClient {
@@ -23,6 +25,8 @@ function adminClient(config: SsoConfig): SupabaseClient {
 /** What Supabase said, without anything that could carry a token or a key. */
 const failed = (what: string, error: { message?: string; code?: string } | null | undefined) =>
   new Error(`${what} failed${error?.code ? ` (${error.code})` : ""}.`);
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 export function accountSteps(config: SsoConfig): AccountSteps {
   const admin = adminClient(config);
@@ -53,14 +57,12 @@ export function accountSteps(config: SsoConfig): AccountSteps {
       // Another sign-in of the same person may have created it a moment ago: linking again finds it.
       if (error && error.code !== "email_exists" && error.code !== "user_already_exists") throw failed("Creating the account", error);
     },
-    async signInToken(userId) {
-      const found = await admin.auth.admin.getUserById(userId);
-      const email = found.data.user?.email;
-      if (found.error || !email) throw failed("Reading the account", found.error);
-      // generateLink only makes the link; it sends nothing.
-      const { data, error } = await admin.auth.admin.generateLink({ type: "magiclink", email });
-      if (error || data.user?.id !== userId || !data.properties?.hashed_token) throw failed("Making the sign-in", error);
-      return data.properties.hashed_token;
+    async beginHandoff(handoffId, identity, userId, next) {
+      const { error } = await admin.rpc("issuer_begin_handoff", {
+        handoff: handoffId, token_id: identity.tokenId, issuer: identity.issuer, subject: identity.subject, account: userId,
+        verified_at: new Date(identity.issuedAt * 1000).toISOString(), next,
+      });
+      if (error) throw failed("Keeping the sign-in", error);
     },
   };
 }
@@ -76,8 +78,35 @@ function sessionIdOf(accessToken: string): string | null {
 }
 
 export function sessionSteps(config: SsoConfig): SessionSteps {
+  const admin = adminClient(config);
   return {
-    async replaceSession(hashedToken, userId) {
+    async openHandoff(handoffId) {
+      const { data, error } = await admin.rpc("issuer_open_handoff", { handoff: handoffId });
+      if (error) throw failed("Opening the sign-in", error);
+      if (data === null) return null;
+      const v = data as { user_id?: unknown; linked?: unknown; next?: unknown };
+      if (typeof v.user_id !== "string" || !UUID.test(v.user_id) || typeof v.linked !== "boolean" || typeof v.next !== "string") {
+        throw failed("Opening the sign-in", null);
+      }
+      return { userId: v.user_id, linked: v.linked, next: v.next };
+    },
+    async confirmLink(handoffId) {
+      const db = await supabase();
+      // Signed out (or signed in only to the sign-in page's own cookies): nothing here can confirm anything.
+      const { data: claims } = await db.auth.getClaims();
+      if (!claims?.claims) return false;
+      const { data, error } = await db.rpc("issuer_confirm_link", { handoff: handoffId });
+      if (error) throw failed("Confirming the link", error);
+      return data === true;
+    },
+    async replaceSession(userId) {
+      const found = await admin.auth.admin.getUserById(userId);
+      const email = found.data.user?.email;
+      if (found.error || !email) throw failed("Reading the account", found.error);
+      // generateLink only makes the link; it sends nothing. Its token is used at once, below, and never leaves here.
+      const link = await admin.auth.admin.generateLink({ type: "magiclink", email });
+      const hashedToken = link.data.properties?.hashed_token;
+      if (link.error || link.data.user?.id !== userId || !hashedToken) throw failed("Making the sign-in", link.error);
       const db = await supabase();
       // Whoever was signed in here before stops being: their session ends on the server too, not just in this browser.
       await db.auth.signOut({ scope: "local" });
@@ -89,12 +118,14 @@ export function sessionSteps(config: SsoConfig): SessionSteps {
       }
       return sessionId;
     },
-    async markSession(sessionId: string, handoff: Handoff) {
-      const { error } = await adminClient(config).rpc("issuer_mark_session", {
-        session: sessionId, account: handoff.userId, issuer: handoff.issuer, subject: handoff.subject,
-        verified_at: new Date(handoff.verifiedAt * 1000).toISOString(),
-      });
+    async markSession(sessionId, handoffId) {
+      const { error } = await admin.rpc("issuer_mark_session", { session: sessionId, handoff: handoffId });
       if (error) throw failed("Marking the session", error);
+    },
+    async sessionMarked(userId) {
+      // The same reading every page makes (readAuthState, issuer_session()), so what it accepts here they accept too.
+      const state = await readAuthState();
+      return !!state?.issuer && state.user.id === userId && nextStep(state) === null;
     },
     async endSession() {
       await (await supabase()).auth.signOut({ scope: "local" });

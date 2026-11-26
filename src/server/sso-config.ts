@@ -28,6 +28,8 @@ export interface SsoConfig {
   allowedDomains: string[];
   /** The organisation's name, for the one line of the sign-in page that needs it. */
   label: string;
+  /** This app's own address (ORGANIZER_PUBLIC_ORIGIN), whose /auth/sso/callback the issuer posts back to. */
+  publicOrigin: string;
   /** The Supabase project's secret key, which only the callback uses (sso-admin.ts). */
   secretKey: string;
 }
@@ -86,7 +88,11 @@ export function readSsoConfig(env: Env = process.env): SsoConfig | null {
   const missing = SETTINGS.filter((name) => !env[name]?.trim());
   if (missing.length) throw new Error(`Sign-in through your organisation is set up only in part: set ${missing.join(", ")}.`);
   if (!env.SUPABASE_SECRET_KEY?.trim()) throw new Error("Sign-in through your organisation needs SUPABASE_SECRET_KEY.");
+  // Without it there is no callback address to send: the sign-in page would offer a button that leads nowhere.
+  if (!env.ORGANIZER_PUBLIC_ORIGIN?.trim()) throw new Error("Sign-in through your organisation needs ORGANIZER_PUBLIC_ORIGIN.");
   const local = env.NODE_ENV !== "production";
+  const publicOrigin = new URL(httpsUrl("ORGANIZER_PUBLIC_ORIGIN", env.ORGANIZER_PUBLIC_ORIGIN.trim(), { local }));
+  if (publicOrigin.pathname !== "/" || publicOrigin.search) throw new Error("ORGANIZER_PUBLIC_ORIGIN must be an origin, without a path.");
   const issuer = httpsUrl("SSO_ISSUER", env.SSO_ISSUER!.trim(), { local });
   if (issuer.endsWith("/")) throw new Error("SSO_ISSUER must not end with a slash.");
   const clientId = env.SSO_CLIENT_ID!.trim();
@@ -96,7 +102,7 @@ export function readSsoConfig(env: Env = process.env): SsoConfig | null {
   const allowedDomains = (env.SSO_ALLOWED_EMAIL_DOMAINS ?? "").split(",").map((d) => d.trim().toLowerCase()).filter(Boolean);
   for (const domain of allowedDomains) if (!DOMAIN.test(domain)) throw new Error("SSO_ALLOWED_EMAIL_DOMAINS has a value that isn't a domain.");
   return {
-    issuer, clientId, label, allowedDomains,
+    issuer, clientId, label, allowedDomains, publicOrigin: publicOrigin.origin,
     authorizeUrl: httpsUrl("SSO_AUTHORIZE_URL", env.SSO_AUTHORIZE_URL!.trim(), { local }),
     keys: signingKeys(env.SSO_JWKS!),
     secretKey: env.SUPABASE_SECRET_KEY!.trim(),

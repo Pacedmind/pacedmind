@@ -16,7 +16,7 @@ export const CLOCK_SKEW = 60;
 /** Why a sign-in through the issuer failed, as the one short code the error page shows. */
 export type SsoRefusal =
   | "access_denied" | "state" | "token" | "expired" | "nonce" | "email" | "domain" | "two_factor"
-  | "replayed" | "account_linked" | "account_unconfirmed" | "account_ambiguous" | "unavailable";
+  | "replayed" | "account_linked" | "account_unconfirmed" | "account_ambiguous" | "account_protected" | "unavailable";
 
 /** The person the issuer vouches for. */
 export interface Identity {

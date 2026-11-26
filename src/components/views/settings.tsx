@@ -248,6 +248,11 @@ export interface AccountView {
   mfaEnabled: boolean;
   /** The organisation's name when this session was made through its sign-in, whose checks replace PacedMind's own here. */
   issuer: string | null;
+  /**
+   * The organisation's name when signing in through it is on and this session is PacedMind's own: Security then offers
+   * to let it sign in to this account, which an account with its own authenticator allows only from such a session.
+   */
+  organisation: string | null;
   factors: { id: string; name: string; added: string }[];
   backupCodes: boolean;
 }
@@ -459,6 +464,18 @@ export function SecuritySettings({ account }: { account: AccountView }) {
         <Row label={tx("Backup codes")}><span className="text-[12.5px] text-fg3">{tx("Set up")}</span></Row>
       )}
     </Section>
+
+    {account.organisation && (
+      <Section title={tx("Sign in through {0}", [account.organisation])}
+        note={tx("Lets {0} sign you in to this account from now on, with its own two-factor code instead of PacedMind's. It has to know you by this account's email address.", [account.organisation])}>
+        <Row label={tx("Connect")}>
+          <span className="flex-1" />
+          {/* A full page load: the organisation's sign-in page, then back here, signed in through it. */}
+          <a href={ssoStartHref("/settings/security")} className="inline-flex h-6 items-center rounded-md border border-ctl px-2 text-[12px] whitespace-nowrap text-fg2 transition-colors hover:bg-hover">
+            {tx("Continue with {0}", [account.organisation])}</a>
+        </Row>
+      </Section>
+    )}
 
     <Section title={tx("Password")} note={account.mfaEnabled ? tx("Changing it needs your current password and a current two-factor code, and signs out your other devices.") : tx("Changing it needs your current password and signs out your other devices.")}>
       <Row label={tx("Current")}>

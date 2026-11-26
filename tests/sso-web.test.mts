@@ -57,19 +57,22 @@ const fake = {
   links: new Map<string, string>(),
   tokens: new Set<string>(),
   links_pending: new Map<string, string>(),
-  sessions: new Map<string, { userId: string; token: string }>(),
+  sessions: new Map<string, { userId: string; token: string; aal: "aal1" | "aal2" }>(),
   marks: new Map<string, number>(),
+  // What the callback kept for the finish, by the id the browser carries (the database keeps only its digest).
+  handoffs: new Map<string, { userId: string; subject: string; verifiedAt: number; next: string; opened: boolean }>(),
   calls: [] as { path: string; apikey: string | null; auth: string | null; body: unknown }[],
   markFails: false,
+  markUnreadable: false,
   deleted: [] as string[],
   approvals: [] as { request: string; marked: boolean }[],
 };
 
-function accessToken(userId: string, sessionId: string): string {
+function accessToken(userId: string, sessionId: string, aal: "aal1" | "aal2" = "aal1"): string {
   const now = Math.floor(Date.now() / 1000);
   const enc = (o: object) => Buffer.from(JSON.stringify(o)).toString("base64url");
   // HS256 without a kid: auth-js then asks Auth (/user) instead of checking a signature, as with a legacy project.
-  return `${enc({ alg: "HS256", typ: "JWT" })}.${enc({ sub: userId, session_id: sessionId, aal: "aal1", role: "authenticated", exp: now + 3600, iat: now, amr: [{ method: "otp", timestamp: now }] })}.sig`;
+  return `${enc({ alg: "HS256", typ: "JWT" })}.${enc({ sub: userId, session_id: sessionId, aal, role: "authenticated", exp: now + 3600, iat: now, amr: [{ method: "otp", timestamp: now }] })}.sig`;
 }
 const sessionOf = (auth: string | null) => [...fake.sessions].find(([, s]) => `Bearer ${s.token}` === auth);
 const userJson = (u: User) => ({ id: u.id, aud: "authenticated", role: "authenticated", email: u.email, email_confirmed_at: u.email_confirmed_at, factors: u.factors, app_metadata: {}, user_metadata: u.user_metadata ?? {}, created_at: "2026-01-01T00:00:00Z" });
@@ -91,7 +94,7 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     fake.links_pending.delete(body.token_hash);
     const sessionId = randomUUID();
     const token = accessToken(userId, sessionId);
-    fake.sessions.set(sessionId, { userId, token });
+    fake.sessions.set(sessionId, { userId, token, aal: "aal1" });
     return json({ access_token: token, refresh_token: randomUUID(), token_type: "bearer", expires_in: 3600, expires_at: Math.floor(Date.now() / 1000) + 3600, user: userJson(fake.users.get(userId)!) });
   }
   if (path === "/auth/v1/logout") {
@@ -103,7 +106,8 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const s = sessionOf(auth);
     return s ? json(userJson(fake.users.get(s[1].userId)!)) : json({ code: "session_not_found", msg: "gone" }, 403);
   }
-  if (path.startsWith("/auth/v1/admin/") || ["/rest/v1/rpc/issuer_claim_token", "/rest/v1/rpc/issuer_link_account", "/rest/v1/rpc/issuer_mark_session"].includes(path)) {
+  if (path.startsWith("/auth/v1/admin/") || ["/rest/v1/rpc/issuer_claim_token", "/rest/v1/rpc/issuer_link_account", "/rest/v1/rpc/issuer_begin_handoff",
+    "/rest/v1/rpc/issuer_open_handoff", "/rest/v1/rpc/issuer_mark_session"].includes(path)) {
     // These need the project's secret key, as in Supabase.
     if (!isSecret(apikey)) return json({ code: "not_admin", message: "secret key required" }, 401);
   }
@@ -133,17 +137,41 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const u = [...fake.users.values()].find((x) => x.email === body.email);
     if (!u) return json({ user_id: null });
     if (!u.email_confirmed_at) return json({ refused: "account_unconfirmed" });
-    fake.links.set(body.subject, u.id);
+    // An account with its own authenticator is named, not linked (supabase/tests/issuer_sign_in.sql).
+    if (!u.factors.some((f) => f.status === "verified")) fake.links.set(body.subject, u.id);
     return json({ user_id: u.id });
+  }
+  if (path === "/rest/v1/rpc/issuer_begin_handoff") {
+    assert.ok(fake.tokens.has(body.token_id), "only for a token used up");
+    fake.handoffs.set(body.handoff, { userId: body.account, subject: body.subject, verifiedAt: Date.parse(body.verified_at), next: body.next, opened: false });
+    return new Response(null, { status: 204 });
+  }
+  if (path === "/rest/v1/rpc/issuer_open_handoff") {
+    const h = fake.handoffs.get(body.handoff);
+    if (!h || h.opened) return json(null);
+    h.opened = true;
+    return json({ user_id: h.userId, linked: fake.links.get(h.subject) === h.userId, next: h.next });
   }
   if (path === "/rest/v1/rpc/issuer_mark_session") {
     if (fake.markFails) return json({ code: "42501", message: "That session is not a new session of this account." }, 403);
-    assert.equal(fake.sessions.get(body.session)?.userId, body.account);
-    fake.marks.set(body.session, Date.parse(body.verified_at));
+    const h = fake.handoffs.get(body.handoff);
+    if (!h?.opened || fake.links.get(h.subject) !== h.userId || fake.sessions.get(body.session)?.userId !== h.userId) {
+      return json({ code: "42501", message: "That sign-in is not waiting to finish." }, 403);
+    }
+    fake.handoffs.delete(body.handoff);
+    fake.marks.set(body.session, h.verifiedAt);
     return new Response(null, { status: 204 });
   }
   const own = sessionOf(auth);
+  if (path === "/rest/v1/rpc/issuer_confirm_link") {
+    if (!own) return json({ code: "42501", message: "permission denied" }, 401);
+    const h = fake.handoffs.get(body.handoff);
+    if (!h?.opened || own[1].userId !== h.userId || own[1].aal !== "aal2") return json(false);
+    fake.links.set(h.subject, h.userId);
+    return json(true);
+  }
   if (path === "/rest/v1/rpc/issuer_session") {
+    if (fake.markUnreadable) return json({ code: "57014", message: "canceling statement due to statement timeout" }, 500);
     const at = own ? fake.marks.get(own[0]) : undefined;
     return json(at === undefined ? null : new Date(at).toISOString());
   }
@@ -213,6 +241,16 @@ async function signIn(next = "/settings/account") {
   return finish.GET();
 }
 
+/** The browser signed in to the account the usual way, with PacedMind's own code when `aal` says so. */
+async function ownSession(user: User, aal: "aal1" | "aal2") {
+  const sessionId = randomUUID();
+  const access = accessToken(user.id, sessionId, aal);
+  fake.sessions.set(sessionId, { userId: user.id, token: access, aal });
+  const { error } = await (await supabase()).auth.setSession({ access_token: access, refresh_token: randomUUID() });
+  assert.equal(error, null);
+  return sessionId;
+}
+
 let person = randomUUID();
 const existing: User = { id: randomUUID(), email: "person@org.example", email_confirmed_at: "2026-01-01T00:00:00Z",
   factors: [{ id: randomUUID(), factor_type: "totp", status: "verified", created_at: "2026-01-01T00:00:00Z" }] };
@@ -227,19 +265,49 @@ test("the browser goes to the issuer with a fresh state in a __Host- cookie", as
   assert.deepEqual(jar.get(START_COOKIE)?.options, { httpOnly: true, secure: true, sameSite: "none", path: "/", maxAge: 600 });
 });
 
-test("a full sign-in makes a marked session that counts as two-factor, with no PacedMind code", async () => {
+test("an account with its own authenticator isn't taken over by its address: only its owner's two-factor session links it", async () => {
+  const refused = async (res: Response) => {
+    assert.equal(res.status, 403);
+    assert.match(await res.text(), /Code: account_protected</);
+    assert.equal(fake.links.size, 0);
+    assert.equal(fake.marks.size, 0);
+  };
+  // Signed out, as someone with only the mailbox at the issuer would be.
   jar.clear();
+  await refused(await signIn());
+  assert.deepEqual(sessionCookies(), []);
+  // Signed in to the account without its code, or to another account with one: neither is its owner proving it.
+  const before = await ownSession(existing, "aal1");
+  await refused(await signIn());
+  assert.ok(fake.sessions.has(before), "the browser keeps the session it had");
+  const stranger: User = { id: randomUUID(), email: "stranger@org.example", email_confirmed_at: "2026-01-01T00:00:00Z", factors: [] };
+  fake.users.set(stranger.id, stranger);
+  jar.clear();
+  await ownSession(stranger, "aal2");
+  await refused(await signIn());
+  assert.equal((await readAuthState())?.user.id, stranger.id);
+  fake.sessions.clear();
+});
+
+test("a full sign-in makes a marked session that counts as two-factor, with no PacedMind code", async () => {
+  // The owner, signed in here with PacedMind's own code, lets the issuer sign in to the account from now on.
+  jar.clear();
+  const owners = await ownSession(existing, "aal2");
   fake.calls.length = 0;
   const done = await signIn("/settings/account");
   assert.equal(done.status, 303);
   assert.equal(done.headers.get("location"), "/settings/account");
+  assert.equal(fake.links.get(person), existing.id);
+  assert.equal(fake.sessions.has(owners), false, "the owner's own session made way for the new one");
   assert.equal(jar.has(START_COOKIE), false);
   assert.equal(jar.has(FINISH_COOKIE), false);
   assert.ok(sessionCookies().length > 0, "the session is in the usual cookies");
   assert.equal(fake.marks.size, 1);
   // The secret key went only to the admin API and the issuer's database functions; no email was sent.
   for (const call of fake.calls) {
-    const privileged = call.path.startsWith("/auth/v1/admin/") || call.path.startsWith("/rest/v1/rpc/issuer_") && call.path !== "/rest/v1/rpc/issuer_session";
+    // Confirming the link is the owner's session's own act; reading the mark is any session's.
+    const privileged = call.path.startsWith("/auth/v1/admin/") || call.path.startsWith("/rest/v1/rpc/issuer_")
+      && !["/rest/v1/rpc/issuer_session", "/rest/v1/rpc/issuer_confirm_link"].includes(call.path);
     assert.equal(isSecret(call.apikey), privileged, call.path);
     assert.doesNotMatch(call.path, /\/(otp|magiclink|recover|invite)$/);
   }
@@ -322,6 +390,7 @@ test("signing in again replaces the browser's session and ends the old one", asy
 
 test("a new person gets a confirmed account; a fresh check deletes it with no code", async () => {
   jar.clear();
+  const linked = person;
   person = randomUUID();
   const s = await startFlow();
   const posted = await post({ id_token: await token(s.nonce, { email: "new@org.example", sub: person, name: "New Person" }), state: s.state });
@@ -340,7 +409,7 @@ test("a new person gets a confirmed account; a fresh check deletes it with no co
   assert.ok(!fake.calls.some((c) => c.path.includes("/factors") || c.path === "/auth/v1/user" && c.body));
   await assert.rejects(actions.deleteAccountAction("", "new@org.example"), (e: Error & { digest?: string }) => /NEXT_REDIRECT/.test(e.digest ?? e.message));
   assert.deepEqual(fake.deleted, [created.id]);
-  person = randomUUID();
+  person = linked;
 });
 
 test("refusals show one plain page with a short code and leave no session", async () => {
@@ -376,6 +445,26 @@ test("refusals show one plain page with a short code and leave no session", asyn
     await page(await post({ id_token: await token(s.nonce, { email: "squatted@org.example", sub: randomUUID() }), state: s.state }), "account_unconfirmed");
     // The finish without a verified sign-in.
     await page(await finish.GET(), "state");
+    // The finish with a sign-in the browser made up itself: a one-time token from the account's own email (all a
+    // magic link or a recovery email needs), the person's id at the issuer and a time of its choosing. It isn't an id
+    // the database kept, so no token is spent, no session made and nothing marked.
+    const fromTheMailbox = randomUUID().replace(/-/g, "") + "abcdef0123456789abcdef01";
+    fake.links_pending.set(fromTheMailbox, existing.id);
+    for (const forged of [
+      Buffer.from(JSON.stringify({ hashedToken: fromTheMailbox, userId: existing.id, issuer: ISSUER, subject: person, verifiedAt: Math.floor(Date.now() / 1000), next: "/today", at: Date.now() })).toString("base64url"),
+      "f".repeat(43),
+    ]) {
+      const sessionsBefore = fake.sessions.size;
+      const marksBefore = fake.marks.size;
+      fake.calls.length = 0;
+      jar.set(FINISH_COOKIE, { value: forged });
+      await page(await finish.GET(), "state");
+      assert.ok(fake.links_pending.has(fromTheMailbox), "the mailbox's token was never used");
+      assert.equal(fake.sessions.size, sessionsBefore);
+      assert.equal(fake.marks.size, marksBefore);
+      assert.ok(!fake.calls.some((c) => c.path === "/auth/v1/verify" || c.path === "/rest/v1/rpc/issuer_mark_session"));
+    }
+    fake.links_pending.delete(fromTheMailbox);
     // A session that can't be marked is ended, and the log says why without a token or key.
     fake.markFails = true;
     s = await startFlow();
@@ -389,6 +478,47 @@ test("refusals show one plain page with a short code and leave no session", asyn
     console.error = original;
     fake.markFails = false;
   }
+});
+
+test("when the pages can't read the mark, the finish stops on a page instead of sending the view round again", async () => {
+  jar.clear();
+  jar.set("pacedmind-embed", { value: "1" });
+  fake.markUnreadable = true;
+  try {
+    const sessionsBefore = fake.sessions.size;
+    const s = await startFlow();
+    const posted = await post({ id_token: await token(s.nonce, { sub: randomUUID(), email: "fourth@org.example" }), state: s.state });
+    assert.equal(posted.status, 303);
+    const res = await finish.GET();
+    assert.equal(res.status, 503);
+    assert.match(await res.text(), /Code: unavailable</);
+    // Signed out again: no session a page would send back to the issuer for PacedMind's code.
+    assert.deepEqual(sessionCookies(), []);
+    assert.equal(fake.sessions.size, sessionsBefore);
+  } finally {
+    fake.markUnreadable = false;
+  }
+});
+
+// A time limit, so reading the whole body first fails the test rather than hanging it.
+test("a body without a length is counted as it arrives and refused past the limit", { timeout: 10_000 }, async () => {
+  jar.clear();
+  const s = await startFlow();
+  let pulled = 0;
+  // A chunked post that never ends: reading it whole first would never finish, and would fill the memory.
+  const endless = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      pulled += 1;
+      controller.enqueue(new TextEncoder().encode(`state=${s.state}&x=${"a".repeat(4096)}`));
+    },
+  });
+  // No Content-Length; `duplex` is what Node's fetch needs for a streamed body, which Next's own init type doesn't name.
+  const res = await callback.POST(new NextRequest(`${ORIGIN}/auth/sso/callback`, {
+    method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: endless, duplex: "half",
+  } as ConstructorParameters<typeof NextRequest>[1]));
+  assert.equal(res.status, 403);
+  assert.match(await res.text(), /Code: token</);
+  assert.ok(pulled <= 8, `read ${pulled} chunks`);
 });
 
 test("an issuer token replayed through a new start is refused once its nonce matches", async () => {

@@ -39,6 +39,7 @@ function accountView(state: Auth, tx: Translator = createTranslator("en")): Acco
     email: state.user.email ?? null,
     mfaEnabled: state.mfaEnabled,
     issuer: state.issuer ? ssoLabel() ?? tx("your organisation") : null,
+    organisation: state.issuer ? null : ssoLabel(),
     factors: state.factors.filter((f) => f.factor_type === "totp").map((f, i) => ({
       id: f.id, name: f.friendly_name?.replace(/\s·.*$/, "") || tx("Authenticator {0}", [i + 1]), added: f.created_at.slice(0, 10),
     })),

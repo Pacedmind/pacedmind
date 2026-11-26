@@ -7,7 +7,7 @@ import { nextStep } from "../src/server/auth-flow";
 import { readSsoConfig, type SsoConfig } from "../src/server/sso-config";
 import { verifyIdentityToken } from "../src/server/sso-token";
 import {
-  FINISH_COOKIE, START_COOKIE, acceptCallback, finishSignIn, startSignIn, type AccountSteps, type Handoff, type SessionSteps,
+  FINISH_COOKIE, START_COOKIE, acceptCallback, finishSignIn, startSignIn, type AccountSteps, type OpenedHandoff, type SessionSteps,
 } from "../src/server/sso";
 import { CODE_REUSE_MS, codeFreshUntil } from "../src/server/step-up";
 import type { AuthState } from "../src/server/supabase";
@@ -24,8 +24,9 @@ const other = await generateKeyPair("ES256", { extractable: true });
 const publicJwk = { ...(await exportJWK(keys.publicKey)), kid: "key-1", alg: "ES256", use: "sig" };
 const otherJwk = { ...(await exportJWK(other.publicKey)), kid: "key-2" };
 
+const ORIGIN = "https://planner.example.test";
 const env = (patch: Record<string, string | undefined> = {}) => ({
-  NODE_ENV: "production", SSO_ISSUER: ISSUER, SSO_CLIENT_ID: CLIENT, SSO_AUTHORIZE_URL: `${ISSUER}/authorize`,
+  NODE_ENV: "production", ORGANIZER_PUBLIC_ORIGIN: ORIGIN, SSO_ISSUER: ISSUER, SSO_CLIENT_ID: CLIENT, SSO_AUTHORIZE_URL: `${ISSUER}/authorize`,
   SSO_JWKS: JSON.stringify({ keys: [publicJwk, otherJwk] }), SSO_LABEL: "Example Org", SUPABASE_SECRET_KEY: "test-only-not-a-key",
   ...patch,
 });
@@ -68,8 +69,13 @@ test("the feature is off with nothing set, and refuses to run half set up or wit
     { SSO_JWKS: JSON.stringify({ keys: [{ ...publicJwk, kid: undefined }] }) },
     { SSO_JWKS: JSON.stringify({ keys: [publicJwk, publicJwk] }) },
     { SSO_ALLOWED_EMAIL_DOMAINS: "not a domain" }, { SSO_LABEL: "<b>Org</b>" }, { SSO_CLIENT_ID: "a b" },
+    // No address to send the issuer back to, or one it shouldn't post a token to.
+    { ORGANIZER_PUBLIC_ORIGIN: undefined }, { ORGANIZER_PUBLIC_ORIGIN: "http://planner.example.test" },
+    { ORGANIZER_PUBLIC_ORIGIN: `${ORIGIN}/app` },
   ];
   for (const patch of refused) assert.throws(() => readSsoConfig(env(patch)), Error, JSON.stringify(patch));
+  assert.throws(() => readSsoConfig(env({ ORGANIZER_PUBLIC_ORIGIN: undefined })), /ORGANIZER_PUBLIC_ORIGIN/);
+  assert.equal(readSsoConfig(env({ ORGANIZER_PUBLIC_ORIGIN: `${ORIGIN}/` }))!.publicOrigin, ORIGIN);
   // Errors name the setting, never the secret key or a key's numbers.
   try {
     readSsoConfig(env({ SSO_JWKS: JSON.stringify({ keys: [{ ...publicJwk, d: "private-part" }] }) }));
@@ -122,11 +128,15 @@ test("every promised claim is checked", async () => {
     ["subject not a UUID", { sub: "someone" }, "token"],
     ["no jti", { jti: undefined }, "token"],
     ["no auth_time", { auth_time: undefined }, "token"],
+    ["auth_time in the future", { auth_time: now + 61 }, "token"],
     ["no name", { name: undefined }, "token"],
+    ["name too long", { name: "n".repeat(201) }, "token"],
     ["other nonce", { nonce: "m".repeat(43) }, "nonce"],
     ["unverified email", { email_verified: false }, "email"],
     ["email_verified as text", { email_verified: "true" }, "email"],
     ["upper-case email", { email: "Person@org.example" }, "email"],
+    // Each part within its own limit, the whole address over the 254 characters an address may have.
+    ["email too long", { email: `${"p".repeat(64)}@${"d".repeat(185)}.example` }, "email"],
     ["no two-factor code", { amr: ["pwd"] }, "two_factor"],
     ["amr not a list", { amr: "otp" }, "two_factor"],
     ["acr aal1", { acr: "aal1" }, "two_factor"],
@@ -134,6 +144,8 @@ test("every promised claim is checked", async () => {
   for (const [why, patch, code] of cases) {
     assert.deepEqual(await verify(await sign(claims(patch))), { ok: false, code }, why);
   }
+  // At the limits themselves, each is still fine.
+  assert.ok((await verify(await sign(claims({ auth_time: now + 60, name: "n".repeat(200), email: `${"p".repeat(64)}@${"d".repeat(181)}.example` })))).ok);
   const limited = { ...config, allowedDomains: ["org.example"] };
   assert.ok((await verifyIdentityToken(await sign(claims()), limited, NONCE, now)).ok);
   assert.deepEqual(await verifyIdentityToken(await sign(claims({ email: "person@sub.org.example" })), limited, NONCE, now), { ok: false, code: "domain" });
@@ -141,10 +153,8 @@ test("every promised claim is checked", async () => {
 
 /* ---------- the steps ---------- */
 
-const ORIGIN = "https://planner.example.test";
-
 function started(next: string | null = "/settings/account", at = Date.now()) {
-  const { location, cookie } = startSignIn(config, ORIGIN, next, at);
+  const { location, cookie } = startSignIn(config, next, at);
   const url = new URL(location);
   return { url, cookie, state: url.searchParams.get("state")!, nonce: url.searchParams.get("nonce")! };
 }
@@ -174,15 +184,19 @@ test("starting sends exactly the agreed request and keeps state and nonce in a _
 function accounts(patch: Partial<AccountSteps> = {}) {
   const calls: string[] = [];
   const seen = new Set<string>();
+  const kept: { id: string; subject: string; tokenId: string; issuedAt: number; userId: string; next: string }[] = [];
   let created = false;
   const steps: AccountSteps = {
     claimToken: async (id) => { calls.push(`claim ${id}`); if (seen.has(id)) return false; seen.add(id); return true; },
     linkAccount: async () => { calls.push("link"); return { userId: "11111111-1111-4111-8111-111111111111" }; },
     createAccount: async (identity) => { calls.push(`create ${identity.email}`); created = true; },
-    signInToken: async (userId) => { calls.push(`token ${userId}`); return "a".repeat(56); },
+    beginHandoff: async (id, identity, userId, next) => {
+      calls.push(`keep ${userId}`);
+      kept.push({ id, subject: identity.subject, tokenId: identity.tokenId, issuedAt: identity.issuedAt, userId, next });
+    },
     ...patch,
   };
-  return { steps, calls, created: () => created };
+  return { steps, calls, kept, created: () => created };
 }
 
 test("the callback refuses anything this browser didn't start, before looking at the token", async () => {
@@ -214,21 +228,21 @@ test("the issuer refusing, and a token from another sign-in, end there", async (
   assert.deepEqual(calls, []);
 });
 
-test("a token signs in once: the account's one-time sign-in waits in a short-lived __Host- cookie", async () => {
+test("a token signs in once: the database keeps the verified sign-in, the browser only a random id for it", async () => {
   const s = started("/settings/account");
   const body = liveClaims({ nonce: s.nonce });
   const token = await sign(body);
-  const { steps, calls } = accounts();
+  const { steps, calls, kept } = accounts();
   const r = await acceptCallback({ id_token: token, state: s.state }, s.cookie.value, config, steps);
   assert.ok(r.ok);
   assert.equal(r.cookie.name, FINISH_COOKIE);
   assert.deepEqual(r.cookie.options, { httpOnly: true, secure: true, sameSite: "lax", path: "/", maxAge: 60 });
-  const handoff = JSON.parse(Buffer.from(r.cookie.value, "base64url").toString());
-  assert.equal(handoff.userId, "11111111-1111-4111-8111-111111111111");
-  assert.equal(handoff.subject, body.sub);
-  assert.equal(handoff.verifiedAt, body.iat);
-  assert.equal(handoff.next, "/settings/account");
-  assert.deepEqual(calls, [`claim ${body.jti}`, "link", "token 11111111-1111-4111-8111-111111111111"]);
+  // 256 random bits and nothing else: no account, person, time or sign-in token the browser could change.
+  assert.match(r.cookie.value, /^[A-Za-z0-9_-]{43}$/);
+  assert.deepEqual(kept, [{
+    id: r.cookie.value, subject: body.sub, tokenId: body.jti, issuedAt: body.iat, userId: "11111111-1111-4111-8111-111111111111", next: "/settings/account",
+  }]);
+  assert.deepEqual(calls, [`claim ${body.jti}`, "link", "keep 11111111-1111-4111-8111-111111111111"]);
   // The same token again, even through a new start in the same browser: refused, and no account is touched.
   const again = started();
   const replay = await sign({ ...body, nonce: again.nonce });
@@ -254,44 +268,69 @@ test("accounts: a new person gets a confirmed account, and a refused link stops 
     const blocked = accounts({ linkAccount: async () => ({ refused }) });
     const two = await fresh();
     assert.deepEqual(await acceptCallback({ id_token: two.t, state: two.s.state }, two.s.cookie.value, config, blocked.steps), { ok: false, code: refused });
-    assert.ok(!blocked.calls.some((c) => c.startsWith("token") || c.startsWith("create")));
+    assert.ok(!blocked.calls.some((c) => c.startsWith("keep") || c.startsWith("create")));
   }
 });
 
-function handoffCookie(patch: Partial<Handoff> & { at?: number } = {}) {
-  return Buffer.from(JSON.stringify({
-    hashedToken: "a".repeat(56), userId: "11111111-1111-4111-8111-111111111111", issuer: ISSUER, subject: randomUUID(),
-    verifiedAt: Math.floor(Date.now() / 1000), next: "/today", at: Date.now(), ...patch,
-  })).toString("base64url");
-}
+const HANDOFF = "h".repeat(43);
+const ACCOUNT = "11111111-1111-4111-8111-111111111111";
 
-function sessions(patch: Partial<SessionSteps> = {}) {
+function sessions(opened: OpenedHandoff | null = { userId: ACCOUNT, linked: true, next: "/today" }, patch: Partial<SessionSteps> = {}) {
   const calls: string[] = [];
   const steps: SessionSteps = {
-    replaceSession: async (hashed, userId) => { calls.push(`replace ${userId}`); return "33333333-3333-4333-8333-333333333333"; },
-    markSession: async (sessionId) => { calls.push(`mark ${sessionId}`); },
+    openHandoff: async (id) => { calls.push(`open ${id}`); return opened; },
+    confirmLink: async () => { calls.push("confirm"); return false; },
+    replaceSession: async (userId) => { calls.push(`replace ${userId}`); return "33333333-3333-4333-8333-333333333333"; },
+    markSession: async (sessionId, id) => { calls.push(`mark ${sessionId} ${id}`); },
+    sessionMarked: async (userId) => { calls.push(`marked? ${userId}`); return true; },
     endSession: async () => { calls.push("end"); },
     ...patch,
   };
   return { steps, calls };
 }
 
-test("the finish makes and marks the session, and ends it when it can't be marked", async () => {
-  const ok = sessions();
-  assert.deepEqual(await finishSignIn(handoffCookie({ next: "/settings/account" }), ok.steps), { ok: true, next: "/settings/account" });
-  assert.deepEqual(ok.calls, ["replace 11111111-1111-4111-8111-111111111111", "mark 33333333-3333-4333-8333-333333333333"]);
-  for (const [why, value] of [
-    ["none", undefined], ["stale", handoffCookie({ at: Date.now() - 61_000 })], ["bad user", handoffCookie({ userId: "x" })],
-    ["bad token", handoffCookie({ hashedToken: "<script>" })], ["garbage", "%%%"],
-  ] as const) {
+test("the finish makes the session the kept sign-in names and has it marked from there", async () => {
+  const ok = sessions({ userId: ACCOUNT, linked: true, next: "/settings/account" });
+  assert.deepEqual(await finishSignIn(HANDOFF, ok.steps), { ok: true, next: "/settings/account" });
+  assert.deepEqual(ok.calls, [`open ${HANDOFF}`, `replace ${ACCOUNT}`, `mark 33333333-3333-4333-8333-333333333333 ${HANDOFF}`, `marked? ${ACCOUNT}`]);
+  // Where to go is checked again on the way out.
+  assert.deepEqual(await finishSignIn(HANDOFF, sessions({ userId: ACCOUNT, linked: true, next: "https://elsewhere.example" }).steps), { ok: true, next: "/today" });
+});
+
+test("a finish cookie the browser made up gets no session: only an id the database kept counts", async () => {
+  // What the browser itself could set: a sign-in for any account, with a one-time token from that account's own
+  // email, a person and a time of its choosing. It isn't an id, so nothing is even looked up.
+  const forged = Buffer.from(JSON.stringify({
+    hashedToken: "a".repeat(56), userId: ACCOUNT, issuer: ISSUER, subject: randomUUID(), verifiedAt: Math.floor(Date.now() / 1000), next: "/today", at: Date.now(),
+  })).toString("base64url");
+  for (const [why, value] of [["none", undefined], ["forged sign-in", forged], ["garbage", "%%%"], ["too short", "h".repeat(42)]] as const) {
     const s = sessions();
     assert.deepEqual(await finishSignIn(value, s.steps), { ok: false, code: "state" }, why);
     assert.deepEqual(s.calls, [], why);
   }
-  assert.deepEqual(await finishSignIn(handoffCookie({ next: "https://elsewhere.example" }), sessions().steps), { ok: true, next: "/today" });
-  const unmarked = sessions({ markSession: async () => { throw new Error("Marking the session failed."); } });
-  await assert.rejects(finishSignIn(handoffCookie(), unmarked.steps), /Marking/);
-  assert.deepEqual(unmarked.calls, ["replace 11111111-1111-4111-8111-111111111111", "end"]);
+  // An id of the right shape the database never kept, or already finished: refused before any session is touched.
+  const unknown = sessions(null);
+  assert.deepEqual(await finishSignIn(HANDOFF, unknown.steps), { ok: false, code: "state" });
+  assert.deepEqual(unknown.calls, [`open ${HANDOFF}`]);
+});
+
+test("an account with its own authenticator is linked only from its owner's own two-factor session", async () => {
+  const refused = sessions({ userId: ACCOUNT, linked: false, next: "/today" });
+  assert.deepEqual(await finishSignIn(HANDOFF, refused.steps), { ok: false, code: "account_protected" });
+  // The browser's session, whoever's it is, stays as it was.
+  assert.deepEqual(refused.calls, [`open ${HANDOFF}`, "confirm"]);
+  const owner = sessions({ userId: ACCOUNT, linked: false, next: "/settings/security" }, { confirmLink: async () => true });
+  assert.deepEqual(await finishSignIn(HANDOFF, owner.steps), { ok: true, next: "/settings/security" });
+  assert.ok(owner.calls.includes(`replace ${ACCOUNT}`));
+});
+
+test("a session the pages wouldn't see as marked is ended, and the person stops on a page instead of going round", async () => {
+  const unmarked = sessions(undefined, { markSession: async () => { throw new Error("Marking the session failed."); } });
+  await assert.rejects(finishSignIn(HANDOFF, unmarked.steps), /Marking/);
+  assert.deepEqual(unmarked.calls, [`open ${HANDOFF}`, `replace ${ACCOUNT}`, "end"]);
+  const unseen = sessions(undefined, { sessionMarked: async () => false });
+  assert.deepEqual(await finishSignIn(HANDOFF, unseen.steps), { ok: false, code: "unavailable" });
+  assert.deepEqual(unseen.calls, [`open ${HANDOFF}`, `replace ${ACCOUNT}`, `mark 33333333-3333-4333-8333-333333333333 ${HANDOFF}`, "end"]);
 });
 
 /* ---------- what such a session is allowed ---------- */

@@ -2397,5 +2397,7 @@
   "Your organisation account can't sign in to PacedMind here. If you think it should, tell whoever manages your organisation's sign-in.": "Konto Twojej organizacji nie może się tu zalogować do PacedMind. Jeśli uważasz, że powinno, powiadom osobę, która zarządza logowaniem w Twojej organizacji.",
   "Code: {0}": "Kod: {0}",
   "Confirm with {0} again first, then try again within four minutes.": "Najpierw potwierdź ponownie przez {0}, a potem spróbuj jeszcze raz w ciągu czterech minut.",
-  "You signed in through your organisation. Authenticators and the password are changed from a sign-in with your PacedMind password.": "Zalogowano Cię przez Twoją organizację. Aplikacje uwierzytelniające i hasło zmienisz po zalogowaniu się hasłem PacedMind."
+  "You signed in through your organisation. Authenticators and the password are changed from a sign-in with your PacedMind password.": "Zalogowano Cię przez Twoją organizację. Aplikacje uwierzytelniające i hasło zmienisz po zalogowaniu się hasłem PacedMind.",
+  "Sign in through {0}": "Logowanie przez {0}",
+  "Lets {0} sign you in to this account from now on, with its own two-factor code instead of PacedMind's. It has to know you by this account's email address.": "Od teraz {0} będzie logować Cię do tego konta własnym kodem dwuetapowym zamiast kodu PacedMind. Musi Cię znać pod adresem e-mail tego konta."
 }

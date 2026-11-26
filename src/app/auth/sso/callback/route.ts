@@ -9,6 +9,28 @@ import { refusalPage } from "@/server/sso-page";
 const MAX_BODY = 16 * 1024;
 
 /**
+ * The posted body as text, or null once it passes MAX_BODY. Counted as it arrives rather than trusted from
+ * Content-Length, which a chunked post doesn't send: anyone may post here, and nobody gets to fill the server's memory.
+ */
+async function readBody(request: NextRequest): Promise<string | null> {
+  if (!request.body) return "";
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > MAX_BODY) {
+      await reader.cancel();
+      return null;
+    }
+    chunks.push(value);
+  }
+  return Buffer.concat(chunks).toString("utf8");
+}
+
+/**
  * Where the issuer's page posts the identity token (src/server/sso.ts, step 2). A cross-site POST, so it carries only
  * the start cookie (SameSite=None), not the session's: the session itself is made by /auth/sso/finish, where the
  * browser goes next. Whatever happens, the start cookie is used up.
@@ -23,12 +45,11 @@ export async function POST(request: NextRequest) {
 
   let outcome: Outcome<{ cookie: CookieToSet }>;
   const type = request.headers.get("content-type") ?? "";
-  const length = Number(request.headers.get("content-length") ?? "0");
-  if (!type.toLowerCase().startsWith("application/x-www-form-urlencoded") || length > MAX_BODY) {
+  const body = type.toLowerCase().startsWith("application/x-www-form-urlencoded") ? await readBody(request) : null;
+  if (body === null) {
     outcome = { ok: false, code: "token" };
   } else {
-    const body = await request.text();
-    const form = new URLSearchParams(body.length > MAX_BODY ? "" : body);
+    const form = new URLSearchParams(body);
     try {
       outcome = await acceptCallback({ id_token: form.get("id_token"), state: form.get("state"), error: form.get("error") }, started, config, accountSteps(config));
     } catch (e) {
