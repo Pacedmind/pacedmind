@@ -8,7 +8,8 @@ import { isNativeCompanion } from "@/lib/native-client";
 import { MODE, readAuthState, requireAal2, requirePlannerAccess, supabase } from "@/server/supabase";
 import { supabaseConfig } from "@/server/supabase-config";
 import { nextStep, safeNext, takeNext, withNext } from "@/server/auth-flow";
-import { STEP_UP_REFUSED, refusedStepUp, verifyCode } from "@/server/step-up";
+import { ISSUER_MANAGED, STEP_UP_REFUSED, codeFreshUntil, issuerStepUp, refusedStepUp, verifyCode } from "@/server/step-up";
+import { ssoLabel } from "@/server/sso-config";
 import { requireDesktopWindow } from "@/server/window";
 import { deviceConfig, updateDevice } from "@/server/device";
 import { cutOffAgents } from "@/server/requests";
@@ -195,6 +196,7 @@ export async function startEnrollAction(code?: string): Promise<AuthResult & { e
   const db = await supabase();
   const state = await readAuthState();
   if (!state) return { ok: false, error: "Sign in first." };
+  if (state.issuer) return { ok: false, error: ISSUER_MANAGED };
   if (state.factors.length) {
     if (state.aal !== "aal2") return { ok: false, error: "Enter your two-factor code first." };
     const wrong = await verifyCode(db, code ?? "");
@@ -216,6 +218,7 @@ export async function confirmEnrollAction(factorId: string, code: string): Promi
   await guard();
   const digits = code.replace(/\s+/g, "");
   if (!CODE.test(digits)) return { ok: false, error: "Enter the 6-digit code the app shows now." };
+  if ((await readAuthState())?.issuer) return { ok: false, error: ISSUER_MANAGED };
   const db = await supabase();
   const { error } = await db.auth.mfa.challengeAndVerify({ factorId, code: digits });
   if (error) return { ok: false, error: explain(error.message) };
@@ -247,6 +250,7 @@ export async function setNewPasswordAction(password: string): Promise<AuthResult
 export async function changePasswordAction(current: string, password: string, code: string): Promise<AuthResult> {
   await guard();
   const state = await requirePlannerAccess();
+  if (state.issuer) return { ok: false, error: ISSUER_MANAGED };
   if (!current) return { ok: false, error: "Enter your current password." };
   const problem = passwordProblem(password);
   if (problem) return { ok: false, error: problem };
@@ -264,6 +268,7 @@ export async function changePasswordAction(current: string, password: string, co
 export async function removeFactorAction(factorId: string, code: string): Promise<AuthResult> {
   await guard();
   const state = await requireAal2();
+  if (state.issuer) return { ok: false, error: ISSUER_MANAGED };
   const totp = state.factors.filter((f) => f.factor_type === "totp");
   if (!totp.some((f) => f.id === factorId)) return { ok: false, error: "That authenticator isn't on your account." };
   if (totp.length < 2) return { ok: false, error: "Keep one authenticator to protect your account and computer access. Add a replacement before removing this one." };
@@ -320,6 +325,7 @@ export async function revokeDeviceAction(deviceId: string): Promise<AuthResult> 
 export async function sendDeletionLinkAction(): Promise<AuthResult> {
   await guard();
   const state = await requirePlannerAccess();
+  if (state.issuer) return { ok: false, error: issuerStepUp(ssoLabel()) };
   if (state.mfaEnabled) return { ok: false, error: "Use your authenticator code to confirm account deletion." };
   if (!state.user.email) return { ok: false, error: "Your account has no email address." };
   const { error } = await (await supabase()).auth.resetPasswordForEmail(state.user.email, {
@@ -335,7 +341,12 @@ export async function deleteAccountAction(proof: string, confirmEmail: string): 
   if (clean(confirmEmail) !== clean(state.user.email ?? "")) return { ok: false, error: "Type your account's email to confirm." };
   const db = await supabase();
   let deletionClient = db;
-  if (state.mfaEnabled) {
+  if (state.issuer) {
+    // Signed in through your organisation: a round-trip through it in the last few minutes confirms, never a code or a
+    // password of PacedMind's. The database checks the same (private.recent_mfa).
+    const until = codeFreshUntil(state);
+    if (!until || until <= Date.now()) return { ok: false, error: issuerStepUp(ssoLabel()) };
+  } else if (state.mfaEnabled) {
     const wrong = await verifyCode(db, proof);
     if (wrong) return { ok: false, error: wrong };
   } else if (proof) {
@@ -351,7 +362,7 @@ export async function deleteAccountAction(proof: string, confirmEmail: string): 
   try {
     const { error } = await deletionClient.rpc("delete_account");
     if (error) return { ok: false, error: refusedStepUp(error.message) || /fresh|recent|authentication/i.test(error.message)
-      ? state.mfaEnabled ? STEP_UP_REFUSED : "Confirm with your current password or a new email confirmation link, then try again within five minutes."
+      ? state.issuer ? issuerStepUp(ssoLabel()) : state.mfaEnabled ? STEP_UP_REFUSED : "Confirm with your current password or a new email confirmation link, then try again within five minutes."
       : explain(error.message) };
   } finally {
     if (deletionClient !== db) await deletionClient.auth.signOut({ scope: "local" });

@@ -26,8 +26,8 @@ import { findWork, importAreas, importProjects, keyOf, type FoundArea, type Foun
 import { linkFolder, mergeProjects } from "@/server/project-links";
 import { changePreferences, type PreferenceChanges } from "@/server/preferences";
 import { approveFolder, isFolderApproval, refuseFolder } from "@/server/folder-requests";
-import { STEP_UP_REFUSED, codeFreshUntil, refusedStepUp, verifyCode } from "@/server/step-up";
-import { MODE, readAuthState, supabase } from "@/server/supabase";
+import { STEP_UP_REFUSED, freshCheckProblem, refusedStepUp, staleCheck } from "@/server/step-up";
+import { MODE, supabase } from "@/server/supabase";
 import { cloudOrigin } from "@/server/supabase-config";
 import { getTranslation } from "@/server/i18n";
 import { confirmWorkEmail, removeWorkEmail, requestWorkEmail } from "@/server/work-email";
@@ -208,7 +208,8 @@ type Remote = {
 /**
  * What a request to a computer answers: the request's id once sent (it shows in /api/state's `requests`), and
  * `needCode` when it needs a current two-factor code first (none was given, none was entered in the last four minutes,
- * and the computer doesn't take requests without one), or the one given didn't do.
+ * and the computer doesn't take requests without one), or the one given didn't do. A session made through your
+ * organisation's sign-in needs a new round-trip through it instead, and its error says so.
  */
 type Requested = Result & { requestId?: string; needCode?: boolean };
 
@@ -270,12 +271,8 @@ async function requestTarget(deviceId: string | null | undefined): Promise<Devic
  * last four minutes. The database checks the code's time and authenticator either way. Null when the request can go.
  */
 async function stepUp(code: string | null | undefined): Promise<Requested | null> {
-  if (code?.trim()) {
-    const wrong = await verifyCode(await supabase(), code);
-    return wrong ? { ok: false, error: wrong, needCode: true } : null;
-  }
-  const until = codeFreshUntil(await readAuthState());
-  return until && until > Date.now() ? null : { ok: false, error: "Enter a current two-factor code.", needCode: true };
+  const problem = await freshCheckProblem(code);
+  return problem ? { ok: false, error: problem, needCode: true } : null;
 }
 
 /** What the computer does with a request, as its setting last said, for the message after sending it. */
@@ -307,7 +304,7 @@ async function sendRequest(input: repo.LaunchRequestInput, device: Device, code:
     // computer that took requests without a code may have switched that off since the page read it.
     return {
       ok: false, needCode: true,
-      error: given ? STEP_UP_REFUSED : device.remoteCode ? "Enter a current two-factor code." : `${device.name} asks for a two-factor code now. Enter a current one.`,
+      error: await staleCheck(given ? STEP_UP_REFUSED : device.remoteCode ? "Enter a current two-factor code." : `${device.name} asks for a two-factor code now. Enter a current one.`),
     };
   }
 }
@@ -514,7 +511,7 @@ export async function answerAskAction(askId: string, answer: string, code = ""):
   } catch (e) {
     const message = errorOf(e);
     if (!refusedStepUp(message)) return done({ ok: false, error: message });
-    return { ok: false, needCode: true, error: (code ?? "").trim() ? STEP_UP_REFUSED : "Enter a current two-factor code." };
+    return { ok: false, needCode: true, error: await staleCheck((code ?? "").trim() ? STEP_UP_REFUSED : "Enter a current two-factor code.") };
   }
   return done({ ok: true, message: "Sent. The agent gets it within a few seconds." });
 }

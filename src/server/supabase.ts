@@ -9,6 +9,7 @@ import { dataDir, deviceConfig, revokeAllSessionTokens, updateDevice } from "./d
 import { clearApprovals } from "./approval-store";
 import { readSecureJson, removeFile, writeSecureJson } from "./secure-file";
 import { COOKIE_OPTIONS, supabaseConfig } from "./supabase-config";
+import { ssoConfig } from "./sso-config";
 import { canUsePlanner } from "@/lib/auth-access";
 
 /*
@@ -128,7 +129,10 @@ export type Aal = "aal1" | "aal2";
 
 export interface AuthState {
   user: User;
-  /** aal2 once a second factor was verified in this session. */
+  /**
+   * aal2 once a second factor was verified in this session, or when the session was made through your organisation's
+   * sign-in (`issuer`), whose own two-factor check stands in for the account's.
+   */
   aal: Aal;
   /** The auth session (the JWT's session_id), which a device registration points at. */
   sessionId: string | null;
@@ -142,6 +146,25 @@ export interface AuthState {
   amr: { method: string; timestamp: number }[];
   /** The OAuth client of an agent's sign-in (the hosted MCP server), null for a person's session. */
   clientId: string | null;
+  /**
+   * Set when this session was made through your organisation's sign-in (src/server/sso.ts), as the database records
+   * it: `verifiedAt` (ms) is when the issuer last checked the person, which counts as a fresh code for a few minutes
+   * (CODE_REUSE_MS in step-up.ts; five in the database).
+   */
+  issuer: { verifiedAt: number } | null;
+}
+
+/**
+ * Whether the database marked this session as made through your organisation's sign-in, and when the issuer checked
+ * (ms). Only the database's own record counts, which only the hosted app's sign-in writes; asked only of a person's
+ * session that hasn't verified a code of its own, and only while the feature is on. Fails closed.
+ */
+async function issuerCheck(client: SupabaseClient, claims: Record<string, unknown>): Promise<{ verifiedAt: number } | null> {
+  if (MODE !== "web" || !ssoConfig() || claims.aal === "aal2" || claims.client_id || typeof claims.session_id !== "string") return null;
+  const { data, error } = await client.rpc("issuer_session");
+  if (error || typeof data !== "string") return null;
+  const at = Date.parse(data);
+  return Number.isFinite(at) ? { verifiedAt: at } : null;
 }
 
 /**
@@ -181,15 +204,17 @@ export async function readAuthState(): Promise<AuthState | null> {
   }
   if (!user || !claims) return null;
   const all = user.factors ?? [];
+  const issuer = agentContext.getStore() ? null : await issuerCheck(client, claims);
   return {
     user,
-    aal: claims.aal === "aal2" ? "aal2" : "aal1",
+    aal: claims.aal === "aal2" || issuer ? "aal2" : "aal1",
     sessionId: typeof claims.session_id === "string" ? claims.session_id : null,
     factors: all.filter((f) => f.status === "verified" && (f.factor_type === "totp" || f.factor_type === "webauthn")),
     hasRecoveryCodes: all.some((f) => f.status === "verified" && (f.factor_type as string) === "recovery_code"),
     mfaEnabled: all.some((f) => f.status === "verified"),
     amr: Array.isArray(claims.amr) ? (claims.amr as { method: string; timestamp: number }[]) : [],
     clientId: typeof claims.client_id === "string" && claims.client_id ? claims.client_id : null,
+    issuer,
   };
 }
 

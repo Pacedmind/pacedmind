@@ -12,6 +12,7 @@ import {
   type AgentId, type AgentTools, type Device, type Doer, type LaunchRequestView, type RemoteStart as Setting, type Surface,
 } from "@/lib/types";
 import { REMOTE_START_LABEL } from "@/lib/from-elsewhere";
+import { SSO_START_PATH } from "@/lib/sso";
 import { deviceWithNeeds, missingOn, needList, toolsOn } from "@/lib/needs";
 import { AgentIcon, Icon, SurfaceIcon, type IconName } from "./icons";
 import { RUN_SHEET, noteSentRequest, publishComputers, useClock, useLaunchState } from "./request-status";
@@ -205,7 +206,7 @@ function RunSheet({ ask, devices, task, hereId, onClose }: {
 }) {
   const tx = useTranslation();
   const titleId = useId();
-  const { codeFreshUntil } = useLaunchState();
+  const { codeFreshUntil, confirmWith } = useLaunchState();
   const now = useClock(10_000);
   const needs = ask.kind === "start" ? task?.needs ?? [] : [];
   const runsOn = ask.kind === "start" ? task?.runsOn ?? null : null;
@@ -266,7 +267,8 @@ function RunSheet({ ask, devices, task, hereId, onClose }: {
   const codeFree = !!device && !device.remoteCode;
   const showCode = needCode || (!fresh && !codeFree);
   const usable = !!device && !refuses && !(ask.kind !== "start" && blocked);
-  const ready = usable && !blocked && !busy && !!who && (!showCode || code.length === 6) && (ask.kind !== "changes" || !!text.trim());
+  // Signed in through your organisation, the check is a new round-trip through it (a link below), never a code here.
+  const ready = usable && !blocked && !busy && !!who && (!showCode || (!confirmWith && code.length === 6)) && (ask.kind !== "changes" || !!text.trim());
   const agentName = who ? tx(AGENT_LABEL[who]) : tx("the agent");
   const lacks = device && who && needs.length ? missingOn(needs, device, who) : [];
   const hereLacks = ask.kind === "start" ? ask.missingHere ?? [] : [];
@@ -298,7 +300,7 @@ function RunSheet({ ask, devices, task, hereId, onClose }: {
     if (!ready || !device || !who) return;
     setBusy(true);
     setError(null);
-    const given = showCode ? code : "";
+    const given = showCode && !confirmWith ? code : "";
     let r: Awaited<ReturnType<typeof requestSessionAction>>;
     try {
       r = ask.kind === "start" ? await requestSessionAction(ask.taskId, who, device.id, given, surface)
@@ -502,7 +504,15 @@ function RunSheet({ ask, devices, task, hereId, onClose }: {
             </ul>
           )}
 
-          {usable && (showCode ? (
+          {usable && (showCode && confirmWith ? (
+            <div className="flex flex-col gap-1.5">
+              {/* A full page load: the organisation's sign-in page, then back to Today with a new session. */}
+              <a href={SSO_START_PATH} className="inline-flex h-10 w-full items-center justify-center rounded-md border border-line2 text-[13px] text-fg2 transition-colors hover:bg-hover">
+                {tx("Confirm with {0}", [confirmWith])}</a>
+              <span className="text-[11.5px] leading-relaxed text-mut2">
+                {tx("Asking a computer to run an agent takes a sign-in through {0} from the last few minutes. Come back here once you have.", [confirmWith])}</span>
+            </div>
+          ) : showCode ? (
             <label className="flex flex-col gap-1.5">
               <span className="text-[12px] text-mut">{tx("Two-factor code")}</span>
               {/* A start's choices come first (and would scroll away), so only a resume puts the cursor here. */}
@@ -515,7 +525,9 @@ function RunSheet({ ask, devices, task, hereId, onClose }: {
           ) : (
             <p className="flex items-center gap-2 text-[12px] text-mut2">
               <Icon name="check" size={12} strokeWidth={2.2} className="shrink-0" />
-              {codeFree ? tx("No code needed: {0} takes requests without one.", [name]) : tx("No code needed: you entered one in the last few minutes.")}
+              {codeFree ? tx("No code needed: {0} takes requests without one.", [name])
+                : confirmWith ? tx("No code needed: you signed in through {0} in the last few minutes.", [confirmWith])
+                  : tx("No code needed: you entered one in the last few minutes.")}
             </p>
           ))}
 

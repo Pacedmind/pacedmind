@@ -101,7 +101,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
     <ExecutionProvider devices={executionDevices} hereId={here?.id ?? null} desktop={MODE === "desktop"} folders={folders}>
     <div className="flex h-full flex-col">
       {!embed && <AppHeader email={user?.email ?? null} />}
-      {state && !state.mfaEnabled && <div role="status" className="flex flex-wrap items-center justify-between gap-2 border-b border-line bg-panel px-4 py-2 text-[12px] text-fg3">
+      {state && !state.mfaEnabled && !state.issuer && <div role="status" className="flex flex-wrap items-center justify-between gap-2 border-b border-line bg-panel px-4 py-2 text-[12px] text-fg3">
         <span>{tx("Your planner and MCP are ready. Set up two-factor sign-in when you want to start sessions on your computers.")}</span>
         <Link href="/login/setup?next=%2Fsettings%2Fsecurity" className="shrink-0 text-fg2 underline underline-offset-2">{tx("Set up 2FA")}</Link>
       </div>}

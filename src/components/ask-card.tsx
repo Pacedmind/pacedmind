@@ -5,6 +5,7 @@ import { useState } from "react";
 
 import { answerAskAction, withdrawAskAction } from "@/app/actions";
 import { AGENT_LABEL, type AgentId, type AskView } from "@/lib/types";
+import { SSO_START_PATH } from "@/lib/sso";
 import { pollLaunchState, useClock, useLaunchState } from "./request-status";
 import { Button, cx, useAction } from "./ui";
 
@@ -15,13 +16,13 @@ import { Button, cx, useAction } from "./ui";
  * it takes a two-factor code from the last few minutes, and only when that computer takes answers from elsewhere.
  */
 export function AskCard({ sessionId, agent }: { sessionId: string; agent: AgentId }) {
-  const { asks, codeFreshUntil } = useLaunchState();
+  const { asks, codeFreshUntil, confirmWith } = useLaunchState();
   const ask = asks.find((a) => a.sessionId === sessionId);
   // A new ask gets a fresh card: what was typed for the last one doesn't carry over.
-  return ask ? <AskBody key={ask.id} ask={ask} agent={agent} codeFreshUntil={codeFreshUntil} /> : null;
+  return ask ? <AskBody key={ask.id} ask={ask} agent={agent} codeFreshUntil={codeFreshUntil} confirmWith={confirmWith} /> : null;
 }
 
-function AskBody({ ask, agent, codeFreshUntil }: { ask: AskView; agent: AgentId; codeFreshUntil: number | null }) {
+function AskBody({ ask, agent, codeFreshUntil, confirmWith }: { ask: AskView; agent: AgentId; codeFreshUntil: number | null; confirmWith: string | null }) {
   const tx = useTranslation();
   const { run, pending } = useAction();
   const now = useClock(5_000);
@@ -31,10 +32,13 @@ function AskBody({ ask, agent, codeFreshUntil }: { ask: AskView; agent: AgentId;
   const [sent, setSent] = useState(false);
   const who = tx(AGENT_LABEL[agent]);
   const showCode = !ask.here && (needCode || !codeFreshUntil || codeFreshUntil <= now + 5_000);
+  // Signed in through your organisation, the fresh check is a new round-trip through it, never PacedMind's code.
+  const viaIssuer = showCode && !!confirmWith;
+  const missingCode = showCode && (viaIssuer || code.length !== 6);
   if (sent || ask.expiresAt <= now) return null;
 
   const answer = (value: string) => run(async () => {
-    const r = await answerAskAction(ask.id, value, showCode ? code : "");
+    const r = await answerAskAction(ask.id, value, showCode && !viaIssuer ? code : "");
     if (r.ok) {
       setSent(true);
       pollLaunchState();
@@ -65,7 +69,12 @@ function AskBody({ ask, agent, codeFreshUntil }: { ask: AskView; agent: AgentId;
               onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && text.trim()) { e.preventDefault(); answer(text); } }}
               className={cx(box, "field-sizing-content min-h-[52px] resize-none leading-[1.55] max-md:text-[16px]")} />
           )}
-          {showCode && (
+          {viaIssuer ? (
+            <p className="text-[12px] leading-snug text-mut">
+              {tx("Answering from here takes a sign-in through {0} from the last few minutes.", [confirmWith])}{" "}
+              <a href={SSO_START_PATH} className="text-fg2 underline underline-offset-2">{tx("Confirm with {0}", [confirmWith])}</a>
+            </p>
+          ) : showCode && (
             <label className="flex items-center gap-2 text-[12px] text-mut">
               {tx("Two-factor code")}<input value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))} inputMode="numeric" autoComplete="one-time-code"
                 aria-label={tx("Two-factor code")} placeholder="123456" className={cx(box, "w-[92px] font-mono tracking-widest max-md:text-[16px]")} />
@@ -74,11 +83,11 @@ function AskBody({ ask, agent, codeFreshUntil }: { ask: AskView; agent: AgentId;
           <div className="flex flex-wrap items-center gap-2">
             {ask.kind === "permission" ? (
               <>
-                <Button variant="primary" disabled={pending || (showCode && code.length !== 6)} onClick={() => answer("allow")}>{tx("Allow")}</Button>
-                <Button disabled={pending || (showCode && code.length !== 6)} onClick={() => answer("deny")}>{tx("Refuse")}</Button>
+                <Button variant="primary" disabled={pending || missingCode} onClick={() => answer("allow")}>{tx("Allow")}</Button>
+                <Button disabled={pending || missingCode} onClick={() => answer("deny")}>{tx("Refuse")}</Button>
               </>
             ) : (
-              <Button variant="primary" disabled={pending || !text.trim() || (showCode && code.length !== 6)} onClick={() => answer(text)}>{tx("Send answer")}</Button>
+              <Button variant="primary" disabled={pending || !text.trim() || missingCode} onClick={() => answer(text)}>{tx("Send answer")}</Button>
             )}
             {ask.here && ask.kind === "permission" && (
               <Button variant="ghost" disabled={pending} title={tx("Its terminal asks too: PacedMind stops asking")}

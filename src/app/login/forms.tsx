@@ -86,10 +86,12 @@ type Mode = "signin" | "signup" | "reset";
  * opens on creating an account (the site's Cloud button links to /login?create=1). `next`: the hosted app's page to
  * continue to once signed in (approving an agent's sign-in).
  */
-export function LoginForm({ initialError, confirmed, create, next, google }: {
+export function LoginForm({ initialError, confirmed, create, next, google, organisation }: {
   initialError: string | null; confirmed?: boolean; create?: boolean; next?: string | null;
   /** Whether Google sign-in is switched on in Supabase (googleSignIn() in auth-flow.ts). */
   google?: boolean;
+  /** Signing in through your organisation (src/server/sso.ts), when it's on: its name and where it starts. */
+  organisation?: { label: string; href: string } | null;
 }) {
   const tx = useTranslation();
   const [mode, setMode] = useState<Mode>(create ? "signup" : "signin");
@@ -122,10 +124,16 @@ export function LoginForm({ initialError, confirmed, create, next, google }: {
 
   return (
     <Card title={title} onSubmit={submit}>
-      {google && mode !== "reset" && (
+      {organisation && mode !== "reset" && (
+        // A plain link: the browser goes to the organisation's sign-in page and comes back signed in.
+        <a href={organisation.href}
+          className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md border border-ctl px-2.5 text-[13px] whitespace-nowrap text-fg2 transition-colors hover:bg-hover">
+          {tx("Continue with {0}", [organisation.label])}</a>
+      )}
+      {(google || organisation) && mode !== "reset" && (
         <>
-          <Button type="button" disabled={pending} onClick={withGoogle} className="h-9 justify-center gap-2 text-[13px]">
-            <GoogleMark />{tx("Continue with Google")}</Button>
+          {google && <Button type="button" disabled={pending} onClick={withGoogle} className="h-9 justify-center gap-2 text-[13px]">
+            <GoogleMark />{tx("Continue with Google")}</Button>}
           <div className="flex items-center gap-3 text-[12px] text-mut2" aria-hidden>
             <span className="h-px flex-1 bg-line2" />{tx("or with your email")}<span className="h-px flex-1 bg-line2" />
           </div>

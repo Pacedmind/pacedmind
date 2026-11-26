@@ -32,7 +32,7 @@ export function LiveRefresh({ every = 4000, refreshOnMount = false, taskNoteVers
       busy = true;
       try {
         const r = await fetch("/api/state", { cache: "no-store" });
-        const state = (await r.json()) as { version: string; requests?: unknown; codeFreshUntil?: unknown; asks?: unknown; plan?: unknown };
+        const state = (await r.json()) as { version: string; requests?: unknown; codeFreshUntil?: unknown; confirmWith?: unknown; asks?: unknown; plan?: unknown };
         publishLaunchState(state);
         publishPlan(state.plan);
         // A newly opened note may have loaded just before an agent's write and its first poll just after it.

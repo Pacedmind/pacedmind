@@ -4,6 +4,7 @@ import { MODE, authState } from "@/server/supabase";
 import { nextStep } from "@/server/auth-flow";
 import { approvalItems } from "@/server/requests";
 import { codeFreshUntil } from "@/server/step-up";
+import { ssoLabel } from "@/server/sso-config";
 import { askedHere } from "@/server/asks";
 import { readPlan } from "@/server/billing";
 import { floatingTaskScope } from "@/server/floating-tasks";
@@ -28,7 +29,8 @@ const RECENT_MS = 30 * 60_000;
  * for your permission or asked you a question: attentionOf), with the event that says so; `requests`, the account's requests to its computers from the last half hour, newest first (for
  * "Waiting for X", "Started on X", "Refused by X"; empty without an account), and `codeFreshUntil`, until when (ms
  * since the epoch) a request may skip asking for a two-factor code because one was entered in this session (a hint:
- * the database decides); `plan`, the account's PacedMind Cloud plan once billing is on (its state, whether it may still
+ * the database decides), or for a session made through your organisation's sign-in until when its last round-trip
+ * through it counts, with `confirmWith`, the organisation's name, to offer the next one; `plan`, the account's PacedMind Cloud plan once billing is on (its state, whether it may still
  * write, when its trial ends), else null.
  */
 export async function GET() {
@@ -37,7 +39,7 @@ export async function GET() {
   // Without an account, the desktop app shows this computer's own data; signing in counts as a change.
   const step = state || MODE === "web" ? nextStep(state) : null;
   if (step) {
-    return Response.json({ version: `${boot}-${step}`, waiting: [], attention: [], asks: [], approvals: [], requests: [], codeFreshUntil: null, signedIn: false, plan: null, floatingScope: null }, noStore);
+    return Response.json({ version: `${boot}-${step}`, waiting: [], attention: [], asks: [], approvals: [], requests: [], codeFreshUntil: null, confirmWith: null, signedIn: false, plan: null, floatingScope: null }, noStore);
   }
   const [version, finished, live, tasks, recent, plan] = await Promise.all([
     repo.stateVersion(), repo.listSessions({ status: ["finished"] }), repo.listSessions({ status: LIVE_STATUSES }), repo.listTasks(),
@@ -90,6 +92,7 @@ export async function GET() {
       approvals: approvals.map((a) => ({ id: a.id, kind: a.kind, key: a.key, title: a.title, agent: a.agent, from: a.from, ...(a.kind === "folder" ? { folder: a.folder } : {}) })),
       requests,
       codeFreshUntil: state ? codeFreshUntil(state) : null,
+      confirmWith: state?.issuer ? ssoLabel() : null,
       signedIn: !!state,
       floatingScope: floatingTaskScope(state),
       plan: plan?.enforced ? { state: plan.state, writable: plan.writable, trialEndsAt: plan.trialEndsAt } : null,

@@ -22,12 +22,17 @@ export interface LaunchState {
   requests: LaunchRequestView[];
   /** Until when (ms) a request may go without a two-factor code, since one was entered in this session. A hint: the database decides. */
   codeFreshUntil: number | null;
+  /**
+   * The organisation's name when this session came through its sign-in: a fresh check is a new round-trip through it
+   * (SSO_START_PATH), never PacedMind's code.
+   */
+  confirmWith: string | null;
   computers: Device[];
   /** What running sessions' agents wait for you to answer (AskCard). */
   asks: AskView[];
 }
 
-const EMPTY: LaunchState = { requests: [], codeFreshUntil: null, computers: [], asks: [] };
+const EMPTY: LaunchState = { requests: [], codeFreshUntil: null, confirmWith: null, computers: [], asks: [] };
 let current = EMPTY;
 let polled: LaunchRequestView[] = [];
 /** Requests sent from this page that no poll has brought yet, with when they were sent. */
@@ -47,13 +52,14 @@ function update(patch: Partial<LaunchState>) {
 const merged = () => [...[...sent.values()].map((s) => s.view).reverse(), ...polled];
 
 /** What /api/state answered (LiveRefresh). */
-export function publishLaunchState(state: { requests?: unknown; codeFreshUntil?: unknown; asks?: unknown }) {
+export function publishLaunchState(state: { requests?: unknown; codeFreshUntil?: unknown; confirmWith?: unknown; asks?: unknown }) {
   polled = Array.isArray(state.requests) ? (state.requests as LaunchRequestView[]) : [];
   const now = Date.now();
   // Once a poll has it the server's copy counts; one that no poll brought within a minute isn't coming.
   for (const [id, s] of sent) if (polled.some((r) => r.id === id) || now - s.at > 60_000) sent.delete(id);
   update({
     requests: merged(), codeFreshUntil: typeof state.codeFreshUntil === "number" ? state.codeFreshUntil : null,
+    confirmWith: typeof state.confirmWith === "string" && state.confirmWith ? state.confirmWith : null,
     asks: Array.isArray(state.asks) ? (state.asks as AskView[]) : [],
   });
 }

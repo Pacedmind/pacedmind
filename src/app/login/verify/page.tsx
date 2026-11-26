@@ -4,6 +4,9 @@ import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { authState } from "@/server/supabase";
 import { nextStep, safeNext } from "@/server/auth-flow";
+import { embedMode } from "@/server/embed";
+import { ssoLabel } from "@/server/sso-config";
+import { startPath } from "@/server/sso";
 import { AuthShell } from "../shell";
 import { VerifyForm } from "../forms";
 
@@ -20,6 +23,9 @@ export default async function VerifyPage(props: PageProps<"/login/verify">) {
   const sp = await props.searchParams;
   const next = typeof sp.next === "string" ? safeNext(sp.next) : null;
   if (step !== "/login/verify") redirect(step ?? next ?? "/today");
+  // Inside a host application PacedMind asks for no code of its own: a new sign-in through your organisation replaces
+  // this session instead.
+  if (ssoLabel() && await embedMode()) redirect(startPath(next));
   const factors = state!.factors
     .filter((f) => f.factor_type === "totp")
     .map((f, i) => ({ id: f.id, name: f.friendly_name?.replace(/\s·.*$/, "") || tx("Authenticator {0}", [i + 1]) }));

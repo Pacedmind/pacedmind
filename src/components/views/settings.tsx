@@ -21,6 +21,7 @@ import { projectColor } from "@/lib/colors";
 import { fmtShort, fmtTime, toDateStr } from "@/lib/dates";
 import { REMOTE_START_OPTIONS, fromElsewhereText } from "@/lib/from-elsewhere";
 import { OLD_ANCHORS, type SettingsGroup, type SettingsSection } from "@/lib/settings-menu";
+import { ssoStartHref } from "@/lib/sso";
 import { TERMINALS, terminalFor } from "@/lib/terminals";
 import {
   AGENT_LABEL, APP_LABEL, PREFERENCE_TEXT_MAX, PREFERENCE_TOPIC_MAX, SUGGESTED_TOPICS, deviceOnline, sameTopic, topicHint, topicOrder,
@@ -245,6 +246,8 @@ export function SettingsContent({ title, hint, children }: { title: string; hint
 export interface AccountView {
   email: string | null;
   mfaEnabled: boolean;
+  /** The organisation's name when this session was made through its sign-in, whose checks replace PacedMind's own here. */
+  issuer: string | null;
   factors: { id: string; name: string; added: string }[];
   backupCodes: boolean;
 }
@@ -311,6 +314,18 @@ export function AccountSettings({ account, devices, thisDeviceId, avatar }: {
       <Row label={tx("Your email")}>
         <input className={input} value={deleting.email} onChange={(e) => setDeleting((d) => ({ ...d, email: e.target.value }))} placeholder={account.email ?? ""} aria-label={tx("Type your email to confirm")} />
       </Row>
+      {account.issuer ? <>
+        <p className="text-[12.5px] text-fg3">{tx("Confirm with {0} first: deleting takes a sign-in through it from the last four minutes.", [account.issuer])}</p>
+        <Row label={tx("Confirm")}>
+          {/* A full page load: the organisation's sign-in page, then back here with a new session. */}
+          <a href={ssoStartHref("/settings/account")} className="inline-flex h-6 items-center rounded-md border border-ctl px-2 text-[12px] whitespace-nowrap text-fg2 transition-colors hover:bg-hover">
+            {tx("Confirm with {0}", [account.issuer])}</a>
+          <span className="flex-1" />
+          <Button disabled={pending || !deleting.email}
+            onClick={() => confirm(tx("Delete your PacedMind account and all its data for good?")) && run(() => deleteAccountAction("", deleting.email))}>
+            {tx("Delete account")}</Button>
+        </Row>
+      </> : <>
       {!account.mfaEnabled && <p className="text-[12.5px] text-fg3">{tx("Confirm with your current password, or open an email confirmation link and leave the password blank. Confirmation lasts five minutes.")}</p>}
       <Row label={account.mfaEnabled ? tx("Code") : tx("Password")}>
         <input className={account.mfaEnabled ? codeInput : input} value={deleting.code} onChange={(e) => setDeleting((d) => ({ ...d, code: account.mfaEnabled ? digits(e.target.value) : e.target.value }))}
@@ -323,6 +338,7 @@ export function AccountSettings({ account, devices, thisDeviceId, avatar }: {
           {tx("Delete account")}</Button>
       </Row>
       {!account.mfaEnabled && <Button size="sm" disabled={pending} onClick={() => run(() => sendDeletionLinkAction())}>{tx("Confirm by email instead")}</Button>}
+      </>}
     </Section>
   </>;
 }
@@ -406,6 +422,16 @@ export function SecuritySettings({ account }: { account: AccountView }) {
   const router = useRouter();
   const [password, setPassword] = useState({ current: "", next: "", again: "", code: "" });
   const [removing, setRemoving] = useState<{ id: string; code: string } | null>(null);
+  // Signed in through your organisation: its sign-in and its two-factor code protect this session, and PacedMind asks
+  // for neither its own code nor its password here, so nothing that needs them is offered.
+  if (account.issuer) return (
+    <Section title={tx("Sign-in")}
+      note={tx("You signed in through {0}, which asked for its own two-factor code. Authenticators and the password are changed from a sign-in with your PacedMind password.", [account.issuer])}>
+      <Row label={tx("Signed in as")}>
+        <span className="flex-1 truncate text-[12.5px] text-fg2">{account.email ?? tx("Unknown")}</span>
+      </Row>
+    </Section>
+  );
   return <>
     <Section title={tx("Two-factor sign-in")}
       note={account.mfaEnabled ? tx("Two-factor sign-in is on. Every sign-in asks for a code. Keep a second authenticator in case you lose your phone.") : tx("Optional for planning and MCP. Turn it on to start sessions and control your computers, then sign out and in once to activate computer access.")}>

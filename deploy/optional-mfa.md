@@ -22,6 +22,7 @@ Planning and approved MCP access are available before MFA enrollment. Enrolled a
 | MCP approved before MFA | Available | Denied even after the account enrolls MFA |
 | MCP reconnected with established MFA | Available | Only allowed request kinds and eligible computers |
 | Revoked/expired session | Denied | Denied |
+| Made through your organisation's sign-in ([organisation-sign-in.md](organisation-sign-in.md)) | Available, never asks for PacedMind's code | Available; a round-trip through the issuer in the last five minutes is the fresh code |
 
 Test the no-fresh-code computer setting explicitly: it must never bypass the established-MFA requirement. Verify account isolation, a second device enrolling MFA while an aal1 session remains open, and Auth network failures without fallback into local mode.
 

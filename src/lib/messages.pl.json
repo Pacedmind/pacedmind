@@ -2382,5 +2382,20 @@
   "Only the workspace's owners and admins change or delete its areas.": "Obszary zespołu zmieniają i usuwają tylko jego właściciele i administratorzy.",
   "Only the workspace's owners and admins rename it.": "Nazwę zespołu zmieniają tylko jego właściciele i administratorzy.",
   "Shared with your team": "Wspólne z zespołem",
-  "The app PacedMind is shown in sets its colors here.": "Tutaj kolory ustala aplikacja, w której otwarto PacedMind."
+  "The app PacedMind is shown in sets its colors here.": "Tutaj kolory ustala aplikacja, w której otwarto PacedMind.",
+  "your organisation": "Twoja organizacja",
+  "Continue with {0}": "Kontynuuj przez {0}",
+  "Answering from here takes a sign-in through {0} from the last few minutes.": "Odpowiedź stąd wymaga zalogowania przez {0} w ciągu ostatnich kilku minut.",
+  "Confirm with {0}": "Potwierdź przez {0}",
+  "Asking a computer to run an agent takes a sign-in through {0} from the last few minutes. Come back here once you have.": "Poproszenie komputera o uruchomienie agenta wymaga zalogowania przez {0} w ciągu ostatnich kilku minut. Wróć tutaj, gdy to zrobisz.",
+  "No code needed: you signed in through {0} in the last few minutes.": "Kod nie jest potrzebny: w ciągu ostatnich kilku minut zalogowano Cię przez {0}.",
+  "Confirm with {0} first: deleting takes a sign-in through it from the last four minutes.": "Najpierw potwierdź przez {0}: usunięcie wymaga zalogowania przez tę usługę w ciągu ostatnich czterech minut.",
+  "Confirm": "Potwierdź",
+  "Sign-in": "Logowanie",
+  "You signed in through {0}, which asked for its own two-factor code. Authenticators and the password are changed from a sign-in with your PacedMind password.": "Zalogowano Cię przez {0}, które poprosiło o własny kod dwuetapowy. Aplikacje uwierzytelniające i hasło zmienisz po zalogowaniu się hasłem PacedMind.",
+  "Can't sign in here": "Nie można się tu zalogować",
+  "Your organisation account can't sign in to PacedMind here. If you think it should, tell whoever manages your organisation's sign-in.": "Konto Twojej organizacji nie może się tu zalogować do PacedMind. Jeśli uważasz, że powinno, powiadom osobę, która zarządza logowaniem w Twojej organizacji.",
+  "Code: {0}": "Kod: {0}",
+  "Confirm with {0} again first, then try again within four minutes.": "Najpierw potwierdź ponownie przez {0}, a potem spróbuj jeszcze raz w ciągu czterech minut.",
+  "You signed in through your organisation. Authenticators and the password are changed from a sign-in with your PacedMind password.": "Zalogowano Cię przez Twoją organizację. Aplikacje uwierzytelniające i hasło zmienisz po zalogowaniu się hasłem PacedMind."
 }

@@ -6,7 +6,7 @@ import type { AuthState } from "../src/server/supabase";
 
 function state(patch: Partial<AuthState> = {}): AuthState {
   return { user: { id: "account" } as AuthState["user"], aal: "aal1", sessionId: "session", factors: [],
-    mfaEnabled: false, hasRecoveryCodes: false, clientId: null, amr: [], ...patch };
+    mfaEnabled: false, hasRecoveryCodes: false, clientId: null, amr: [], issuer: null, ...patch };
 }
 
 test("an unenrolled account reaches its planner without a setup redirect", () => {

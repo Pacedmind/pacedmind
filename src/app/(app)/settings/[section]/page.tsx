@@ -25,6 +25,7 @@ import { folderExtras, serverChoices } from "@/server/extras";
 import { encryptedAtRest } from "@/server/secure-file";
 import { MODE, authState } from "@/server/supabase";
 import { cloudMcpUrl } from "@/server/supabase-config";
+import { ssoLabel } from "@/server/sso-config";
 import { foldersOfRepos } from "@/server/import";
 import { unmarked } from "@/server/marker";
 import { settingsMenu, type SettingsSection } from "@/lib/settings-menu";
@@ -37,6 +38,7 @@ function accountView(state: Auth, tx: Translator = createTranslator("en")): Acco
   return {
     email: state.user.email ?? null,
     mfaEnabled: state.mfaEnabled,
+    issuer: state.issuer ? ssoLabel() ?? tx("your organisation") : null,
     factors: state.factors.filter((f) => f.factor_type === "totp").map((f, i) => ({
       id: f.id, name: f.friendly_name?.replace(/\s·.*$/, "") || tx("Authenticator {0}", [i + 1]), added: f.created_at.slice(0, 10),
     })),

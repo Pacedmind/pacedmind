@@ -4,6 +4,9 @@ import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { MODE, authState } from "@/server/supabase";
 import { googleSignIn, nextStep, safeNext, takeNext, withNext } from "@/server/auth-flow";
+import { embedMode } from "@/server/embed";
+import { ssoLabel } from "@/server/sso-config";
+import { startPath } from "@/server/sso";
 import { Button } from "@/components/ui";
 import { continueWithoutAccountAction } from "../auth/actions";
 import { AuthShell } from "./shell";
@@ -29,6 +32,9 @@ export default async function LoginPage(props: PageProps<"/login">) {
     const step = nextStep(state);
     redirect(step ? withNext(step, next) : MODE === "desktop" ? takeNext() : next ?? "/today");
   }
+  // Inside a host application, signing in goes through your organisation, with no PacedMind sign-in page at all.
+  const organisation = ssoLabel();
+  if (organisation && await embedMode()) redirect(startPath(next));
   return (
     <AuthShell note={next?.startsWith("/oauth/consent") ? tx("Sign in to PacedMind to connect your agent.")
       : next?.startsWith("/join/") ? tx("Sign in to your PacedMind account to view your team invitation.")
@@ -36,7 +42,7 @@ export default async function LoginPage(props: PageProps<"/login">) {
         ? tx("Sign in to PacedMind Cloud to use your tasks on all your computers, or use PacedMind on this computer without an account.")
         : tx("Sign in to plan your week and follow your agent sessions.")}>
       <LoginForm initialError={typeof sp.error === "string" ? sp.error.slice(0, 300) : null} confirmed={sp.confirmed === "1"} create={sp.create === "1"} next={next}
-        google={await googleSignIn()} />
+        google={await googleSignIn()} organisation={organisation ? { label: organisation, href: startPath(next) } : null} />
       {MODE === "desktop" && (
         <form action={continueWithoutAccountAction} className="flex flex-col gap-4">
           <div className="flex items-center gap-3 text-[12px] text-mut2" aria-hidden>
